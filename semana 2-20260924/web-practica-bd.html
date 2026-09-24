@@ -1,0 +1,1524 @@
+<title>Persistencia en BD · Laboratorio CRUD con ORM</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --bg:#f4f2ed; --surface:#ffffff; --surface-2:#eae6dc;
+    --ink:#1b2630; --ink-soft:#5b6970;
+    --accent:#1f7a6c; --accent-ink:#0f4a41; --accent-soft:#dcefea;
+    --amber:#a85a26; --amber-soft:#f3e3d3;
+    --danger:#a13f3f; --danger-soft:#f4dede;
+    --line: rgba(27,38,48,.14);
+    --radius:10px; --shadow:0 1px 2px rgba(27,38,48,.06);
+    --term-bg:#161b1e; --term-ink:#d7e0e0; --term-accent:#7fd9c4;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#10161c; --surface:#161e25; --surface-2:#1c252c;
+      --ink:#e7ecec; --ink-soft:#9fb0b6;
+      --accent:#4fc3ae; --accent-ink:#bdeee2; --accent-soft: rgba(79,195,174,.16);
+      --amber:#e2a164; --amber-soft: rgba(226,161,100,.16);
+      --danger:#e58080; --danger-soft: rgba(229,128,128,.14);
+      --line: rgba(231,236,236,.14); --shadow:0 1px 2px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#10161c; --surface:#161e25; --surface-2:#1c252c;
+    --ink:#e7ecec; --ink-soft:#9fb0b6;
+    --accent:#4fc3ae; --accent-ink:#bdeee2; --accent-soft: rgba(79,195,174,.16);
+    --amber:#e2a164; --amber-soft: rgba(226,161,100,.16);
+    --danger:#e58080; --danger-soft: rgba(229,128,128,.14);
+    --line: rgba(231,236,236,.14); --shadow:0 1px 2px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:'Source Serif 4',Georgia,serif; line-height:1.62;}
+  h1,h2,h3,h4,button,.mono,.badge,nav{font-family:'Manrope',system-ui,sans-serif;}
+  code,pre,.mono-num{font-family:'JetBrains Mono',ui-monospace,monospace;}
+  h1,h2,h3,h4{text-wrap:balance; font-weight:800; letter-spacing:-.01em; color:var(--ink);}
+  a{color:var(--accent-ink);}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+
+  .topbar{position:sticky; top:0; z-index:5; background:var(--surface); border-bottom:1px solid var(--line); padding:12px clamp(16px,5vw,40px);}
+  .topbar-row{display:flex; align-items:center; justify-content:space-between; gap:16px; max-width:760px; margin:0 auto;}
+  .topbar .kicker{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent-ink); font-weight:700;}
+  .topbar h1{font-size:16px; margin:2px 0 0;}
+  .progress-wrap{display:flex; align-items:center; gap:10px; font-size:11px; color:var(--ink-soft);}
+  .progress-track{width:110px; height:6px; border-radius:4px; background:var(--surface-2); overflow:hidden;}
+  .progress-fill{height:100%; width:0%; background:var(--accent); transition:width .25s;}
+  .theme-btn{font-size:11.5px; font-weight:700; border:1px solid var(--line); background:var(--surface-2); color:var(--ink); padding:6px 10px; border-radius:8px; cursor:pointer;}
+  .theme-btn:hover{border-color:var(--accent);}
+
+  main{padding:44px clamp(16px,5vw,40px) 100px;}
+  .doc{max-width:760px; margin:0 auto;}
+
+  header.hero{margin-bottom:28px;}
+  .hero .kicker{font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--accent-ink); font-weight:700; display:flex; gap:8px; align-items:center;}
+  .hero .kicker::before{content:""; width:22px; height:1.5px; background:var(--accent);}
+  .hero h1{font-size:clamp(26px,4vw,34px); margin:10px 0 12px;}
+  .hero p{font-family:'Manrope',sans-serif; color:var(--ink-soft); font-size:14px; max-width:62ch; margin:0 0 14px;}
+  .meta-row{display:flex; gap:8px; flex-wrap:wrap;}
+  .badge{font-size:11px; font-weight:700; padding:5px 10px; border-radius:100px; background:var(--surface-2); color:var(--ink-soft); border:1px solid var(--line);}
+
+  .rule-box{font-family:'Manrope',sans-serif; font-size:13px; background:var(--accent-soft); border:1px solid var(--accent); border-radius:9px; padding:14px 16px; margin-bottom:16px; color:var(--ink);}
+  .rule-box strong{color:var(--accent-ink);}
+  .note-box{font-family:'Manrope',sans-serif; font-size:13px; background:var(--surface-2); border:1px dashed var(--line); border-radius:9px; padding:14px 16px; margin-bottom:28px; color:var(--ink-soft);}
+  .note-box strong{color:var(--ink);}
+
+  .checklist{list-style:none; margin:18px 0; padding:0; display:grid; gap:8px;}
+  .checklist li{display:flex; gap:10px; align-items:flex-start; font-family:'Manrope',sans-serif; font-size:13.5px;}
+  .checklist input{margin-top:3px; width:16px; height:16px; accent-color:var(--accent); flex:none;}
+
+  .stepper{display:flex; align-items:flex-start; gap:0; margin:8px 0 40px; overflow-x:auto; padding-bottom:4px;}
+  .stepper-item{flex:1; min-width:64px; display:flex; flex-direction:column; align-items:center; gap:6px; position:relative; background:none; border:none; padding:0; cursor:pointer; font-family:'Manrope',sans-serif;}
+  .stepper-item::after{content:""; position:absolute; top:14px; left:50%; width:100%; height:2px; background:var(--line); z-index:0;}
+  .stepper-item:last-child::after{display:none;}
+  .stepper-item.done::after{background:var(--accent);}
+  .stepper-num{position:relative; z-index:1; width:28px; height:28px; border-radius:50%; background:var(--surface); border:2px solid var(--line); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-weight:600; font-size:11.5px; color:var(--ink-soft);}
+  .stepper-item.current .stepper-num{border-color:var(--accent); color:var(--accent-ink);}
+  .stepper-item.done .stepper-num{background:var(--accent); border-color:var(--accent); color:var(--surface);}
+  .stepper-item.locked .stepper-num{opacity:.5;}
+  .stepper-label{font-size:9.5px; text-align:center; color:var(--ink-soft); line-height:1.2; max-width:74px;}
+  .stepper-item.current .stepper-label{color:var(--ink); font-weight:700;}
+
+  section.step{border-left:2px solid var(--line); padding-left:26px; margin-left:6px; position:relative; margin-bottom:22px; scroll-margin-top:90px; transition:border-color .2s, opacity .2s;}
+  section.step::before{content: attr(data-n); position:absolute; left:-19px; top:-2px; width:36px; height:36px; border-radius:50%; background:var(--surface); border:2px solid var(--line); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-weight:600; font-size:13px; color:var(--ink-soft);}
+  section.step.current{border-left-color:var(--accent);}
+  section.step.current::before{border-color:var(--accent); color:var(--accent-ink);}
+  section.step.done::before{background:var(--accent); border-color:var(--accent); color:var(--surface); content:"✓";}
+  section.step.locked{opacity:.5;}
+  section.step .eyebrow{font-size:11.5px; font-weight:700; color:var(--accent-ink); letter-spacing:.05em; display:block; margin-bottom:4px;}
+  section.step h2{font-size:19px; margin:0 0 10px;}
+  section.step h4{font-size:13.5px; margin:16px 0 6px;}
+  section.step p{margin:0 0 12px;}
+  section.step ul, section.step ol{margin:0 0 12px; padding-left:20px;}
+  section.step li{margin-bottom:6px;}
+
+  .verify-box{background:var(--surface); border:1px solid var(--accent); border-radius:9px; padding:14px 16px; margin-top:16px;}
+  .verify-box .vt{font-family:'Manrope',sans-serif; font-weight:700; font-size:11.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--accent-ink); margin-bottom:8px; display:flex; align-items:center; gap:6px;}
+  .verify-box .vt::before{content:"✔";}
+  .verify-list{list-style:none; margin:0; padding:0; display:grid; gap:7px;}
+  .verify-list li{display:flex; gap:9px; align-items:flex-start; font-family:'Manrope',sans-serif; font-size:12.5px;}
+  .verify-list input{margin-top:2px; width:15px; height:15px; accent-color:var(--accent); flex:none;}
+
+  .step-actions{display:flex; align-items:center; gap:12px; margin-top:16px; padding-top:16px; border-top:1px dashed var(--line); flex-wrap:wrap;}
+  .step-done-btn{font-family:'Manrope',sans-serif; font-weight:700; font-size:12.5px; padding:9px 15px; border-radius:8px; border:1px solid var(--accent); background:var(--accent-soft); color:var(--accent-ink); cursor:pointer;}
+  .step-done-btn:hover:not(:disabled){background:var(--accent); color:var(--surface);}
+  .step-done-btn.on{background:var(--accent); color:var(--surface);}
+  .step-done-btn:disabled{opacity:.4; cursor:not-allowed;}
+  .step-done-note{font-family:'Manrope',sans-serif; font-size:11.5px; color:var(--ink-soft);}
+
+  .term{background:var(--term-bg); color:var(--term-ink); border-radius:9px; overflow:hidden; margin:14px 0; box-shadow:var(--shadow); border:1px solid var(--line);}
+  .term-bar{display:flex; align-items:center; justify-content:space-between; padding:8px 14px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#8fa0a0; background:rgba(255,255,255,.03); border-bottom:1px solid rgba(255,255,255,.06);}
+  .term-copy{background:transparent; border:1px solid rgba(255,255,255,.18); color:#cfe0e0; font-size:10.5px; padding:3px 8px; border-radius:6px; cursor:pointer; font-family:'Manrope',sans-serif;}
+  .term-copy:hover{border-color:var(--term-accent); color:var(--term-accent);}
+  .term pre{margin:0; padding:14px 16px; overflow-x:auto; font-family:'JetBrains Mono',monospace; font-size:12.5px; line-height:1.65;}
+  .term .k{color:var(--term-accent);}
+  .term .cm{color:#8fa0a0;}
+
+  .callout{border-radius:var(--radius); padding:16px 18px; margin:16px 0; font-family:'Manrope',sans-serif; font-size:13.5px; border:1px solid;}
+  .callout.think{background:var(--surface-2); border-color:var(--line);}
+  .callout.warn{background:var(--amber-soft); border-color:var(--amber);}
+  .callout h4{margin:0 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:.05em;}
+  .callout.think h4{color:var(--ink-soft);}
+  .callout.warn h4{color:var(--amber);}
+  .callout ul,.callout ol{margin:0; padding-left:18px;}
+  .callout li{margin-bottom:5px;}
+
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-family:'Manrope',sans-serif; font-size:13px;}
+  caption{caption-side:top; text-align:left; font-weight:700; font-size:12.5px; color:var(--ink-soft); margin-bottom:8px;}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line);}
+  th{font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft);}
+  td code{font-size:12px;}
+
+  .case{background:var(--surface); border:1px solid var(--accent); border-radius:var(--radius); padding:20px 22px; margin:18px 0; box-shadow:var(--shadow);}
+  .case .tag{display:inline-block; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--accent-ink); background:var(--accent-soft); padding:3px 9px; border-radius:100px; margin-bottom:10px;}
+
+  .ai-box{border:1px solid var(--amber); background:var(--amber-soft); border-radius:var(--radius); padding:18px 20px; margin:18px 0;}
+  .ai-box h4{margin:0 0 10px; font-size:12.5px; color:var(--amber); text-transform:uppercase; letter-spacing:.05em; display:flex; gap:7px; align-items:center;}
+  .ai-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; font-family:'Manrope',sans-serif; font-size:13px;}
+  @media(max-width:600px){.ai-grid{grid-template-columns:1fr;}}
+  .ai-grid h5{margin:0 0 6px; font-size:11.5px; text-transform:uppercase; letter-spacing:.04em;}
+  .ai-grid .yes h5{color:var(--accent-ink);}
+  .ai-grid .no h5{color:var(--danger);}
+  .ai-grid ul{margin:0; padding-left:16px;}
+
+  .declaration{font-family:'JetBrains Mono',monospace; font-size:12px; background:var(--surface-2); border:1px dashed var(--line); border-radius:8px; padding:14px 16px; margin-top:10px; white-space:pre-wrap;}
+
+  .final-check{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:20px 22px; box-shadow:var(--shadow);}
+  footer.doc-foot{margin-top:40px; padding-top:20px; border-top:1px solid var(--line); font-family:'Manrope',sans-serif; font-size:12.5px; color:var(--ink-soft); display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;}
+</style>
+
+<div class="topbar">
+  <div class="topbar-row">
+    <div>
+      <div class="kicker">Extensión de la Práctica 2</div>
+      <h1>CRUD con persistencia real, paso a paso</h1>
+    </div>
+    <div class="progress-wrap">
+      <span id="progressLabel">0/14 pasos</span>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <button class="theme-btn" id="themeBtn" type="button">Sistema</button>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div class="doc">
+    <header class="hero">
+      <span class="kicker">Horas de práctica de laboratorio · Mismo ejercicio, con datos reales</span>
+      <h1>Persistencia en base de datos relacional con ORM y despliegue en Render</h1>
+      <p>Esta guía toma el mismo ejercicio de la práctica anterior (CRUD de Productos) y reemplaza el arreglo en memoria por una <strong>base de datos PostgreSQL real</strong>, accedida a través de <strong>TypeORM</strong> (el ORM oficial recomendado por NestJS). Al final desplegarás la API completa, con su base de datos, en <strong>Render</strong>.</p>
+      <div class="meta-row">
+        <span class="badge">~3 h laboratorio</span>
+        <span class="badge">Nivel: intermedio</span>
+        <span class="badge">NestJS + TypeORM + PostgreSQL</span>
+        <span class="badge">Despliegue en Render</span>
+      </div>
+    </header>
+
+    <div class="rule-box">
+      <strong>Regla de esta guía:</strong> sigue los pasos en orden, sin saltarte ninguno. Cada paso tiene una casilla de <strong>Verificación</strong> — el botón "Marcar paso completado" solo se activa cuando confirmas que la verificación se cumplió. La prueba más importante de todas está en el Paso 8: vas a <em>reiniciar el servidor</em> y comprobar que los datos siguen ahí. Esa es la diferencia real entre esta práctica y la anterior.
+    </div>
+    <div class="note-box">
+      <strong>Nota:</strong> esta guía asume que ya completaste (o al menos conoces) el CRUD en memoria de <code>web-practica.html</code> — reutilizamos el mismo dominio (Productos), el mismo contrato de URIs y los mismos DTOs de validación. Si no la hiciste, el Paso 1 te deja crear el proyecto base desde cero igualmente.
+    </div>
+
+    <nav class="stepper" id="stepper" aria-label="Ruta paso a paso de la práctica">
+      <button class="stepper-item" data-target="step0"><span class="stepper-num">0</span><span class="stepper-label">Entorno</span></button>
+      <button class="stepper-item" data-target="step1"><span class="stepper-num">1</span><span class="stepper-label">Proyecto base</span></button>
+      <button class="stepper-item" data-target="step2"><span class="stepper-num">2</span><span class="stepper-label">PostgreSQL</span></button>
+      <button class="stepper-item" data-target="step3"><span class="stepper-num">3</span><span class="stepper-label">TypeORM</span></button>
+      <button class="stepper-item" data-target="step4"><span class="stepper-num">4</span><span class="stepper-label">Entity</span></button>
+      <button class="stepper-item" data-target="step5"><span class="stepper-num">5</span><span class="stepper-label">GET</span></button>
+      <button class="stepper-item" data-target="step6"><span class="stepper-num">6</span><span class="stepper-label">POST</span></button>
+      <button class="stepper-item" data-target="step7"><span class="stepper-num">7</span><span class="stepper-label">PUT/PATCH</span></button>
+      <button class="stepper-item" data-target="step8"><span class="stepper-num">8</span><span class="stepper-label">DELETE</span></button>
+      <button class="stepper-item" data-target="step9"><span class="stepper-num">9</span><span class="stepper-label">Filtro</span></button>
+      <button class="stepper-item" data-target="step10"><span class="stepper-num">10</span><span class="stepper-label">Prod-ready</span></button>
+      <button class="stepper-item" data-target="step11"><span class="stepper-num">11</span><span class="stepper-label">GitHub + CI</span></button>
+      <button class="stepper-item" data-target="step12"><span class="stepper-num">12</span><span class="stepper-label">Render</span></button>
+      <button class="stepper-item" data-target="step13"><span class="stepper-num">13</span><span class="stepper-label">Entregar</span></button>
+    </nav>
+
+    <!-- PASO 0 -->
+    <section class="step" data-n="0" id="step0">
+      <span class="eyebrow">Paso 0</span>
+      <h2>Verificar el entorno de trabajo</h2>
+      <p>Esta guía asume que <strong>no tienes nada instalado todavía</strong> para la parte de base de datos, ni falta te hace: vamos a levantar PostgreSQL dentro de un contenedor de Docker, así que no vas a instalar el motor de base de datos directamente en tu sistema operativo.</p>
+      <ol>
+        <li>Abre una terminal y confirma Node y npm (si te faltan, instala Node LTS desde <code>nodejs.org</code> primero):</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="node --version
+npm --version">Copiar</button></div>
+        <pre><span class="k">$</span> node --version
+<span class="cm"># v18.19.0 o superior</span>
+<span class="k">$</span> npm --version</pre>
+      </div>
+      <ol start="2">
+        <li>Prepara una carpeta de tu propio usuario para los paquetes globales de npm (evita instalar en <code>/usr/local</code>, que en macOS suele pertenecer a otro dueño y provoca el error <code>EACCES: permission denied</code> al hacer <code>npm i -g</code>):</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="mkdir -p ~/.npm-global
+npm config set prefix '~/.npm-global'
+echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.zshrc
+source ~/.zshrc">Copiar</button></div>
+        <pre><span class="k">$</span> mkdir -p ~/.npm-global
+<span class="k">$</span> npm config set prefix '~/.npm-global'
+<span class="k">$</span> echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.zshrc
+<span class="k">$</span> source ~/.zshrc
+<span class="cm"># en Windows (PowerShell) omite este paso: normalmente no da problemas de permisos</span></pre>
+      </div>
+      <ol start="3">
+        <li>Instala el CLI de Nest de forma global (una sola vez) y confirma:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="npm i -g @nestjs/cli
+nest --version">Copiar</button></div>
+        <pre><span class="k">$</span> npm i -g @nestjs/cli
+<span class="k">$</span> nest --version</pre>
+      </div>
+      <div class="callout warn">
+        <h4>⚠ Si <code>npm i -g @nestjs/cli</code> te da <code>EACCES: permission denied</code></h4>
+        <p style="margin:0;">Es señal de que el paso 2 de arriba no se aplicó (revisa que <code>npm config get prefix</code> ya no muestre <code>/usr/local</code>) o de que la terminal no recargó tu <code>~/.zshrc</code> — ciérrala y ábrela de nuevo. <strong>Nunca uses <code>sudo npm i -g</code></strong> como atajo: soluciona el síntoma hoy, pero deja la carpeta global con permisos mezclados y provoca errores más raros después.</p>
+      </div>
+      <h4>Instalar Docker Desktop (si nunca lo has usado)</h4>
+      <p>Docker es el programa que va a "contener" PostgreSQL por ti — no vas a instalar Postgres como una aplicación aparte, sino que Docker va a descargar una imagen lista para usar y correrla aislada. Solo necesitas instalar Docker una vez:</p>
+      <ol>
+        <li>Ve a <a href="https://www.docker.com/products/docker-desktop/" target="_blank" rel="noopener">docker.com/products/docker-desktop</a> y descarga el instalador para tu sistema operativo (Windows, Mac con chip Intel/Apple Silicon, o Linux).</li>
+        <li>Ejecuta el instalador y acepta las opciones por defecto.
+          <ul>
+            <li><strong>Windows:</strong> el instalador te puede pedir habilitar "WSL2" (Subsistema de Windows para Linux) — acepta y, si te pide reiniciar el computador, hazlo. Es normal que el proceso tome varios minutos e incluya un reinicio.</li>
+            <li><strong>Mac:</strong> arrastra la app a la carpeta Aplicaciones como cualquier otra app, y ábrela desde ahí.</li>
+          </ul>
+        </li>
+        <li>Abre la aplicación <strong>Docker Desktop</strong> (búscala en el menú de inicio o en Spotlight). Espera a que el ícono de la ballena en tu barra de tareas/menú deje de estar "cargando" — <strong>Docker Desktop debe quedar abierto y corriendo en segundo plano</strong> mientras hagas esta práctica; si lo cierras, los comandos <code>docker</code> dejan de funcionar.</li>
+        <li>Con Docker Desktop abierto, vuelve a la terminal y confirma:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="docker --version
+docker run hello-world">Copiar</button></div>
+        <pre><span class="k">$</span> docker --version
+<span class="cm"># cualquier versión reciente de Docker Desktop</span>
+<span class="k">$</span> docker run hello-world
+<span class="cm"># descarga una imagen mínima y, si todo está bien, imprime "Hello from Docker!"</span></pre>
+      </div>
+      <p style="font-size:13px; color:var(--ink-soft);">Si <code>docker --version</code> falla con algo como "no se reconoce el comando", Docker Desktop no quedó instalado o no está en el <code>PATH</code>: cierra y vuelve a abrir la terminal, y si sigue fallando, reinstala. Si <code>docker run hello-world</code> falla con "Cannot connect to the Docker daemon", significa que instalaste Docker pero <strong>la aplicación Docker Desktop no está abierta</strong> — ábrela y espera a que termine de iniciar.</p>
+      <p>Crea también, si no la tienes, una cuenta gratuita en <a href="https://render.com" target="_blank" rel="noopener">render.com</a> (puedes registrarte con tu cuenta de GitHub) — la usarás en el Paso 12.</p>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 0</div>
+        <ul class="verify-list" data-step="step0">
+          <li><input type="checkbox" data-v="0"><span><code>node</code>, <code>npm</code>, <code>nest --version</code> y <code>docker --version</code> me responden con un número de versión sin errores.</span></li>
+          <li><input type="checkbox" data-v="1"><span>Docker Desktop está abierto y <code>docker run hello-world</code> imprimió "Hello from Docker!".</span></li>
+          <li><input type="checkbox" data-v="2"><span>Tengo una cuenta creada en Render (o confirmada si ya la tenía).</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step0" data-next="step1" disabled>✓ Marcar paso 0 completado → ir al paso 1</button>
+        <span class="step-done-note">Marca las tres casillas de verificación para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 1 -->
+    <section class="step" data-n="1" id="step1">
+      <span class="eyebrow">Paso 1</span>
+      <h2>Crear (o recuperar) el proyecto base</h2>
+      <h4>Si ya tienes <code>nestjs-productos-api</code> de la práctica anterior</h4>
+      <p>Ábrelo en tu editor. Lo vamos a modificar: el arreglo en memoria de <code>ProductosService</code> va a desaparecer por completo y su lugar lo va a ocupar una base de datos real. No necesitas borrar nada todavía, lo iremos reemplazando pieza por pieza en los pasos siguientes.</p>
+      <h4>Si NO lo tienes (empiezas desde cero)</h4>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="nest new nestjs-productos-api --package-manager npm
+cd nestjs-productos-api
+npm i @nestjs/swagger class-validator class-transformer
+npm run start:dev">Copiar</button></div>
+        <pre><span class="k">$</span> nest new nestjs-productos-api --package-manager npm
+<span class="k">$</span> cd nestjs-productos-api
+<span class="k">$</span> npm i @nestjs/swagger class-validator class-transformer
+<span class="k">$</span> npm run start:dev
+<span class="cm"># Nest application successfully started, escuchando en http://localhost:3000</span></pre>
+      </div>
+      <p>Y habilita Swagger + <code>ValidationPipe</code> en <code>src/main.ts</code> (lo ajustaremos otra vez en el Paso 10, así que no te preocupes por el puerto todavía):</p>
+      <div class="term">
+        <div class="term-bar"><span>src/main.ts</span><button class="term-copy" data-copy="import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { AppModule } from './app.module.js';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+
+  const config = new DocumentBuilder()
+    .setTitle('API de Productos (con persistencia)')
+    .setDescription('CRUD de productos sobre PostgreSQL + TypeORM')
+    .setVersion('1.0')
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('swagger', app, document);
+
+  await app.listen(3000);
+}
+bootstrap();">Copiar</button></div>
+        <pre>import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { AppModule } from './app.module.js';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+
+  const config = new DocumentBuilder()
+    .setTitle('API de Productos (con persistencia)')
+    .setDescription('CRUD de productos sobre PostgreSQL + TypeORM')
+    .setVersion('1.0')
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('swagger', app, document);
+
+  await app.listen(3000);
+}
+bootstrap();</pre>
+      </div>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 1</div>
+        <ul class="verify-list" data-step="step1">
+          <li><input type="checkbox" data-v="0"><span><code>npm run start:dev</code> inicia sin errores y <code>/swagger</code> carga en el navegador.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step1" data-next="step2" disabled>✓ Marcar paso 1 completado → ir al paso 2</button>
+        <span class="step-done-note">Marca la verificación para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 2 -->
+    <section class="step" data-n="2" id="step2">
+      <span class="eyebrow">Paso 2</span>
+      <h2>Levantar PostgreSQL local con Docker</h2>
+      <p>Aquí es donde realmente "instalas" PostgreSQL: no como un programa aparte en tu sistema operativo, sino como una <strong>imagen de Docker</strong> que se descarga una sola vez y luego corre siempre dentro de un contenedor aislado — igual a como lo tendrás en Render, solo que local. Con Docker Desktop abierto (Paso 0):</p>
+      <ol>
+        <li>Descarga ("instala") la imagen oficial de PostgreSQL versión 16:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="docker pull postgres:16">Copiar</button></div>
+        <pre><span class="k">$</span> docker pull postgres:16
+<span class="cm"># descarga la imagen desde Docker Hub — puede tardar uno o dos minutos la primera vez</span></pre>
+      </div>
+      <ol start="2">
+        <li>Crea y arranca un contenedor a partir de esa imagen, con usuario, contraseña y base de datos ya configurados:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="docker run --name pg-productos \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=productos_db \
+  -p 5432:5432 \
+  -d postgres:16">Copiar</button></div>
+        <pre><span class="k">$</span> docker run --name pg-productos \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=productos_db \
+  -p 5432:5432 \
+  -d postgres:16
+<span class="cm"># arranca el contenedor en segundo plano (-d) usando la imagen ya descargada</span></pre>
+      </div>
+      <ol start="3">
+        <li>Confirma que el contenedor está corriendo:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="docker ps
+docker exec -it pg-productos psql -U postgres -d productos_db -c &quot;\dt&quot;">Copiar</button></div>
+        <pre><span class="k">$</span> docker ps
+<span class="cm"># debe aparecer pg-productos con estado "Up"</span>
+<span class="k">$</span> docker exec -it pg-productos psql -U postgres -d productos_db -c "\dt"
+<span class="cm"># "Did not find any relations." es la respuesta correcta: la BD existe, aún sin tablas</span></pre>
+      </div>
+      <p style="font-size:13px; color:var(--ink-soft);">Si necesitas parar o reiniciar el contenedor más adelante: <code>docker stop pg-productos</code> / <code>docker start pg-productos</code>. Los datos persisten mientras no ejecutes <code>docker rm</code> sobre el contenedor.</p>
+      <div class="callout warn">
+        <h4>⚠ Problemas comunes</h4>
+        <ul>
+          <li><strong><code>Cannot connect to the Docker daemon</code>:</strong> Docker Desktop no está abierto. Ábrelo y espera a que termine de iniciar antes de repetir el comando.</li>
+          <li><strong><code>port is already allocated</code> en el puerto 5432:</strong> ya tienes otro PostgreSQL (o otro contenedor) usando ese puerto. Detén el otro proceso, o cambia este contenedor a otro puerto de tu máquina con <code>-p 5433:5432</code> (y ajusta el <code>DATABASE_URL</code> del Paso 3 a <code>localhost:5433</code>).</li>
+          <li><strong><code>Conflict... container name "/pg-productos" is already in use</code>:</strong> ya creaste el contenedor antes; no necesitas volver a crearlo, solo arráncalo con <code>docker start pg-productos</code>.</li>
+        </ul>
+      </div>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 2</div>
+        <ul class="verify-list" data-step="step2">
+          <li><input type="checkbox" data-v="0"><span><code>docker ps</code> muestra <code>pg-productos</code> corriendo.</span></li>
+          <li><input type="checkbox" data-v="1"><span>Pude conectarme con <code>psql</code> dentro del contenedor y ver que <code>productos_db</code> existe.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step2" data-next="step3" disabled>✓ Marcar paso 2 completado → ir al paso 3</button>
+        <span class="step-done-note">Marca ambas casillas para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 3 -->
+    <section class="step" data-n="3" id="step3">
+      <span class="eyebrow">Paso 3</span>
+      <h2>Conectar TypeORM al proyecto</h2>
+      <p>Instala el ORM, el driver de PostgreSQL y el módulo de configuración de variables de entorno:</p>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="npm i @nestjs/typeorm typeorm pg @nestjs/config">Copiar</button></div>
+        <pre><span class="k">$</span> npm i @nestjs/typeorm typeorm pg @nestjs/config</pre>
+      </div>
+      <ol>
+        <li>Crea un archivo <code>.env</code> en la raíz del proyecto (nunca se sube a git):</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>.env</span><button class="term-copy" data-copy="DATABASE_URL=postgresql://postgres:postgres@localhost:5432/productos_db
+NODE_ENV=development">Copiar</button></div>
+        <pre>DATABASE_URL=postgresql://postgres:postgres@localhost:5432/productos_db
+NODE_ENV=development</pre>
+      </div>
+      <ol start="2">
+        <li>Edita <code>src/app.module.ts</code> para registrar la conexión:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>src/app.module.ts</span><button class="term-copy" data-copy="import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        type: 'postgres',
+        url: config.get<string>('DATABASE_URL'),
+        autoLoadEntities: true,
+        // sin migraciones en este proyecto: se sincroniza también en producción
+        synchronize: true,
+        ssl: config.get('NODE_ENV') === 'production'
+          ? { rejectUnauthorized: false }
+          : false,
+      }),
+    }),
+  ],
+})
+export class AppModule {}">Copiar</button></div>
+        <pre>import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        type: 'postgres',
+        url: config.get&lt;string&gt;('DATABASE_URL'),
+        autoLoadEntities: true,
+        // sin migraciones en este proyecto: se sincroniza también en producción
+        synchronize: true,
+        ssl: config.get('NODE_ENV') === 'production'
+          ? { rejectUnauthorized: false }
+          : false,
+      }),
+    }),
+  ],
+})
+export class AppModule {}</pre>
+      </div>
+      <div class="callout warn">
+        <h4>⚠ Sobre <code>synchronize</code></h4>
+        <p style="margin:0;"><code>synchronize: true</code> hace que TypeORM cree y ajuste las tablas automáticamente a partir de tus entidades. En un proyecto real <strong>no se usa así</strong>, porque puede alterar o borrar columnas con datos en producción sin avisar — ahí se usan <em>migraciones</em> (<code>typeorm migration:generate</code> / <code>migration:run</code>). Esta práctica no cubre migraciones, así que lo dejamos activo también en producción (Render); si no, al desplegar la tabla <code>productos</code> nunca se crearía y toda petición fallaría.</p>
+      </div>
+      <ol start="3">
+        <li>Reinicia <code>npm run start:dev</code>. Si la consola arranca sin errores de conexión, TypeORM ya está hablando con Postgres (aunque todavía no exista ninguna entidad).</li>
+      </ol>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 3</div>
+        <ul class="verify-list" data-step="step3">
+          <li><input type="checkbox" data-v="0"><span>El servidor arranca sin errores de conexión a la base de datos.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step3" data-next="step4" disabled>✓ Marcar paso 3 completado → ir al paso 4</button>
+        <span class="step-done-note">Marca la verificación para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 4 -->
+    <section class="step" data-n="4" id="step4">
+      <span class="eyebrow">Paso 4</span>
+      <h2>Generar el módulo de Productos y la Entity</h2>
+      <ol>
+        <li>Si aún no existen (o si vienes de la práctica anterior, ya los tienes), genera módulo, controlador y servicio:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="nest g module productos
+nest g controller productos --no-spec
+nest g service productos --no-spec">Copiar</button></div>
+        <pre><span class="k">$</span> nest g module productos
+<span class="k">$</span> nest g controller productos --no-spec
+<span class="k">$</span> nest g service productos --no-spec</pre>
+      </div>
+      <ol start="2">
+        <li>Reemplaza (o crea) <code>src/productos/producto.entity.ts</code> — ya no es una clase plana, ahora describe una tabla real:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>src/productos/producto.entity.ts</span><button class="term-copy" data-copy="import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+
+@Entity('productos')
+export class Producto {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  nombre: string;
+
+  @Column('numeric', {
+    precision: 10,
+    scale: 2,
+    transformer: {
+      to: (value: number) => value,
+      from: (value: string) => parseFloat(value),
+    },
+  })
+  precio: number;
+}">Copiar</button></div>
+        <pre>import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+
+@Entity('productos')
+export class Producto {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  nombre: string;
+
+  @Column('numeric', {
+    precision: 10,
+    scale: 2,
+    transformer: {
+      to: (value: number) =&gt; value,
+      from: (value: string) =&gt; parseFloat(value),
+    },
+  })
+  precio: number;
+}</pre>
+      </div>
+      <div class="callout think">
+        <h4>Un detalle que sorprende la primera vez</h4>
+        <p style="margin:0;">El driver de PostgreSQL devuelve las columnas <code>numeric</code>/<code>decimal</code> como <strong>string</strong> (para no perder precisión), no como <code>number</code>. Sin el <code>transformer</code> de arriba, <code>precio</code> llegaría como <code>"45.90"</code> en vez de <code>45.9</code>. El transformer convierte automáticamente en ambas direcciones (guardar/leer).</p>
+      </div>
+      <ol start="3">
+        <li>Edita <code>src/productos/productos.module.ts</code> para registrar la entidad:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>productos.module.ts</span><button class="term-copy" data-copy="import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Producto } from './producto.entity.js';
+import { ProductosController } from './productos.controller.js';
+import { ProductosService } from './productos.service.js';
+
+@Module({
+  imports: [TypeOrmModule.forFeature([Producto])],
+  controllers: [ProductosController],
+  providers: [ProductosService],
+})
+export class ProductosModule {}">Copiar</button></div>
+        <pre>import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Producto } from './producto.entity.js';
+import { ProductosController } from './productos.controller.js';
+import { ProductosService } from './productos.service.js';
+
+@Module({
+  imports: [TypeOrmModule.forFeature([Producto])],
+  controllers: [ProductosController],
+  providers: [ProductosService],
+})
+export class ProductosModule {}</pre>
+      </div>
+      <ol start="4">
+        <li>Reinicia el servidor y confirma que ahora sí existe la tabla:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="docker exec -it pg-productos psql -U postgres -d productos_db -c &quot;\dt&quot;">Copiar</button></div>
+        <pre><span class="k">$</span> docker exec -it pg-productos psql -U postgres -d productos_db -c "\dt"
+<span class="cm"># ahora debe listar la tabla "productos"</span></pre>
+      </div>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 4</div>
+        <ul class="verify-list" data-step="step4">
+          <li><input type="checkbox" data-v="0"><span><code>\dt</code> dentro de <code>psql</code> muestra la tabla <code>productos</code> creada por TypeORM.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step4" data-next="step5" disabled>✓ Marcar paso 4 completado → ir al paso 5</button>
+        <span class="step-done-note">Marca la verificación para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 5 -->
+    <section class="step" data-n="5" id="step5">
+      <span class="eyebrow">Paso 5</span>
+      <h2>GET (listar / obtener) usando el Repository</h2>
+      <p>TypeORM te da un <strong>Repository</strong> por entidad — un objeto con métodos (<code>find</code>, <code>findOneBy</code>, <code>save</code>, <code>delete</code>...) que traduce a SQL por ti. Se inyecta con <code>@InjectRepository</code>.</p>
+      <ol>
+        <li>Reemplaza <code>src/productos/productos.service.ts</code> por completo:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>productos.service.ts</span><button class="term-copy" data-copy="import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Producto } from './producto.entity.js';
+
+@Injectable()
+export class ProductosService {
+  constructor(
+    @InjectRepository(Producto)
+    private readonly productosRepository: Repository<Producto>,
+  ) {}
+
+  findAll(): Promise<Producto[]> {
+    return this.productosRepository.find();
+  }
+
+  async findOne(id: number): Promise<Producto> {
+    const producto = await this.productosRepository.findOneBy({ id });
+    if (!producto) throw new NotFoundException(`Producto ${id} no existe`);
+    return producto;
+  }
+}">Copiar</button></div>
+        <pre>import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Producto } from './producto.entity.js';
+
+@Injectable()
+export class ProductosService {
+  constructor(
+    @InjectRepository(Producto)
+    private readonly productosRepository: Repository&lt;Producto&gt;,
+  ) {}
+
+  findAll(): Promise&lt;Producto[]&gt; {
+    return this.productosRepository.find();
+  }
+
+  async findOne(id: number): Promise&lt;Producto&gt; {
+    const producto = await this.productosRepository.findOneBy({ id });
+    if (!producto) throw new NotFoundException(`Producto ${id} no existe`);
+    return producto;
+  }
+}</pre>
+      </div>
+      <ol start="2">
+        <li>El controlador queda prácticamente igual que en la práctica anterior (Nest maneja las promesas solo):</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>productos.controller.ts</span><button class="term-copy" data-copy="import { Controller, Get, Param, ParseIntPipe } from '@nestjs/common';
+import { ProductosService } from './productos.service.js';
+
+@Controller('api/v1/productos')
+export class ProductosController {
+  constructor(private readonly productosService: ProductosService) {}
+
+  @Get()
+  listar() {
+    return this.productosService.findAll();
+  }
+
+  @Get(':id')
+  obtener(@Param('id', ParseIntPipe) id: number) {
+    return this.productosService.findOne(id);
+  }
+}">Copiar</button></div>
+        <pre>import { Controller, Get, Param, ParseIntPipe } from '@nestjs/common';
+import { ProductosService } from './productos.service.js';
+
+@Controller('api/v1/productos')
+export class ProductosController {
+  constructor(private readonly productosService: ProductosService) {}
+
+  @Get()
+  listar() {
+    return this.productosService.findAll();
+  }
+
+  @Get(':id')
+  obtener(@Param('id', ParseIntPipe) id: number) {
+    return this.productosService.findOne(id);
+  }
+}</pre>
+      </div>
+      <ol start="3">
+        <li>Prueba <code>GET /api/v1/productos</code> en Swagger: como la tabla está vacía, debe responder <code>200</code> con <code>[]</code> (no un error — una tabla vacía es un resultado válido).</li>
+        <li>Prueba <code>GET /api/v1/productos/1</code>: debe responder <code>404</code>, porque aún no existe ninguna fila.</li>
+      </ol>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 5</div>
+        <ul class="verify-list" data-step="step5">
+          <li><input type="checkbox" data-v="0"><span><code>GET /productos</code> responde 200 con un arreglo vacío <code>[]</code>.</span></li>
+          <li><input type="checkbox" data-v="1"><span><code>GET /productos/1</code> responde 404.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step5" data-next="step6" disabled>✓ Marcar paso 5 completado → ir al paso 6</button>
+        <span class="step-done-note">Marca ambas casillas para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 6 -->
+    <section class="step" data-n="6" id="step6">
+      <span class="eyebrow">Paso 6</span>
+      <h2>POST (crear) con persistencia real</h2>
+      <p>El DTO de validación no cambia respecto a la práctica anterior — la validación de entrada es independiente de dónde se guarden los datos.</p>
+      <ol>
+        <li>Crea <code>src/productos/dto/crear-producto.dto.ts</code>:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>dto/crear-producto.dto.ts</span><button class="term-copy" data-copy="import { IsNotEmpty, IsNumber, IsPositive, IsString } from 'class-validator';
+
+export class CrearProductoDto {
+  @IsString()
+  @IsNotEmpty()
+  nombre: string;
+
+  @IsNumber()
+  @IsPositive()
+  precio: number;
+}">Copiar</button></div>
+        <pre>import { IsNotEmpty, IsNumber, IsPositive, IsString } from 'class-validator';
+
+export class CrearProductoDto {
+  @IsString()
+  @IsNotEmpty()
+  nombre: string;
+
+  @IsNumber()
+  @IsPositive()
+  precio: number;
+}</pre>
+      </div>
+      <ol start="2"><li>Agrega este método a <code>ProductosService</code>:</li></ol>
+      <div class="term">
+        <div class="term-bar"><span>productos.service.ts</span><button class="term-copy" data-copy="import { CrearProductoDto } from './dto/crear-producto.dto.js';
+
+// ...dentro de la clase:
+async crear(dto: CrearProductoDto): Promise<Producto> {
+  const nuevo = this.productosRepository.create(dto);
+  return this.productosRepository.save(nuevo);
+}">Copiar</button></div>
+        <pre>import { CrearProductoDto } from './dto/crear-producto.dto.js';
+
+// ...dentro de la clase:
+async crear(dto: CrearProductoDto): Promise&lt;Producto&gt; {
+  const nuevo = this.productosRepository.create(dto);
+  return this.productosRepository.save(nuevo);
+}</pre>
+      </div>
+      <p style="font-size:13px; color:var(--ink-soft);"><code>create()</code> arma la instancia en memoria (todavía no toca la base de datos); <code>save()</code> es el que genera el <code>INSERT</code> real y devuelve la fila ya con su <code>id</code> autogenerado por Postgres.</p>
+      <ol start="3"><li>Agrega este método al controlador:</li></ol>
+      <div class="term">
+        <div class="term-bar"><span>productos.controller.ts</span><button class="term-copy" data-copy="import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Post, Res } from '@nestjs/common';
+import type { Response } from 'express';
+import { CrearProductoDto } from './dto/crear-producto.dto.js';
+
+@Post()
+@HttpCode(HttpStatus.CREATED)
+async crear(@Body() dto: CrearProductoDto, @Res({ passthrough: true }) res: Response) {
+  const nuevo = await this.productosService.crear(dto);
+  res.setHeader('Location', `/api/v1/productos/${nuevo.id}`);
+  return nuevo;
+}">Copiar</button></div>
+        <pre>import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Post, Res } from '@nestjs/common';
+import type { Response } from 'express';
+import { CrearProductoDto } from './dto/crear-producto.dto.js';
+
+@Post()
+@HttpCode(HttpStatus.CREATED)
+async crear(@Body() dto: CrearProductoDto, @Res({ passthrough: true }) res: Response) {
+  const nuevo = await this.productosService.crear(dto);
+  res.setHeader('Location', `/api/v1/productos/${nuevo.id}`);
+  return nuevo;
+}</pre>
+      </div>
+      <ol start="4">
+        <li>En Swagger, prueba <code>POST /api/v1/productos</code> con <code>{ "nombre": "Teclado mecánico", "precio": 45.90 }</code>. Debe responder <code>201</code> con header <code>Location</code>.</li>
+        <li>Ahora ve directo a la base de datos <strong>sin pasar por la API</strong> y confirma que la fila realmente está ahí:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="docker exec -it pg-productos psql -U postgres -d productos_db -c &quot;SELECT * FROM productos;&quot;">Copiar</button></div>
+        <pre><span class="k">$</span> docker exec -it pg-productos psql -U postgres -d productos_db -c "SELECT * FROM productos;"
+<span class="cm"># debe mostrar la fila que acabas de crear, con su id, nombre y precio</span></pre>
+      </div>
+      <p>Repite el <code>POST</code> dos veces más con otros productos, para tener varios registros con los que seguir probando.</p>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 6</div>
+        <ul class="verify-list" data-step="step6">
+          <li><input type="checkbox" data-v="0"><span><code>POST</code> válido responde 201 con header <code>Location</code>.</span></li>
+          <li><input type="checkbox" data-v="1"><span>Vi la fila creada directamente con <code>SELECT * FROM productos;</code> en <code>psql</code>, no solo en la respuesta de la API.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step6" data-next="step7" disabled>✓ Marcar paso 6 completado → ir al paso 7</button>
+        <span class="step-done-note">Marca ambas casillas para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 7 -->
+    <section class="step" data-n="7" id="step7">
+      <span class="eyebrow">Paso 7</span>
+      <h2>PUT y PATCH con persistencia real</h2>
+      <ol><li>Crea <code>src/productos/dto/actualizar-precio.dto.ts</code>:</li></ol>
+      <div class="term">
+        <div class="term-bar"><span>dto/actualizar-precio.dto.ts</span><button class="term-copy" data-copy="import { IsNumber, IsPositive } from 'class-validator';
+
+export class ActualizarPrecioDto {
+  @IsNumber()
+  @IsPositive()
+  precio: number;
+}">Copiar</button></div>
+        <pre>import { IsNumber, IsPositive } from 'class-validator';
+
+export class ActualizarPrecioDto {
+  @IsNumber()
+  @IsPositive()
+  precio: number;
+}</pre>
+      </div>
+      <ol start="2"><li>Agrega estos dos métodos a <code>ProductosService</code>:</li></ol>
+      <div class="term">
+        <div class="term-bar"><span>productos.service.ts</span><button class="term-copy" data-copy="async reemplazar(id: number, dto: CrearProductoDto): Promise<void> {
+  const producto = await this.findOne(id); // lanza 404 si no existe
+  await this.productosRepository.save({ ...producto, ...dto });
+}
+
+async actualizarPrecio(id: number, dto: ActualizarPrecioDto): Promise<Producto> {
+  const producto = await this.findOne(id);
+  producto.precio = dto.precio;
+  return this.productosRepository.save(producto);
+}">Copiar</button></div>
+        <pre>async reemplazar(id: number, dto: CrearProductoDto): Promise&lt;void&gt; {
+  const producto = await this.findOne(id); // lanza 404 si no existe
+  await this.productosRepository.save({ ...producto, ...dto });
+}
+
+async actualizarPrecio(id: number, dto: ActualizarPrecioDto): Promise&lt;Producto&gt; {
+  const producto = await this.findOne(id);
+  producto.precio = dto.precio;
+  return this.productosRepository.save(producto);
+}</pre>
+      </div>
+      <p style="font-size:13px; color:var(--ink-soft);">Reutilizamos <code>findOne()</code> (que ya lanza <code>NotFoundException</code>) en vez de repetir la búsqueda a mano — así el <code>404</code> queda garantizado en un solo lugar.</p>
+      <ol start="3"><li>Agrega estos dos métodos al controlador:</li></ol>
+      <div class="term">
+        <div class="term-bar"><span>productos.controller.ts</span><button class="term-copy" data-copy="import { Patch, Put } from '@nestjs/common';
+import { ActualizarPrecioDto } from './dto/actualizar-precio.dto.js';
+
+@Put(':id')
+@HttpCode(HttpStatus.NO_CONTENT)
+async reemplazar(@Param('id', ParseIntPipe) id: number, @Body() dto: CrearProductoDto) {
+  await this.productosService.reemplazar(id, dto);
+}
+
+@Patch(':id')
+async actualizarPrecio(@Param('id', ParseIntPipe) id: number, @Body() dto: ActualizarPrecioDto) {
+  return this.productosService.actualizarPrecio(id, dto);
+}">Copiar</button></div>
+        <pre>import { Patch, Put } from '@nestjs/common';
+import { ActualizarPrecioDto } from './dto/actualizar-precio.dto.js';
+
+@Put(':id')
+@HttpCode(HttpStatus.NO_CONTENT)
+async reemplazar(@Param('id', ParseIntPipe) id: number, @Body() dto: CrearProductoDto) {
+  await this.productosService.reemplazar(id, dto); // 204: sin cuerpo
+}
+
+@Patch(':id')
+async actualizarPrecio(@Param('id', ParseIntPipe) id: number, @Body() dto: ActualizarPrecioDto) {
+  return this.productosService.actualizarPrecio(id, dto); // 200: devolvemos el recurso
+}</pre>
+      </div>
+      <ol>
+        <li>Prueba <code>PUT /api/v1/productos/1</code> con un objeto completo: debe responder <code>204</code>.</li>
+        <li>Prueba <code>PATCH /api/v1/productos/1</code> con <code>{ "precio": 60.00 }</code>: debe responder <code>200</code> con el producto actualizado.</li>
+        <li>Confirma en <code>psql</code> (<code>SELECT * FROM productos WHERE id = 1;</code>) que el precio realmente cambió en la tabla.</li>
+        <li>Prueba ambos verbos con <code>id=999</code>: deben responder <code>404</code>.</li>
+      </ol>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 7</div>
+        <ul class="verify-list" data-step="step7">
+          <li><input type="checkbox" data-v="0"><span><code>PUT</code> válido responde 204 y <code>PATCH</code> válido responde 200, y el cambio se ve en <code>psql</code>.</span></li>
+          <li><input type="checkbox" data-v="1"><span>Ambos responden 404 con un id inexistente.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step7" data-next="step8" disabled>✓ Marcar paso 7 completado → ir al paso 8</button>
+        <span class="step-done-note">Marca ambas casillas para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 8 -->
+    <section class="step" data-n="8" id="step8">
+      <span class="eyebrow">Paso 8 · El paso clave</span>
+      <h2>DELETE, y comprobar que la persistencia es real</h2>
+      <ol><li>Agrega este método a <code>ProductosService</code>:</li></ol>
+      <div class="term">
+        <div class="term-bar"><span>productos.service.ts</span><button class="term-copy" data-copy="async eliminar(id: number): Promise<void> {
+  const resultado = await this.productosRepository.delete(id);
+  if (resultado.affected === 0) {
+    throw new NotFoundException(`Producto ${id} no existe`);
+  }
+}">Copiar</button></div>
+        <pre>async eliminar(id: number): Promise&lt;void&gt; {
+  const resultado = await this.productosRepository.delete(id);
+  if (resultado.affected === 0) {
+    throw new NotFoundException(`Producto ${id} no existe`);
+  }
+}</pre>
+      </div>
+      <p style="font-size:13px; color:var(--ink-soft);"><code>delete()</code> ejecuta un <code>DELETE</code> SQL directo por id — no necesita cargar la fila primero. <code>resultado.affected</code> te dice cuántas filas realmente se borraron (0 significa que ese id no existía).</p>
+      <ol start="2"><li>Agrega este método al controlador:</li></ol>
+      <div class="term">
+        <div class="term-bar"><span>productos.controller.ts</span><button class="term-copy" data-copy="import { Delete } from '@nestjs/common';
+
+@Delete(':id')
+@HttpCode(HttpStatus.NO_CONTENT)
+async eliminar(@Param('id', ParseIntPipe) id: number) {
+  await this.productosService.eliminar(id);
+}">Copiar</button></div>
+        <pre>import { Delete } from '@nestjs/common';
+
+@Delete(':id')
+@HttpCode(HttpStatus.NO_CONTENT)
+async eliminar(@Param('id', ParseIntPipe) id: number) {
+  await this.productosService.eliminar(id); // 204
+}</pre>
+      </div>
+      <ol start="3">
+        <li>Ejecuta <code>DELETE /api/v1/productos/2</code>: debe responder <code>204</code>.</li>
+        <li>Ejecuta el mismo <code>DELETE</code> una segunda vez: debe responder <code>404</code>, nunca 500.</li>
+      </ol>
+      <div class="case">
+        <span class="tag">La prueba que distingue esta práctica de la anterior</span>
+        <ol style="margin:0;">
+          <li>Anota cuántos productos tienes ahora mismo (<code>GET /api/v1/productos</code>).</li>
+          <li>Detén completamente el servidor de Nest (<code>Ctrl+C</code> en la terminal donde corre <code>npm run start:dev</code>).</li>
+          <li>Vuelve a ejecutar <code>npm run start:dev</code> desde cero.</li>
+          <li>Ejecuta <code>GET /api/v1/productos</code> otra vez.</li>
+        </ol>
+        <p style="margin:10px 0 0;">En la práctica anterior (arreglo en memoria), reiniciar el servidor <strong>borraba todo</strong> y volvías a ver solo los 3 productos iniciales del código. Aquí, tus productos siguen exactamente igual — porque nunca vivieron en la memoria del proceso de Node, sino en Postgres, un proceso completamente aparte.</p>
+      </div>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 8</div>
+        <ul class="verify-list" data-step="step8">
+          <li><input type="checkbox" data-v="0"><span>El primer <code>DELETE</code> da 204; el segundo, sobre el mismo id, da 404.</span></li>
+          <li><input type="checkbox" data-v="1"><span>Reinicié el servidor por completo y mis productos siguen ahí — la persistencia es real.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step8" data-next="step9" disabled>✓ Marcar paso 8 completado → ir al paso 9</button>
+        <span class="step-done-note">Marca ambas casillas para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 9 -->
+    <section class="step" data-n="9" id="step9">
+      <span class="eyebrow">Paso 9 · Reto</span>
+      <h2>Búsqueda por nombre usando el ORM</h2>
+      <div class="case">
+        <span class="tag">Resuelve antes de continuar</span>
+        <p style="margin:0;">Agrega soporte para <code>GET /api/v1/productos?nombre=teclado</code>, que debe devolver solo los productos cuyo nombre contenga ese texto (sin distinguir mayúsculas/minúsculas).</p>
+      </div>
+      <div class="callout warn">
+        <h4>⚠ Reemplaza, no agregues</h4>
+        <p style="margin:0;">Los dos bloques de abajo <strong>reemplazan por completo</strong> el <code>findAll()</code> del Paso 5 (en <code>productos.service.ts</code>) y el <code>listar()</code> del Paso 5 (en <code>productos.controller.ts</code>). Si dejas los dos métodos (el viejo sin parámetro y este nuevo) vas a tener dos funciones con el mismo nombre en la misma clase, y TypeScript falla con <code>Duplicate function implementation</code>. Borra la versión vieja de cada uno antes de pegar la nueva.</p>
+      </div>
+      <div class="term">
+        <div class="term-bar"><span>productos.service.ts</span><button class="term-copy" data-copy="import { ILike, Repository } from 'typeorm';
+
+findAll(nombre?: string): Promise<Producto[]> {
+  if (!nombre) return this.productosRepository.find();
+  return this.productosRepository.find({
+    where: { nombre: ILike(`%${nombre}%`) },
+  });
+}">Copiar</button></div>
+        <pre>import { ILike, Repository } from 'typeorm';
+
+findAll(nombre?: string): Promise&lt;Producto[]&gt; {
+  if (!nombre) return this.productosRepository.find();
+  return this.productosRepository.find({
+    where: { nombre: ILike(`%${nombre}%`) },
+  });
+}</pre>
+      </div>
+      <div class="term">
+        <div class="term-bar"><span>productos.controller.ts</span><button class="term-copy" data-copy="import { Query } from '@nestjs/common';
+
+@Get()
+listar(@Query('nombre') nombre?: string) {
+  return this.productosService.findAll(nombre);
+}">Copiar</button></div>
+        <pre>import { Query } from '@nestjs/common';
+
+@Get()
+listar(@Query('nombre') nombre?: string) {
+  return this.productosService.findAll(nombre);
+}</pre>
+      </div>
+      <p style="font-size:13px; color:var(--ink-soft);"><code>ILike</code> es específico de PostgreSQL (comparación tipo <code>LIKE</code> insensible a mayúsculas). Fíjate que sigues sin escribir SQL a mano — el ORM traduce el operador por ti.</p>
+      <p>Prueba <code>GET /api/v1/productos?nombre=teclado</code> y confirma que solo devuelve las coincidencias, y que <code>GET /api/v1/productos</code> (sin query) sigue devolviendo todos.</p>
+
+      <div class="ai-box">
+        <h4>🤖 Uso de IA en esta práctica</h4>
+        <div class="ai-grid">
+          <div class="yes">
+            <h5>Nivel 2–3: borrador / revisor</h5>
+            <ul>
+              <li>Pide que te explique qué SQL genera un método del Repository — no solo que te lo escriba.</li>
+              <li>Pide alternativas a <code>synchronize: true</code> para producción, y compáralas.</li>
+            </ul>
+          </div>
+          <div class="no">
+            <h5>No permitido</h5>
+            <ul>
+              <li>"Impleméntame todo el CRUD con TypeORM" de una sola vez sin probar cada endpoint contra la base de datos real.</li>
+              <li>Copiar una configuración de conexión sin entender qué variables de entorno usa.</li>
+            </ul>
+          </div>
+        </div>
+        <p style="font-family:'Manrope',sans-serif; font-size:12.5px; margin:12px 0 0; color:var(--ink-soft);">Si usaste IA en nivel 2–3, agrega esta declaración a tu entrega:</p>
+        <div class="declaration">### Declaración de uso de IA
+- Herramienta(s): ____________________
+- Nivel de uso: ______________________
+- Qué se le pidió: ___________________
+- Qué se modificó/verificó manualmente: ______</div>
+      </div>
+
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 9</div>
+        <ul class="verify-list" data-step="step9">
+          <li><input type="checkbox" data-v="0"><span><code>GET /productos?nombre=...</code> filtra correctamente y sin query devuelve todos.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step9" data-next="step10" disabled>✓ Marcar paso 9 completado → ir al paso 10</button>
+        <span class="step-done-note">Marca la verificación para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 10 -->
+    <section class="step" data-n="10" id="step10">
+      <span class="eyebrow">Paso 10</span>
+      <h2>Preparar el proyecto para producción</h2>
+      <ol>
+        <li>Edita <code>src/main.ts</code> para que el puerto venga de una variable de entorno (Render asigna el suyo propio dinámicamente, nunca es fijo):</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>src/main.ts</span><button class="term-copy" data-copy="await app.listen(process.env.PORT ?? 3000);">Copiar</button></div>
+        <pre>await app.listen(process.env.PORT ?? 3000);</pre>
+      </div>
+      <ol start="2">
+        <li>Crea <code>.env.example</code> (este sí se sube a git — documenta qué variables hacen falta, sin valores reales):</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>.env.example</span><button class="term-copy" data-copy="DATABASE_URL=postgresql://usuario:password@host:5432/nombre_bd
+NODE_ENV=development">Copiar</button></div>
+        <pre>DATABASE_URL=postgresql://usuario:password@host:5432/nombre_bd
+NODE_ENV=development</pre>
+      </div>
+      <ol start="3">
+        <li>Confirma que tu <code>.gitignore</code> excluye <code>.env</code>, <code>node_modules/</code> y <code>dist/</code> (agrega la línea <code>.env</code> si <code>nest new</code> no la trae):</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="grep -qxF '.env' .gitignore || echo '.env' >> .gitignore
+cat .gitignore">Copiar</button></div>
+        <pre><span class="k">$</span> grep -qxF '.env' .gitignore || echo '.env' >> .gitignore
+<span class="k">$</span> cat .gitignore</pre>
+      </div>
+      <ol start="4">
+        <li>Confirma que el proyecto compila para producción sin errores:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="npm run build
+npm run start:prod">Copiar</button></div>
+        <pre><span class="k">$</span> npm run build
+<span class="k">$</span> npm run start:prod
+<span class="cm"># debe arrancar igual que start:dev, leyendo el .env local (Ctrl+C para volver a start:dev)</span></pre>
+      </div>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 10</div>
+        <ul class="verify-list" data-step="step10">
+          <li><input type="checkbox" data-v="0"><span><code>npm run build && npm run start:prod</code> funciona localmente sin errores.</span></li>
+          <li><input type="checkbox" data-v="1"><span><code>.env</code> está en <code>.gitignore</code> y no aparece en <code>git status</code> como archivo por subir.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step10" data-next="step11" disabled>✓ Marcar paso 10 completado → ir al paso 11</button>
+        <span class="step-done-note">Marca ambas casillas para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 11 -->
+    <section class="step" data-n="11" id="step11">
+      <span class="eyebrow">Paso 11</span>
+      <h2>Subir a GitHub y automatizar las pruebas con Actions</h2>
+      <ol>
+        <li>Crea un repositorio vacío en <a href="https://github.com/new" target="_blank" rel="noopener">github.com/new</a> (sin README, sin <code>.gitignore</code> — ya tienes los tuyos) y copia su URL.</li>
+        <li>Conecta tu proyecto local y sube el primer commit:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="git init
+git add .
+git commit -m &quot;feat: CRUD de productos con TypeORM + PostgreSQL&quot;
+git branch -M main
+git remote add origin https://github.com/&lt;tu-usuario&gt;/&lt;tu-repo&gt;.git
+git push -u origin main">Copiar</button></div>
+        <pre><span class="k">$</span> git init
+<span class="k">$</span> git add .
+<span class="k">$</span> git commit -m "feat: CRUD de productos con TypeORM + PostgreSQL"
+<span class="k">$</span> git branch -M main
+<span class="k">$</span> git remote add origin https://github.com/&lt;tu-usuario&gt;/&lt;tu-repo&gt;.git
+<span class="k">$</span> git push -u origin main</pre>
+      </div>
+      <div class="callout warn">
+        <h4>⚠ Si <code>git push</code> no refleja tus últimos cambios en GitHub Actions</h4>
+        <p style="margin:0;">Confirma que estás en la rama <code>main</code> (<code>git branch</code>) y que el push terminó sin errores (<code>git log origin/main -1</code> debe mostrar tu último commit). Un push a otra rama, o interrumpido a mitad de camino, deja Actions corriendo sobre código viejo sin avisarte.</p>
+      </div>
+      <ol start="3">
+        <li>Crea la carpeta <code>.github/workflows/</code> en la raíz del proyecto y dentro el archivo <code>tests.yml</code>:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>.github/workflows/tests.yml</span><button class="term-copy" data-copy="name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: productos_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd &quot;pg_isready -U postgres&quot;
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/productos_db
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm test
+
+      - name: E2E tests
+        run: npm run test:e2e">Copiar</button></div>
+        <pre>name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: productos_db
+        ports:
+          - 5432:5432
+        options: &gt;-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/productos_db
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm test
+
+      - name: E2E tests
+        run: npm run test:e2e</pre>
+      </div>
+      <p style="font-size:13px; color:var(--ink-soft);">Este workflow levanta su propio contenedor de PostgreSQL (independiente del <code>pg-productos</code> local del Paso 2) solo mientras corren las pruebas — por eso <code>DATABASE_URL</code> aquí es una variable del workflow, no tu <code>.env</code> (que nunca se sube al repo).</p>
+      <div class="callout warn">
+        <h4>⚠ Si Actions falla en "Install dependencies" con <code>npm ci</code></h4>
+        <p style="margin:0;"><code>npm ci</code> exige que <code>package-lock.json</code> esté perfectamente sincronizado con <code>package.json</code>. Si ves un error como <code>Missing: &lt;paquete&gt; from lock file</code>, corre <code>npm install</code> en tu máquina (regenera el lock), y sube ese cambio con un nuevo commit.</p>
+      </div>
+      <ol start="4">
+        <li>Sube el workflow:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="git add .github
+git commit -m &quot;ci: agregar GitHub Actions para pruebas&quot;
+git push">Copiar</button></div>
+        <pre><span class="k">$</span> git add .github
+<span class="k">$</span> git commit -m "ci: agregar GitHub Actions para pruebas"
+<span class="k">$</span> git push</pre>
+      </div>
+      <ol start="5">
+        <li>Ve a la pestaña <strong>Actions</strong> de tu repositorio en GitHub y espera a que el workflow "Tests" termine — debe quedar con un check ✅ verde. Si queda en rojo ❌, abre el log del paso que falló antes de seguir al Paso 12.</li>
+      </ol>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 11</div>
+        <ul class="verify-list" data-step="step11">
+          <li><input type="checkbox" data-v="0"><span>Mi código está en GitHub y puedo verlo en <code>github.com/&lt;mi-usuario&gt;/&lt;mi-repo&gt;</code>.</span></li>
+          <li><input type="checkbox" data-v="1"><span>La pestaña Actions muestra el workflow "Tests" en verde (✅), no en rojo.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step11" data-next="step12" disabled>✓ Marcar paso 11 completado → ir al paso 12</button>
+        <span class="step-done-note">Marca ambas casillas para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 12 -->
+    <section class="step" data-n="12" id="step12">
+      <span class="eyebrow">Paso 12</span>
+      <h2>Desplegar en Render</h2>
+      <ol>
+        <li>En el dashboard de Render: <strong>New → PostgreSQL</strong>. Elige un nombre (p. ej. <code>productos-db</code>), la región más cercana y el plan gratuito. Espera a que quede en estado "Available".</li>
+        <li>Copia la <strong>Internal Database URL</strong> que Render te muestra (si tu Web Service va a vivir en la misma región, es la más rápida y no consume tu ancho de banda saliente).</li>
+        <li>En el dashboard: <strong>New → Web Service</strong>. Conecta el mismo repositorio de GitHub del Paso 11.</li>
+        <li>Configura el servicio:</li>
+      </ol>
+      <table>
+        <caption>Configuración del Web Service en Render</caption>
+        <thead><tr><th>Campo</th><th>Valor</th></tr></thead>
+        <tbody>
+          <tr><td>Build Command</td><td><code>npm install --include=dev &amp;&amp; npm run build</code></td></tr>
+          <tr><td>Start Command</td><td><code>npm run start:prod</code></td></tr>
+          <tr><td>Variable <code>DATABASE_URL</code></td><td>la Internal Database URL copiada en el paso 2</td></tr>
+          <tr><td>Variable <code>NODE_ENV</code></td><td><code>production</code></td></tr>
+        </tbody>
+      </table>
+      <div class="callout warn">
+        <h4>⚠ Sobre <code>--include=dev</code> en el Build Command</h4>
+        <p style="margin:0;">Render aplica la variable <code>NODE_ENV=production</code> también durante el build, y con eso <code>npm install</code> por defecto <strong>omite las <code>devDependencies</code></strong> — ahí vive <code>@nestjs/cli</code>, que provee el comando <code>nest</code>. Sin <code>--include=dev</code> el build falla con <code>sh: 1: nest: not found</code>.</p>
+      </div>
+      <ol start="5">
+        <li>Guarda y despliega. Sigue los logs de build hasta ver <code>Nest application successfully started</code>.</li>
+        <li>Abre <code>https://&lt;tu-servicio&gt;.onrender.com/swagger</code> y repite ahí la misma matriz de pruebas del Paso 7 de la práctica anterior (POST, GET, PUT, PATCH, DELETE) — ahora contra la base de datos administrada por Render, no tu Postgres local.</li>
+      </ol>
+      <div class="callout warn">
+        <h4>⚠ Cold start en el plan gratuito</h4>
+        <p style="margin:0;">En el plan gratuito de Render, el servicio "duerme" tras un rato sin tráfico y la primera petición después de eso puede tardar unos 30–60 segundos en responder mientras arranca de nuevo. No es un error tuyo — es el comportamiento esperado del plan gratuito.</p>
+      </div>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 12</div>
+        <ul class="verify-list" data-step="step12">
+          <li><input type="checkbox" data-v="0"><span>El Web Service en Render terminó de desplegar y los logs muestran que arrancó sin errores.</span></li>
+          <li><input type="checkbox" data-v="1"><span>Probé el CRUD completo contra <code>/swagger</code> en la URL pública de Render y funciona igual que en local.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step12" data-next="step13" disabled>✓ Marcar paso 12 completado → ir al paso 13</button>
+        <span class="step-done-note">Marca ambas casillas para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 13 -->
+    <section class="step" data-n="13" id="step13">
+      <span class="eyebrow">Paso 13</span>
+      <h2>Documentar, confirmar y subir tu trabajo</h2>
+      <ol>
+        <li>En tu bitácora, anota la URL pública de tu servicio en Render y explica con tus palabras por qué los datos sobrevivieron al reinicio del Paso 8 (relaciónalo con dónde vive la memoria de un proceso de Node frente a dónde vive un archivo de datos de Postgres).</li>
+        <li>Si usaste IA en algún paso, agrega la declaración de uso del Paso 9.</li>
+        <li>Confirma de nuevo que <code>.env</code> no está entre los archivos rastreados por git (<code>git status</code>, o <code>git ls-files | grep .env</code> no debe mostrar nada salvo <code>.env.example</code>).</li>
+        <li>Si te quedaron cambios sin subir (por ejemplo, tu bitácora), haz un último commit y push:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="git add .
+git commit -m &quot;docs: bitácora final de la práctica&quot;
+git push">Copiar</button></div>
+        <pre><span class="k">$</span> git add .
+<span class="k">$</span> git commit -m "docs: bitácora final de la práctica"
+<span class="k">$</span> git push</pre>
+      </div>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 13</div>
+        <ul class="verify-list" data-step="step13">
+          <li><input type="checkbox" data-v="0"><span>Todo mi trabajo está subido a GitHub y puedo verlo con <code>git log</code>.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step13" data-next="exitCheck" disabled>✓ Marcar paso 13 completado → ir al checklist final</button>
+        <span class="step-done-note">Marca la verificación para continuar.</span>
+      </div>
+    </section>
+
+    <div class="final-check" id="exitCheck" style="scroll-margin-top:90px;">
+      <h3 style="margin:0 0 4px; font-size:16px;">Checklist de salida</h3>
+      <p style="font-family:'Manrope',sans-serif; font-size:12.5px; color:var(--ink-soft); margin:0 0 14px;">No te vayas del laboratorio sin esto. Se guarda en este navegador para que retomes donde quedaste.</p>
+      <ul class="checklist" id="exitChecklist">
+        <li><input type="checkbox" data-key="run"><span><code>npm run start:dev</code> conecta a PostgreSQL sin errores.</span></li>
+        <li><input type="checkbox" data-key="endpoints"><span>Los 6 endpoints (más el filtro por nombre) responden en Swagger local.</span></li>
+        <li><input type="checkbox" data-key="persist"><span>Comprobé que los datos sobreviven a un reinicio completo del servidor.</span></li>
+        <li><input type="checkbox" data-key="env"><span><code>.env</code> nunca se subió al repositorio; <code>.env.example</code> sí.</span></li>
+        <li><input type="checkbox" data-key="ci"><span>El workflow de GitHub Actions pasa en verde (✅) en la pestaña Actions.</span></li>
+        <li><input type="checkbox" data-key="render"><span>El mismo CRUD funciona en la URL pública de Render, contra la base de datos administrada.</span></li>
+        <li><input type="checkbox" data-key="git"><span>Hice commit y push del proyecto.</span></li>
+      </ul>
+    </div>
+
+    <footer class="doc-foot">
+      <span>Integración de Sistemas · Persistencia y despliegue</span>
+      <a href="web-practica.html">← Volver a la práctica en memoria</a>
+    </footer>
+  </div>
+</main>
+
+<script>
+(function(){
+  const root = document.documentElement;
+  const btn = document.getElementById('themeBtn');
+  const labels = {system:'Sistema', light:'Claro', dark:'Oscuro'};
+  let mode='system';
+  try{ mode = localStorage.getItem('s02db-theme') || 'system'; }catch(e){}
+  function apply(){ if(mode==='system'){root.removeAttribute('data-theme');} else {root.setAttribute('data-theme',mode);} btn.textContent = labels[mode]; }
+  btn.addEventListener('click', ()=>{ mode = mode==='system'?'light':mode==='light'?'dark':'system'; try{localStorage.setItem('s02db-theme',mode);}catch(e){} apply(); });
+  apply();
+})();
+
+document.querySelectorAll('.term-copy').forEach(btn=>{
+  btn.addEventListener('click', async ()=>{
+    const text = btn.getAttribute('data-copy');
+    try{ await navigator.clipboard.writeText(text); btn.textContent='¡Copiado!'; setTimeout(()=>btn.textContent='Copiar',1200); }
+    catch(e){ btn.textContent='No se pudo copiar'; setTimeout(()=>btn.textContent='Copiar',1200); }
+  });
+});
+
+// exit checklist persistence (independent of step gating)
+(function(){
+  let state = {};
+  try{ state = JSON.parse(localStorage.getItem('s02db-practica-checklist-js')||'{}'); }catch(e){}
+  const boxes = document.querySelectorAll('#exitChecklist input[type="checkbox"]');
+  function save(){ try{ localStorage.setItem('s02db-practica-checklist-js', JSON.stringify(state)); }catch(e){} }
+  boxes.forEach(b=>{
+    const key = 'exitChecklist:' + b.dataset.key;
+    if(state[key]) b.checked = true;
+    b.addEventListener('change', ()=>{ state[key]=b.checked; save(); });
+  });
+})();
+
+// ---------- Stepper + verification gating: no se puede saltar pasos ----------
+(function(){
+  const STEPS = ['step0','step1','step2','step3','step4','step5','step6','step7','step8','step9','step10','step11','step12','step13'];
+  const stepperItems = Array.from(document.querySelectorAll('.stepper-item'));
+  const sections = STEPS.map(id => document.getElementById(id));
+
+  let doneState = {};
+  let verifyState = {};
+  try{ doneState = JSON.parse(localStorage.getItem('s02db-practica-steps-js')||'{}'); }catch(e){}
+  try{ verifyState = JSON.parse(localStorage.getItem('s02db-practica-verify-js')||'{}'); }catch(e){}
+
+  function saveDone(){ try{ localStorage.setItem('s02db-practica-steps-js', JSON.stringify(doneState)); }catch(e){} }
+  function saveVerify(){ try{ localStorage.setItem('s02db-practica-verify-js', JSON.stringify(verifyState)); }catch(e){} }
+
+  function firstNotDone(){ const idx = STEPS.findIndex(id => !doneState[id]); return idx === -1 ? STEPS.length - 1 : idx; }
+
+  // restore verification checkboxes
+  document.querySelectorAll('.verify-list input[type="checkbox"]').forEach(cb=>{
+    const stepId = cb.closest('.verify-list').dataset.step;
+    const key = stepId + ':' + cb.dataset.v;
+    if(verifyState[key]) cb.checked = true;
+    cb.addEventListener('change', ()=>{
+      verifyState[key] = cb.checked;
+      saveVerify();
+      updateStepButton(stepId);
+    });
+  });
+
+  function updateStepButton(stepId){
+    const list = document.querySelector(`.verify-list[data-step="${stepId}"]`);
+    const boxes = list ? Array.from(list.querySelectorAll('input[type="checkbox"]')) : [];
+    const allChecked = boxes.length > 0 && boxes.every(b=>b.checked);
+    const btn = document.querySelector(`.step-done-btn[data-step="${stepId}"]`);
+    if(btn && !doneState[stepId]){ btn.disabled = !allChecked; }
+  }
+
+  function render(){
+    const currentIdx = firstNotDone();
+    STEPS.forEach((id, i)=>{
+      const isDone = !!doneState[id];
+      const isLocked = i > currentIdx;
+      sections[i].classList.toggle('done', isDone);
+      sections[i].classList.toggle('current', i === currentIdx);
+      sections[i].classList.toggle('locked', isLocked);
+      stepperItems[i].classList.toggle('done', isDone);
+      stepperItems[i].classList.toggle('current', i === currentIdx);
+      stepperItems[i].classList.toggle('locked', isLocked);
+      updateStepButton(id);
+    });
+    document.querySelectorAll('.step-done-btn').forEach(btn=>{
+      const id = btn.dataset.step;
+      btn.classList.toggle('on', !!doneState[id]);
+      if(doneState[id]){
+        btn.disabled = false;
+        btn.textContent = '✓ Paso completado (clic para desmarcar)';
+      } else {
+        btn.textContent = btn.dataset.label;
+      }
+    });
+    const doneCount = STEPS.filter(id=>doneState[id]).length;
+    document.getElementById('progressLabel').textContent = `${doneCount}/${STEPS.length} pasos`;
+    document.getElementById('progressFill').style.width = (doneCount/STEPS.length*100)+'%';
+  }
+
+  document.querySelectorAll('.step-done-btn').forEach(btn=>{ btn.dataset.label = btn.textContent; });
+
+  document.querySelectorAll('.step-done-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.step;
+      const wasDone = !!doneState[id];
+      if(!wasDone && btn.disabled) return; // gated: verification incomplete
+      doneState[id] = !wasDone;
+      saveDone(); render();
+      if(!wasDone && btn.dataset.next){
+        const target = document.getElementById(btn.dataset.next);
+        if(target) target.scrollIntoView({behavior:'smooth', block:'start'});
+      }
+    });
+  });
+
+  stepperItems.forEach(item=>{
+    item.addEventListener('click', ()=>{
+      const target = document.getElementById(item.dataset.target);
+      if(target) target.scrollIntoView({behavior:'smooth', block:'start'});
+    });
+  });
+
+  render();
+})();
+</script>

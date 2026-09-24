@@ -1,0 +1,235 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans)}
+.wrap{padding:1.5rem 0;font-size:13px}
+.tabs{display:flex;gap:6px;margin-bottom:1.5rem;flex-wrap:wrap}
+.tab{padding:7px 16px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);background:transparent;cursor:pointer;font-size:13px;color:var(--color-text-secondary);transition:all .15s}
+.tab:hover{background:var(--color-background-secondary)}
+.tab.active{background:var(--color-background-info);color:var(--color-text-info);border-color:transparent;font-weight:500}
+.section{display:none}
+.section.active{display:block}
+.legend{display:flex;gap:12px;margin-bottom:1rem;flex-wrap:wrap}
+.leg{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--color-text-secondary)}
+.dot{width:10px;height:10px;border-radius:50%}
+table{width:100%;border-collapse:collapse}
+th{background:var(--color-background-secondary);color:var(--color-text-secondary);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:8px 10px;border:0.5px solid var(--color-border-tertiary);text-align:left}
+td{padding:8px 10px;border:0.5px solid var(--color-border-tertiary);vertical-align:top;color:var(--color-text-primary);line-height:1.5}
+tr:hover td{background:var(--color-background-secondary)}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;white-space:nowrap}
+.b-get{background:#E6F1FB;color:#0C447C}
+.b-post{background:#EAF3DE;color:#27500A}
+.b-put{background:#FAEEDA;color:#633806}
+.b-del{background:#FCEBEB;color:#791F1F}
+.b-patch{background:#EEEDFE;color:#3C3489}
+.p-alta{background:#FCEBEB;color:#791F1F}
+.p-media{background:#FAEEDA;color:#633806}
+.p-baja{background:#EAF3DE;color:#27500A}
+.s-pass{color:#3B6D11;font-weight:500}
+.s-fail{color:#A32D2D;font-weight:500}
+.s-pend{color:#854F0B}
+.sec-tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11px;margin:1px;background:var(--color-background-secondary);color:var(--color-text-secondary);border:0.5px solid var(--color-border-tertiary)}
+.hu-id{font-family:var(--font-mono);font-size:11px;color:var(--color-text-secondary)}
+ul{padding-left:14px}
+li{margin-bottom:3px}
+.counter{display:flex;gap:12px;margin-bottom:1.2rem;flex-wrap:wrap}
+.cnt{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 16px;text-align:center}
+.cnt-n{font-size:22px;font-weight:500;color:var(--color-text-primary)}
+.cnt-l{font-size:11px;color:var(--color-text-secondary);margin-top:2px}
+</style>
+<div class="wrap">
+<h2 class="sr-only">Matriz de pruebas de funcionalidad y seguridad — API REST gestión de clientes</h2>
+<div class="tabs">
+  <button class="tab active" onclick="show('func')">Pruebas funcionales</button>
+  <button class="tab" onclick="show('sec')">Seguridad</button>
+  <button class="tab" onclick="show('hu')">Historias de usuario</button>
+  <button class="tab" onclick="show('resumen')">Resumen</button>
+</div>
+
+<div id="func" class="section active">
+  <div class="legend">
+    <span class="leg"><span class="dot" style="background:#378ADD"></span>GET</span>
+    <span class="leg"><span class="dot" style="background:#639922"></span>POST</span>
+    <span class="leg"><span class="dot" style="background:#BA7517"></span>PUT/PATCH</span>
+    <span class="leg"><span class="dot" style="background:#E24B4A"></span>DELETE</span>
+  </div>
+  <table>
+    <thead><tr>
+      <th>ID</th><th>HU</th><th>Endpoint</th><th>Método</th><th>Caso de prueba</th><th>Datos entrada</th><th>Respuesta esperada</th><th>Criterio aceptación</th><th>Prioridad</th><th>Estado</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="hu-id">TC-F01</td><td>HU-01</td><td>/api/v1/clientes</td><td><span class="badge b-post">POST</span></td><td>Crear cliente con datos válidos</td><td>JSON con nombre, email, teléfono, dirección</td><td>201 Created + body cliente creado con ID</td><td>El cliente queda persistido y se retorna el recurso creado con ID único</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-F02</td><td>HU-01</td><td>/api/v1/clientes</td><td><span class="badge b-post">POST</span></td><td>Crear cliente con email duplicado</td><td>Email ya registrado</td><td>409 Conflict + mensaje descriptivo</td><td>No se permite registrar emails duplicados</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-F03</td><td>HU-01</td><td>/api/v1/clientes</td><td><span class="badge b-post">POST</span></td><td>Crear cliente con campos requeridos vacíos</td><td>Body sin nombre y sin email</td><td>400 Bad Request + detalle de campos faltantes</td><td>El sistema valida todos los campos obligatorios</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-F04</td><td>HU-02</td><td>/api/v1/clientes/{id}</td><td><span class="badge b-get">GET</span></td><td>Obtener cliente por ID existente</td><td>ID válido en path</td><td>200 OK + body con datos del cliente</td><td>Retorna todos los campos del cliente solicitado</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-F05</td><td>HU-02</td><td>/api/v1/clientes/{id}</td><td><span class="badge b-get">GET</span></td><td>Obtener cliente con ID inexistente</td><td>ID que no existe en BD</td><td>404 Not Found</td><td>El sistema informa correctamente cuando el recurso no existe</td><td><span class="badge p-media">Media</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-F06</td><td>HU-02</td><td>/api/v1/clientes</td><td><span class="badge b-get">GET</span></td><td>Listar clientes con paginación</td><td>?page=1&size=10</td><td>200 OK + array clientes + metadata paginación</td><td>Responde con el número correcto de registros y metadatos de navegación</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-F07</td><td>HU-02</td><td>/api/v1/clientes</td><td><span class="badge b-get">GET</span></td><td>Filtrar clientes por nombre</td><td>?nombre=Juan</td><td>200 OK + clientes que coinciden</td><td>El filtro devuelve solo los registros que contienen el parámetro buscado</td><td><span class="badge p-media">Media</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-F08</td><td>HU-03</td><td>/api/v1/clientes/{id}</td><td><span class="badge b-put">PUT</span></td><td>Actualizar cliente completo</td><td>JSON con todos los campos</td><td>200 OK + body actualizado</td><td>Los datos del cliente quedan modificados en su totalidad</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-F09</td><td>HU-03</td><td>/api/v1/clientes/{id}</td><td><span class="badge b-patch">PATCH</span></td><td>Actualización parcial de cliente</td><td>Solo campo teléfono</td><td>200 OK + solo campo modificado actualizado</td><td>Solo se modifican los campos enviados en la petición</td><td><span class="badge p-media">Media</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-F10</td><td>HU-04</td><td>/api/v1/clientes/{id}</td><td><span class="badge b-del">DELETE</span></td><td>Eliminar cliente existente</td><td>ID válido</td><td>204 No Content</td><td>El cliente es eliminado y no puede ser recuperado posteriormente</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-F11</td><td>HU-04</td><td>/api/v1/clientes/{id}</td><td><span class="badge b-del">DELETE</span></td><td>Eliminar cliente inexistente</td><td>ID que no existe</td><td>404 Not Found</td><td>El sistema retorna error descriptivo al intentar eliminar un recurso inexistente</td><td><span class="badge p-media">Media</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-F12</td><td>HU-05</td><td>/api/v1/clientes/{id}/estado</td><td><span class="badge b-patch">PATCH</span></td><td>Activar/desactivar cliente</td><td>{estado: "inactivo"}</td><td>200 OK + estado actualizado</td><td>El estado del cliente cambia correctamente y queda auditado con timestamp</td><td><span class="badge p-media">Media</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div id="sec" class="section">
+  <table>
+    <thead><tr>
+      <th>ID</th><th>Categoría</th><th>Caso de prueba</th><th>Endpoint</th><th>Escenario</th><th>Resultado esperado</th><th>Criterio aceptación</th><th>Prioridad</th><th>Estado</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="hu-id">TC-S01</td><td><span class="sec-tag">Autenticación</span></td><td>Acceso sin token</td><td>/api/v1/clientes</td><td>Request sin header Authorization</td><td>401 Unauthorized</td><td>Ningún endpoint protegido responde sin credenciales válidas</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S02</td><td><span class="sec-tag">Autenticación</span></td><td>Token inválido o malformado</td><td>/api/v1/clientes</td><td>Bearer con cadena arbitraria</td><td>401 Unauthorized</td><td>El sistema rechaza tokens que no pueden ser verificados</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S03</td><td><span class="sec-tag">JWT</span></td><td>Token expirado</td><td>/api/v1/clientes/{id}</td><td>JWT con exp en el pasado</td><td>401 + mensaje "token expirado"</td><td>Los tokens vencidos son rechazados; no se reutilizan después de su TTL</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S04</td><td><span class="sec-tag">JWT</span></td><td>Token con firma alterada</td><td>/api/v1/clientes</td><td>Modificar payload y reenviar</td><td>401 Unauthorized</td><td>Cualquier alteración del JWT es detectada por la verificación de firma</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S05</td><td><span class="sec-tag">JWT</span></td><td>JWT con algoritmo "none"</td><td>/api/v1/clientes</td><td>alg: none en header del token</td><td>401 Unauthorized</td><td>El servidor rechaza explícitamente el algoritmo "none"</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S06</td><td><span class="sec-tag">Autorización</span></td><td>Rol sin permisos de escritura</td><td>/api/v1/clientes</td><td>Usuario con rol "viewer" hace POST</td><td>403 Forbidden</td><td>Solo roles autorizados pueden ejecutar operaciones de escritura</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S07</td><td><span class="sec-tag">Autorización</span></td><td>Acceso a recurso de otro usuario</td><td>/api/v1/clientes/{id}</td><td>Usuario A intenta ver datos de Usuario B</td><td>403 Forbidden</td><td>Los usuarios solo pueden acceder a sus propios recursos sin rol admin</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S08</td><td><span class="sec-tag">HTTPS</span></td><td>Petición por HTTP plano</td><td>http://api/clientes</td><td>Llamada en puerto 80 sin TLS</td><td>301 redirect o conexión rechazada</td><td>Toda comunicación debe ocurrir sobre TLS 1.2 o superior</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S09</td><td><span class="sec-tag">HTTPS</span></td><td>Certificado TLS válido</td><td>https://api</td><td>Verificar cert no expirado y firma confiable</td><td>Handshake exitoso, sin warnings</td><td>El certificado es emitido por CA confiable y no está revocado</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S10</td><td><span class="sec-tag">CORS</span></td><td>Origen permitido</td><td>/api/v1/clientes</td><td>Request desde dominio whitelisted</td><td>200 + header Access-Control-Allow-Origin correcto</td><td>Los orígenes autorizados reciben los headers CORS adecuados</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S11</td><td><span class="sec-tag">CORS</span></td><td>Origen no permitido</td><td>/api/v1/clientes</td><td>Request desde dominio externo no registrado</td><td>CORS bloqueado por el browser; no se devuelve ACAO</td><td>No se incluye el header ACAO para orígenes no autorizados</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S12</td><td><span class="sec-tag">CORS</span></td><td>Preflight OPTIONS</td><td>/api/v1/clientes</td><td>Método OPTIONS con Origin y ACRM</td><td>204 + headers Allow correctos</td><td>El servidor responde correctamente al preflight con los métodos y headers permitidos</td><td><span class="badge p-media">Media</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S13</td><td><span class="sec-tag">Sanitización</span></td><td>Inyección SQL en parámetro</td><td>/api/v1/clientes?nombre=</td><td>?nombre=' OR '1'='1</td><td>400 Bad Request o 0 resultados sin error de BD</td><td>Los parámetros son sanitizados; ninguna consulta SQL es alterada por la entrada</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S14</td><td><span class="sec-tag">Sanitización</span></td><td>XSS en campo nombre</td><td>/api/v1/clientes</td><td>nombre: "&lt;script&gt;alert(1)&lt;/script&gt;"</td><td>400 rechazado o almacenado escapado</td><td>Los campos de texto son sanitizados antes de persistirse o reflejarse</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S15</td><td><span class="sec-tag">Sanitización</span></td><td>Path traversal en ID</td><td>/api/v1/clientes/../../etc</td><td>ID con secuencia de traversal</td><td>400 Bad Request</td><td>Los IDs son validados como identificadores numéricos o UUID; no se permiten rutas</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S16</td><td><span class="sec-tag">Validación</span></td><td>Email con formato inválido</td><td>/api/v1/clientes</td><td>email: "no-es-un-email"</td><td>400 + detalle del campo inválido</td><td>El servidor valida el formato del email antes de procesarlo</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S17</td><td><span class="sec-tag">Validación</span></td><td>Teléfono con caracteres especiales</td><td>/api/v1/clientes</td><td>telefono: "abc!@#"</td><td>400 + mensaje de validación</td><td>Solo se aceptan caracteres numéricos y símbolo + en el campo teléfono</td><td><span class="badge p-media">Media</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S18</td><td><span class="sec-tag">Validación</span></td><td>Payload con campos extra no definidos</td><td>/api/v1/clientes</td><td>Body con campos __proto__ o campos no permitidos</td><td>400 o campos ignorados sin error</td><td>Los campos desconocidos son ignorados o rechazados; no provocan comportamiento inesperado</td><td><span class="badge p-media">Media</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S19</td><td><span class="sec-tag">Validación</span></td><td>Content-Type incorrecto</td><td>/api/v1/clientes</td><td>Header Content-Type: text/plain</td><td>415 Unsupported Media Type</td><td>Solo se acepta application/json; otros tipos son rechazados explícitamente</td><td><span class="badge p-media">Media</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+      <tr><td class="hu-id">TC-S20</td><td><span class="sec-tag">Validación</span></td><td>Payload masivo (Mass Assignment)</td><td>/api/v1/clientes</td><td>Body con campo "rol": "admin"</td><td>Campo rol ignorado; 201 sin escalada de privilegios</td><td>Los campos sensibles como rol o permisos no son asignables desde la API pública</td><td><span class="badge p-alta">Alta</span></td><td><span class="s-pend">Pendiente</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div id="hu" class="section">
+  <table>
+    <thead><tr>
+      <th>ID</th><th>Historia de usuario</th><th>Criterios de aceptación</th><th>Endpoints involucrados</th><th>Casos de prueba</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td class="hu-id">HU-01</td>
+        <td><strong>Registrar cliente</strong><br><span style="color:var(--color-text-secondary)">Como operador, quiero registrar un nuevo cliente con sus datos básicos para poder gestionarlo en el sistema.</span></td>
+        <td><ul>
+          <li>El sistema asigna un ID único automático</li>
+          <li>Se validan nombre, email y teléfono obligatorios</li>
+          <li>No se permiten emails duplicados</li>
+          <li>Se retorna 201 con el recurso creado</li>
+          <li>El timestamp de creación queda registrado</li>
+        </ul></td>
+        <td>POST /api/v1/clientes</td>
+        <td>TC-F01, TC-F02, TC-F03</td>
+      </tr>
+      <tr>
+        <td class="hu-id">HU-02</td>
+        <td><strong>Consultar clientes</strong><br><span style="color:var(--color-text-secondary)">Como operador, quiero consultar uno o varios clientes para visualizar su información actualizada.</span></td>
+        <td><ul>
+          <li>Se puede obtener un cliente por su ID</li>
+          <li>Se retorna 404 si el ID no existe</li>
+          <li>El listado soporta paginación (page/size)</li>
+          <li>Se pueden filtrar por nombre o estado</li>
+          <li>La respuesta incluye metadatos de paginación</li>
+        </ul></td>
+        <td>GET /api/v1/clientes<br>GET /api/v1/clientes/{id}</td>
+        <td>TC-F04, TC-F05, TC-F06, TC-F07</td>
+      </tr>
+      <tr>
+        <td class="hu-id">HU-03</td>
+        <td><strong>Actualizar datos del cliente</strong><br><span style="color:var(--color-text-secondary)">Como operador, quiero modificar los datos de un cliente existente cuando la información cambia.</span></td>
+        <td><ul>
+          <li>PUT actualiza todos los campos del cliente</li>
+          <li>PATCH actualiza solo los campos enviados</li>
+          <li>Se retorna el recurso actualizado</li>
+          <li>No se permite cambiar el ID del cliente</li>
+          <li>Se registra timestamp de última modificación</li>
+        </ul></td>
+        <td>PUT /api/v1/clientes/{id}<br>PATCH /api/v1/clientes/{id}</td>
+        <td>TC-F08, TC-F09</td>
+      </tr>
+      <tr>
+        <td class="hu-id">HU-04</td>
+        <td><strong>Eliminar cliente</strong><br><span style="color:var(--color-text-secondary)">Como administrador, quiero eliminar un cliente del sistema cuando ya no sea necesario.</span></td>
+        <td><ul>
+          <li>Solo usuarios con rol admin pueden eliminar</li>
+          <li>Se retorna 204 tras eliminación exitosa</li>
+          <li>Se retorna 404 si el cliente no existe</li>
+          <li>El cliente no puede recuperarse tras la eliminación</li>
+        </ul></td>
+        <td>DELETE /api/v1/clientes/{id}</td>
+        <td>TC-F10, TC-F11</td>
+      </tr>
+      <tr>
+        <td class="hu-id">HU-05</td>
+        <td><strong>Gestionar estado del cliente</strong><br><span style="color:var(--color-text-secondary)">Como operador, quiero activar o desactivar un cliente sin eliminarlo para controlar su acceso al sistema.</span></td>
+        <td><ul>
+          <li>Los estados válidos son: activo, inactivo, suspendido</li>
+          <li>El cambio de estado queda auditado con usuario y timestamp</li>
+          <li>Un cliente inactivo no puede autenticarse en otros servicios</li>
+          <li>Se retorna el estado actualizado en la respuesta</li>
+        </ul></td>
+        <td>PATCH /api/v1/clientes/{id}/estado</td>
+        <td>TC-F12</td>
+      </tr>
+      <tr>
+        <td class="hu-id">HU-06</td>
+        <td><strong>Acceso seguro a la API</strong><br><span style="color:var(--color-text-secondary)">Como desarrollador, quiero que todos los endpoints estén protegidos con JWT para garantizar que solo usuarios autenticados y autorizados operen sobre los datos.</span></td>
+        <td><ul>
+          <li>Toda petición requiere JWT válido en header Authorization</li>
+          <li>Los tokens expiran según TTL configurado</li>
+          <li>El rol del usuario determina las operaciones permitidas</li>
+          <li>Toda comunicación ocurre por HTTPS</li>
+          <li>Los orígenes permitidos están definidos en CORS</li>
+          <li>Toda entrada es validada y sanitizada</li>
+        </ul></td>
+        <td>Todos los endpoints</td>
+        <td>TC-S01 al TC-S20</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div id="resumen" class="section">
+  <div class="counter">
+    <div class="cnt"><div class="cnt-n">12</div><div class="cnt-l">Pruebas funcionales</div></div>
+    <div class="cnt"><div class="cnt-n">20</div><div class="cnt-l">Pruebas de seguridad</div></div>
+    <div class="cnt"><div class="cnt-n">6</div><div class="cnt-l">Historias de usuario</div></div>
+    <div class="cnt"><div class="cnt-n">32</div><div class="cnt-l">Total casos de prueba</div></div>
+  </div>
+  <table>
+    <thead><tr><th>Categoría seguridad</th><th>Casos</th><th>IDs</th><th>Riesgo si falla</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sec-tag">Autenticación</span></td><td>2</td><td>TC-S01, TC-S02</td><td style="color:var(--color-text-danger)">Acceso no autorizado al API completo</td></tr>
+      <tr><td><span class="sec-tag">JWT</span></td><td>3</td><td>TC-S03, TC-S04, TC-S05</td><td style="color:var(--color-text-danger)">Falsificación de identidad / token hijacking</td></tr>
+      <tr><td><span class="sec-tag">Autorización</span></td><td>2</td><td>TC-S06, TC-S07</td><td style="color:var(--color-text-danger)">Escalada de privilegios / acceso entre usuarios</td></tr>
+      <tr><td><span class="sec-tag">HTTPS</span></td><td>2</td><td>TC-S08, TC-S09</td><td style="color:var(--color-text-warning)">Intercepción de datos en tránsito (MITM)</td></tr>
+      <tr><td><span class="sec-tag">CORS</span></td><td>3</td><td>TC-S10, TC-S11, TC-S12</td><td style="color:var(--color-text-warning)">Peticiones cross-origin no autorizadas</td></tr>
+      <tr><td><span class="sec-tag">Sanitización</span></td><td>3</td><td>TC-S13, TC-S14, TC-S15</td><td style="color:var(--color-text-danger)">Inyección SQL / XSS / path traversal</td></tr>
+      <tr><td><span class="sec-tag">Validación</span></td><td>5</td><td>TC-S16 al TC-S20</td><td style="color:var(--color-text-warning)">Datos corruptos / mass assignment / errores 500</td></tr>
+    </tbody>
+  </table>
+  <div style="margin-top:1.2rem">
+    <table>
+      <thead><tr><th>Historia</th><th>Título</th><th>Total TCs</th><th>Cobertura</th></tr></thead>
+      <tbody>
+        <tr><td class="hu-id">HU-01</td><td>Registrar cliente</td><td>3</td><td>Creación, duplicados, validación campos</td></tr>
+        <tr><td class="hu-id">HU-02</td><td>Consultar clientes</td><td>4</td><td>Por ID, 404, paginación, filtros</td></tr>
+        <tr><td class="hu-id">HU-03</td><td>Actualizar datos</td><td>2</td><td>PUT total, PATCH parcial</td></tr>
+        <tr><td class="hu-id">HU-04</td><td>Eliminar cliente</td><td>2</td><td>Exitoso, recurso inexistente</td></tr>
+        <tr><td class="hu-id">HU-05</td><td>Gestionar estado</td><td>1</td><td>Cambio de estado + auditoría</td></tr>
+        <tr><td class="hu-id">HU-06</td><td>Acceso seguro</td><td>20</td><td>Auth, JWT, Roles, HTTPS, CORS, Sanitización, Validación</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</div>
+<script>
+function show(id){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>

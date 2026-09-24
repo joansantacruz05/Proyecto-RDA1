@@ -1,0 +1,799 @@
+<title>Semana 1 · Laboratorio API base</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --bg:#f4f2ed; --surface:#ffffff; --surface-2:#eae6dc;
+    --ink:#1b2630; --ink-soft:#5b6970;
+    --accent:#1f7a6c; --accent-ink:#0f4a41; --accent-soft:#dcefea;
+    --amber:#a85a26; --amber-soft:#f3e3d3;
+    --danger:#a13f3f; --danger-soft:#f4dede;
+    --line: rgba(27,38,48,.14);
+    --radius:10px; --shadow:0 1px 2px rgba(27,38,48,.06);
+    --term-bg:#161b1e; --term-ink:#d7e0e0; --term-accent:#7fd9c4;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#10161c; --surface:#161e25; --surface-2:#1c252c;
+      --ink:#e7ecec; --ink-soft:#9fb0b6;
+      --accent:#4fc3ae; --accent-ink:#bdeee2; --accent-soft: rgba(79,195,174,.16);
+      --amber:#e2a164; --amber-soft: rgba(226,161,100,.16);
+      --danger:#e58080; --danger-soft: rgba(229,128,128,.14);
+      --line: rgba(231,236,236,.14); --shadow:0 1px 2px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#10161c; --surface:#161e25; --surface-2:#1c252c;
+    --ink:#e7ecec; --ink-soft:#9fb0b6;
+    --accent:#4fc3ae; --accent-ink:#bdeee2; --accent-soft: rgba(79,195,174,.16);
+    --amber:#e2a164; --amber-soft: rgba(226,161,100,.16);
+    --danger:#e58080; --danger-soft: rgba(229,128,128,.14);
+    --line: rgba(231,236,236,.14); --shadow:0 1px 2px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:'Source Serif 4',Georgia,serif; line-height:1.62;}
+  h1,h2,h3,h4,button,.mono,.badge,nav{font-family:'Manrope',system-ui,sans-serif;}
+  code,pre,.mono-num{font-family:'JetBrains Mono',ui-monospace,monospace;}
+  h1,h2,h3,h4{text-wrap:balance; font-weight:800; letter-spacing:-.01em; color:var(--ink);}
+  a{color:var(--accent-ink);}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+
+  .topbar{position:sticky; top:0; z-index:5; background:var(--surface); border-bottom:1px solid var(--line); padding:12px clamp(16px,5vw,40px);}
+  .topbar-row{display:flex; align-items:center; justify-content:space-between; gap:16px; max-width:760px; margin:0 auto;}
+  .topbar .kicker{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent-ink); font-weight:700;}
+  .topbar h1{font-size:16px; margin:2px 0 0;}
+  .progress-wrap{display:flex; align-items:center; gap:10px; font-size:11px; color:var(--ink-soft);}
+  .progress-track{width:110px; height:6px; border-radius:4px; background:var(--surface-2); overflow:hidden;}
+  .progress-fill{height:100%; width:0%; background:var(--accent); transition:width .25s;}
+  .theme-btn{font-size:11.5px; font-weight:700; border:1px solid var(--line); background:var(--surface-2); color:var(--ink); padding:6px 10px; border-radius:8px; cursor:pointer;}
+  .theme-btn:hover{border-color:var(--accent);}
+
+  main{padding:44px clamp(16px,5vw,40px) 100px;}
+  .doc{max-width:760px; margin:0 auto;}
+
+  header.hero{margin-bottom:28px;}
+  .hero .kicker{font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--accent-ink); font-weight:700; display:flex; gap:8px; align-items:center;}
+  .hero .kicker::before{content:""; width:22px; height:1.5px; background:var(--accent);}
+  .hero h1{font-size:clamp(26px,4vw,34px); margin:10px 0 12px;}
+  .hero p{font-family:'Manrope',sans-serif; color:var(--ink-soft); font-size:14px; max-width:62ch; margin:0 0 14px;}
+  .meta-row{display:flex; gap:8px; flex-wrap:wrap;}
+  .badge{font-size:11px; font-weight:700; padding:5px 10px; border-radius:100px; background:var(--surface-2); color:var(--ink-soft); border:1px solid var(--line);}
+
+  .rule-box{font-family:'Manrope',sans-serif; font-size:13px; background:var(--accent-soft); border:1px solid var(--accent); border-radius:9px; padding:14px 16px; margin-bottom:16px; color:var(--ink);}
+  .rule-box strong{color:var(--accent-ink);}
+  .note-box{font-family:'Manrope',sans-serif; font-size:13px; background:var(--surface-2); border:1px dashed var(--line); border-radius:9px; padding:14px 16px; margin-bottom:28px; color:var(--ink-soft);}
+  .note-box strong{color:var(--ink);}
+
+  .checklist{list-style:none; margin:18px 0; padding:0; display:grid; gap:8px;}
+  .checklist li{display:flex; gap:10px; align-items:flex-start; font-family:'Manrope',sans-serif; font-size:13.5px;}
+  .checklist input{margin-top:3px; width:16px; height:16px; accent-color:var(--accent); flex:none;}
+
+  .stepper{display:flex; align-items:flex-start; gap:0; margin:8px 0 40px; overflow-x:auto; padding-bottom:4px;}
+  .stepper-item{flex:1; min-width:64px; display:flex; flex-direction:column; align-items:center; gap:6px; position:relative; background:none; border:none; padding:0; cursor:pointer; font-family:'Manrope',sans-serif;}
+  .stepper-item::after{content:""; position:absolute; top:14px; left:50%; width:100%; height:2px; background:var(--line); z-index:0;}
+  .stepper-item:last-child::after{display:none;}
+  .stepper-item.done::after{background:var(--accent);}
+  .stepper-num{position:relative; z-index:1; width:28px; height:28px; border-radius:50%; background:var(--surface); border:2px solid var(--line); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-weight:600; font-size:11.5px; color:var(--ink-soft);}
+  .stepper-item.current .stepper-num{border-color:var(--accent); color:var(--accent-ink);}
+  .stepper-item.done .stepper-num{background:var(--accent); border-color:var(--accent); color:var(--surface);}
+  .stepper-item.locked .stepper-num{opacity:.5;}
+  .stepper-label{font-size:9.5px; text-align:center; color:var(--ink-soft); line-height:1.2; max-width:74px;}
+  .stepper-item.current .stepper-label{color:var(--ink); font-weight:700;}
+
+  section.step{border-left:2px solid var(--line); padding-left:26px; margin-left:6px; position:relative; margin-bottom:22px; scroll-margin-top:90px; transition:border-color .2s, opacity .2s;}
+  section.step::before{content: attr(data-n); position:absolute; left:-19px; top:-2px; width:36px; height:36px; border-radius:50%; background:var(--surface); border:2px solid var(--line); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-weight:600; font-size:13px; color:var(--ink-soft);}
+  section.step.current{border-left-color:var(--accent);}
+  section.step.current::before{border-color:var(--accent); color:var(--accent-ink);}
+  section.step.done::before{background:var(--accent); border-color:var(--accent); color:var(--surface); content:"✓";}
+  section.step.locked{opacity:.5;}
+  section.step .eyebrow{font-size:11.5px; font-weight:700; color:var(--accent-ink); letter-spacing:.05em; display:block; margin-bottom:4px;}
+  section.step h2{font-size:19px; margin:0 0 10px;}
+  section.step h4{font-size:13.5px; margin:16px 0 6px;}
+  section.step p{margin:0 0 12px;}
+  section.step ul, section.step ol{margin:0 0 12px; padding-left:20px;}
+  section.step li{margin-bottom:6px;}
+
+  .verify-box{background:var(--surface); border:1px solid var(--accent); border-radius:9px; padding:14px 16px; margin-top:16px;}
+  .verify-box .vt{font-family:'Manrope',sans-serif; font-weight:700; font-size:11.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--accent-ink); margin-bottom:8px; display:flex; align-items:center; gap:6px;}
+  .verify-box .vt::before{content:"✔";}
+  .verify-list{list-style:none; margin:0; padding:0; display:grid; gap:7px;}
+  .verify-list li{display:flex; gap:9px; align-items:flex-start; font-family:'Manrope',sans-serif; font-size:12.5px;}
+  .verify-list input{margin-top:2px; width:15px; height:15px; accent-color:var(--accent); flex:none;}
+
+  .step-actions{display:flex; align-items:center; gap:12px; margin-top:16px; padding-top:16px; border-top:1px dashed var(--line); flex-wrap:wrap;}
+  .step-done-btn{font-family:'Manrope',sans-serif; font-weight:700; font-size:12.5px; padding:9px 15px; border-radius:8px; border:1px solid var(--accent); background:var(--accent-soft); color:var(--accent-ink); cursor:pointer;}
+  .step-done-btn:hover:not(:disabled){background:var(--accent); color:var(--surface);}
+  .step-done-btn.on{background:var(--accent); color:var(--surface);}
+  .step-done-btn:disabled{opacity:.4; cursor:not-allowed;}
+  .step-done-note{font-family:'Manrope',sans-serif; font-size:11.5px; color:var(--ink-soft);}
+
+  .term{background:var(--term-bg); color:var(--term-ink); border-radius:9px; overflow:hidden; margin:14px 0; box-shadow:var(--shadow); border:1px solid var(--line);}
+  .term-bar{display:flex; align-items:center; justify-content:space-between; padding:8px 14px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#8fa0a0; background:rgba(255,255,255,.03); border-bottom:1px solid rgba(255,255,255,.06);}
+  .term-copy{background:transparent; border:1px solid rgba(255,255,255,.18); color:#cfe0e0; font-size:10.5px; padding:3px 8px; border-radius:6px; cursor:pointer; font-family:'Manrope',sans-serif;}
+  .term-copy:hover{border-color:var(--term-accent); color:var(--term-accent);}
+  .term pre{margin:0; padding:14px 16px; overflow-x:auto; font-family:'JetBrains Mono',monospace; font-size:12.5px; line-height:1.65;}
+  .term .k{color:var(--term-accent);}
+  .term .cm{color:#8fa0a0;}
+
+  .callout{border-radius:var(--radius); padding:16px 18px; margin:16px 0; font-family:'Manrope',sans-serif; font-size:13.5px; border:1px solid;}
+  .callout.think{background:var(--surface-2); border-color:var(--line);}
+  .callout.warn{background:var(--amber-soft); border-color:var(--amber);}
+  .callout h4{margin:0 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:.05em;}
+  .callout.think h4{color:var(--ink-soft);}
+  .callout.warn h4{color:var(--amber);}
+  .callout ul,.callout ol{margin:0; padding-left:18px;}
+  .callout li{margin-bottom:5px;}
+
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-family:'Manrope',sans-serif; font-size:13px;}
+  caption{caption-side:top; text-align:left; font-weight:700; font-size:12.5px; color:var(--ink-soft); margin-bottom:8px;}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line);}
+  th{font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft);}
+  td code{font-size:12px;}
+
+  .case{background:var(--surface); border:1px solid var(--accent); border-radius:var(--radius); padding:20px 22px; margin:18px 0; box-shadow:var(--shadow);}
+  .case .tag{display:inline-block; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--accent-ink); background:var(--accent-soft); padding:3px 9px; border-radius:100px; margin-bottom:10px;}
+
+  .ai-box{border:1px solid var(--amber); background:var(--amber-soft); border-radius:var(--radius); padding:18px 20px; margin:18px 0;}
+  .ai-box h4{margin:0 0 10px; font-size:12.5px; color:var(--amber); text-transform:uppercase; letter-spacing:.05em; display:flex; gap:7px; align-items:center;}
+  .ai-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; font-family:'Manrope',sans-serif; font-size:13px;}
+  @media(max-width:600px){.ai-grid{grid-template-columns:1fr;}}
+  .ai-grid h5{margin:0 0 6px; font-size:11.5px; text-transform:uppercase; letter-spacing:.04em;}
+  .ai-grid .yes h5{color:var(--accent-ink);}
+  .ai-grid .no h5{color:var(--danger);}
+  .ai-grid ul{margin:0; padding-left:16px;}
+
+  .declaration{font-family:'JetBrains Mono',monospace; font-size:12px; background:var(--surface-2); border:1px dashed var(--line); border-radius:8px; padding:14px 16px; margin-top:10px; white-space:pre-wrap;}
+
+  .final-check{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:20px 22px; box-shadow:var(--shadow);}
+  footer.doc-foot{margin-top:40px; padding-top:20px; border-top:1px solid var(--line); font-family:'Manrope',sans-serif; font-size:12.5px; color:var(--ink-soft); display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;}
+</style>
+
+<div class="topbar">
+  <div class="topbar-row">
+    <div>
+      <div class="kicker">Semana 1 · Práctica</div>
+      <h1>API base NestJS + Swagger</h1>
+    </div>
+    <div class="progress-wrap">
+      <span id="progressLabel">0/10 pasos</span>
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <button class="theme-btn" id="themeBtn" type="button">Sistema</button>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div class="doc">
+    <header class="hero">
+      <span class="kicker">Horas de práctica de laboratorio · Empiezas desde cero</span>
+      <h1>Tu primera API base con documentación automática</h1>
+      <p>Vas a crear un proyecto <strong>NestJS</strong>, habilitar Swagger/OpenAPI con <code>@nestjs/swagger</code> e implementar tus primeros endpoints funcionales siguiendo una mentalidad <strong>API-first</strong>: primero el contrato, luego el código. Este mismo proyecto lo seguirás extendiendo en las próximas semanas del curso.</p>
+      <div class="meta-row">
+        <span class="badge">2.5 h laboratorio</span>
+        <span class="badge">Node.js 20+ · NestJS · TypeScript</span>
+        <span class="badge">Individual o en pareja</span>
+      </div>
+    </header>
+
+    <div class="rule-box">
+      <strong>Regla de esta guía:</strong> sigue los pasos en orden, sin saltarte ninguno. Cada paso tiene una casilla de <strong>Verificación</strong> — el botón "Marcar paso completado" solo se activa cuando confirmas que la verificación se cumplió. Si te saltas un paso, los siguientes probablemente fallarán.
+    </div>
+
+    <nav class="stepper" id="stepper" aria-label="Ruta paso a paso de la práctica">
+      <button class="stepper-item" data-target="step0"><span class="stepper-num">0</span><span class="stepper-label">Entorno</span></button>
+      <button class="stepper-item" data-target="step1"><span class="stepper-num">1</span><span class="stepper-label">CLI Nest</span></button>
+      <button class="stepper-item" data-target="step2"><span class="stepper-num">2</span><span class="stepper-label">Proyecto base</span></button>
+      <button class="stepper-item" data-target="step3"><span class="stepper-num">3</span><span class="stepper-label">Swagger</span></button>
+      <button class="stepper-item" data-target="step4"><span class="stepper-num">4</span><span class="stepper-label">Contrato</span></button>
+      <button class="stepper-item" data-target="step5"><span class="stepper-num">5</span><span class="stepper-label">Recurso Nest</span></button>
+      <button class="stepper-item" data-target="step6"><span class="stepper-num">6</span><span class="stepper-label">Endpoints</span></button>
+      <button class="stepper-item" data-target="step7"><span class="stepper-num">7</span><span class="stepper-label">Probar</span></button>
+      <button class="stepper-item" data-target="step8"><span class="stepper-num">8</span><span class="stepper-label">Reto</span></button>
+      <button class="stepper-item" data-target="step9"><span class="stepper-num">9</span><span class="stepper-label">Entregar</span></button>
+    </nav>
+
+    <!-- PASO 0 -->
+    <section class="step" data-n="0" id="step0">
+      <span class="eyebrow">Paso 0</span>
+      <h2>Verificar el entorno de trabajo</h2>
+      <p>Antes de escribir una sola línea de código, confirma que tienes todo instalado.</p>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="node --version
+npm --version">Copiar</button></div>
+        <pre><span class="k">$</span> node --version
+<span class="cm"># deberías ver algo como: v20.11.0</span>
+<span class="k">$</span> npm --version
+<span class="cm"># deberías ver algo como: 10.2.4</span></pre>
+      </div>
+      <p>Si en vez de un número ves un error como "no se reconoce el comando node", <strong>no tienes Node.js instalado</strong>: descárgalo desde <code>nodejs.org</code> (versión LTS 20 o superior), instálalo, cierra y vuelve a abrir la terminal, y repite el comando.</p>
+      <p>Confirma también que tienes un editor de código (VS Code recomendado, por su integración con TypeScript).</p>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 0</div>
+        <ul class="verify-list" data-step="step0">
+          <li><input type="checkbox" data-v="0"><span><code>node --version</code> me muestra 20.x o superior sin errores.</span></li>
+          <li><input type="checkbox" data-v="1"><span>Tengo un editor de código abierto y listo para usar.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step0" data-next="step1" disabled>✓ Marcar paso 0 completado → ir al paso 1</button>
+        <span class="step-done-note">Marca ambas casillas de verificación para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 1 -->
+    <section class="step" data-n="1" id="step1">
+      <span class="eyebrow">Paso 3.1</span>
+      <h2>Instalar el CLI de NestJS</h2>
+      <p>El CLI de NestJS genera la estructura del proyecto y de cada recurso (controlador, servicio, módulo) a partir de convenciones, en vez de que escribas todo desde cero.</p>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="npm i -g @nestjs/cli
+nest --version">Copiar</button></div>
+        <pre><span class="k">$</span> npm i -g @nestjs/cli
+<span class="k">$</span> nest --version
+<span class="cm"># deberías ver algo como: 10.3.0</span></pre>
+      </div>
+      <p>Si ves "command not found" después de instalar, revisa que la carpeta global de npm esté en tu <code>PATH</code> (cierra y vuelve a abrir la terminal antes de darte por vencido).</p>
+      <div class="callout think">
+        <h4>Pregúntate</h4>
+        <p style="margin:0;">Instalar un CLI que genera código a partir de convenciones es una forma de <strong>automatización</strong> (Tabla 1 de la teoría, dimensión "Automatización"). ¿Qué otras herramientas de automatización viste en la teoría de esta semana?</p>
+      </div>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 1</div>
+        <ul class="verify-list" data-step="step1">
+          <li><input type="checkbox" data-v="0"><span><code>nest --version</code> me muestra un número de versión sin errores.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step1" data-next="step2" disabled>✓ Marcar paso 1 completado → ir al paso 2</button>
+        <span class="step-done-note">Marca la verificación para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 2 -->
+    <section class="step" data-n="2" id="step2">
+      <span class="eyebrow">Paso 3.2</span>
+      <h2>Crear el proyecto base</h2>
+      <ol>
+        <li>Ubícate en una terminal, en la carpeta donde quieras guardar tus proyectos del curso.</li>
+        <li>Ejecuta:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="nest new nestjs-productos-api">Copiar</button></div>
+        <pre><span class="k">$</span> nest new nestjs-productos-api
+<span class="cm"># El CLI pregunta el gestor de paquetes: elige npm</span></pre>
+      </div>
+      <p>Esto genera una carpeta <code>nestjs-productos-api/</code> con <code>src/app.module.ts</code>, <code>src/app.controller.ts</code>, <code>src/app.service.ts</code> y <code>src/main.ts</code>, ya funcional.</p>
+      <ol start="3">
+        <li>Entra al proyecto y ejecútalo:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="cd nestjs-productos-api
+npm run start:dev">Copiar</button></div>
+        <pre><span class="k">$</span> cd nestjs-productos-api
+<span class="k">$</span> npm run start:dev
+<span class="cm"># Nest application successfully started</span></pre>
+      </div>
+      <ol start="4">
+        <li>Abre <code>http://localhost:3000</code> en el navegador: deberías ver <code>Hello World!</code>.</li>
+        <li>Deja este proceso corriendo — <code>start:dev</code> recompila automáticamente cada vez que guardas un archivo.</li>
+      </ol>
+      <div class="callout think">
+        <h4>Pregúntate</h4>
+        <p style="margin:0;"><code>app.module.ts</code>, <code>app.controller.ts</code> y <code>app.service.ts</code> son tu primer contacto con la arquitectura modular de NestJS: un <strong>módulo</strong> agrupa funcionalidad relacionada, un <strong>controlador</strong> recibe peticiones HTTP, y un <strong>servicio</strong> contiene la lógica de negocio. Relaciónalo con "responsabilidad única" (sección 1.2 de la teoría, microservicios) — aquí a nivel de clase, no de despliegue.</p>
+      </div>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 2</div>
+        <ul class="verify-list" data-step="step2">
+          <li><input type="checkbox" data-v="0"><span>La consola muestra "Nest application successfully started".</span></li>
+          <li><input type="checkbox" data-v="1"><span><code>http://localhost:3000</code> responde "Hello World!" en el navegador.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step2" data-next="step3" disabled>✓ Marcar paso 2 completado → ir al paso 3</button>
+        <span class="step-done-note">Marca ambas casillas para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 3 -->
+    <section class="step" data-n="3" id="step3">
+      <span class="eyebrow">Paso 3.3</span>
+      <h2>Habilitar Swagger / OpenAPI</h2>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="npm install @nestjs/swagger">Copiar</button></div>
+        <pre><span class="k">$</span> npm install @nestjs/swagger</pre>
+      </div>
+      <p>Reemplaza el contenido de <code>src/main.ts</code>:</p>
+      <div class="term">
+        <div class="term-bar"><span>src/main.ts</span><button class="term-copy" data-copy="import { NestFactory } from '@nestjs/core';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { AppModule } from './app.module';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  app.setGlobalPrefix('api/v1');
+
+  const config = new DocumentBuilder()
+    .setTitle('API Productos')
+    .setDescription('API de catalogo de productos - Semana 1')
+    .setVersion('1.0')
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document);
+
+  await app.listen(3000);
+}
+bootstrap();">Copiar</button></div>
+        <pre>import { NestFactory } from '@nestjs/core';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { AppModule } from './app.module';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  app.setGlobalPrefix('api/v1');
+
+  const config = new DocumentBuilder()
+    .setTitle('API Productos')
+    .setDescription('API de catálogo de productos — Semana 1')
+    .setVersion('1.0')
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document);
+
+  await app.listen(3000);
+}
+bootstrap();</pre>
+      </div>
+      <p>Guarda y observa la consola (se recompila sola). Abre <code>http://localhost:3000/api/docs</code>.</p>
+      <p style="font-size:13px; color:var(--ink-soft);">Nota: como acabas de aplicar <code>setGlobalPrefix('api/v1')</code>, <code>http://localhost:3000/</code> ya no responde "Hello World!" directamente — esa ruta ahora vive en <code>http://localhost:3000/api/v1</code>. Es esperado.</p>
+      <p>Esto es documentación <em>code-first</em>: nace de decoradores en tu código, igual que Swashbuckle en .NET o Springdoc en Spring Boot. En la semana 7 verás el enfoque <em>schema-first</em> puro.</p>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 3</div>
+        <ul class="verify-list" data-step="step3">
+          <li><input type="checkbox" data-v="0"><span><code>/api/docs</code> carga Swagger UI con el título "API Productos".</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step3" data-next="step4" disabled>✓ Marcar paso 3 completado → ir al paso 4</button>
+        <span class="step-done-note">Marca la verificación para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 4 -->
+    <section class="step" data-n="4" id="step4">
+      <span class="eyebrow">Paso 3.4</span>
+      <h2>Diseñar el contrato antes de programar</h2>
+      <p>Mentalidad API-first: completa esta tabla <strong>antes</strong> de escribir el controlador. Escríbela en tu bitácora o en un archivo <code>contrato.md</code>.</p>
+      <table>
+        <caption>Mini-contrato: GET /productos</caption>
+        <tbody>
+          <tr><th>Recurso</th><td><code>/productos</code></td></tr>
+          <tr><th>Verbo</th><td>GET</td></tr>
+          <tr><th>Respuesta 200</th><td>Lista de <code>{ id, nombre, precio }</code></td></tr>
+          <tr><th>Respuesta de error</th><td>500 si falla el servidor</td></tr>
+        </tbody>
+      </table>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 4</div>
+        <ul class="verify-list" data-step="step4">
+          <li><input type="checkbox" data-v="0"><span>Escribí el contrato antes de tocar el controlador.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step4" data-next="step5" disabled>✓ Marcar paso 4 completado → ir al paso 5</button>
+        <span class="step-done-note">Marca la verificación para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 5 -->
+    <section class="step" data-n="5" id="step5">
+      <span class="eyebrow">Paso 3.5</span>
+      <h2>Generar el recurso Productos</h2>
+      <p>NestJS puede generar automáticamente un módulo, controlador y servicio relacionados con <code>nest g resource</code>. Ejecútalo y observa qué crea:</p>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="nest g resource productos">Copiar</button></div>
+        <pre><span class="k">$</span> nest g resource productos
+<span class="cm"># ? What transport layer do you use? REST API</span>
+<span class="cm"># ? Would you like to generate CRUD entry points? No</span></pre>
+      </div>
+      <p>Elige <strong>REST API</strong> como tipo de transporte y responde <strong>No</strong> a "¿Generar puntos de entrada CRUD?" — los escribiremos a mano en el siguiente paso para entender cada línea.</p>
+      <p>Debe existir ahora una carpeta <code>src/productos/</code> con <code>productos.controller.ts</code>, <code>productos.service.ts</code> y <code>productos.module.ts</code>, y <code>app.module.ts</code> debe haberse actualizado automáticamente para importar <code>ProductosModule</code>.</p>
+      <div class="callout think">
+        <h4>Pregúntate</h4>
+        <p style="margin:0;">¿Por qué NestJS separa el controlador (HTTP) del servicio (lógica)? Relaciónalo con "desacoplar por contrato" (sección 1.1): el controlador es el contrato hacia afuera; el servicio puede cambiar de implementación sin que el consumidor de la API lo note.</p>
+      </div>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 5</div>
+        <ul class="verify-list" data-step="step5">
+          <li><input type="checkbox" data-v="0"><span>Existe <code>src/productos/</code> con controller, service y module.</span></li>
+          <li><input type="checkbox" data-v="1"><span><code>app.module.ts</code> importa <code>ProductosModule</code> automáticamente.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step5" data-next="step6" disabled>✓ Marcar paso 5 completado → ir al paso 6</button>
+        <span class="step-done-note">Marca ambas casillas para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 6 -->
+    <section class="step" data-n="6" id="step6">
+      <span class="eyebrow">Paso 3.6</span>
+      <h2>Implementar el primer endpoint funcional</h2>
+      <p>Reemplaza el contenido de <code>src/productos/productos.service.ts</code>:</p>
+      <div class="term">
+        <div class="term-bar"><span>src/productos/productos.service.ts</span><button class="term-copy" data-copy="import { Injectable, NotFoundException } from '@nestjs/common';
+
+export interface Producto {
+  id: number;
+  nombre: string;
+  precio: number;
+}
+
+@Injectable()
+export class ProductosService {
+  private readonly productos: Producto[] = [
+    { id: 1, nombre: 'Teclado mecanico', precio: 45.90 },
+    { id: 2, nombre: 'Mouse inalambrico', precio: 19.50 },
+    { id: 3, nombre: 'Monitor 24 pulgadas', precio: 129.99 },
+  ];
+
+  findAll(): Producto[] {
+    return this.productos;
+  }
+
+  findOne(id: number): Producto {
+    const producto = this.productos.find((p) => p.id === id);
+    if (!producto) {
+      throw new NotFoundException(`Producto con id ${id} no encontrado`);
+    }
+    return producto;
+  }
+}">Copiar</button></div>
+        <pre>import { Injectable, NotFoundException } from '@nestjs/common';
+
+export interface Producto {
+  id: number;
+  nombre: string;
+  precio: number;
+}
+
+@Injectable()
+export class ProductosService {
+  private readonly productos: Producto[] = [
+    { id: 1, nombre: 'Teclado mecánico', precio: 45.90 },
+    { id: 2, nombre: 'Mouse inalámbrico', precio: 19.50 },
+    { id: 3, nombre: 'Monitor 24"', precio: 129.99 },
+  ];
+
+  findAll(): Producto[] {
+    return this.productos;
+  }
+
+  findOne(id: number): Producto {
+    const producto = this.productos.find((p) => p.id === id);
+    if (!producto) {
+      throw new NotFoundException(`Producto con id ${id} no encontrado`);
+    }
+    return producto;
+  }
+}</pre>
+      </div>
+      <p>Reemplaza el contenido de <code>src/productos/productos.controller.ts</code>:</p>
+      <div class="term">
+        <div class="term-bar"><span>src/productos/productos.controller.ts</span><button class="term-copy" data-copy="import { Controller, Get, Param, ParseIntPipe } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ProductosService, Producto } from './productos.service';
+
+@ApiTags('productos')
+@Controller('productos')
+export class ProductosController {
+  constructor(private readonly productosService: ProductosService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'Listar productos disponibles' })
+  @ApiResponse({ status: 200, description: 'Lista de productos.' })
+  findAll(): Producto[] {
+    return this.productosService.findAll();
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Obtener un producto por id' })
+  @ApiResponse({ status: 200, description: 'Producto encontrado.' })
+  @ApiResponse({ status: 404, description: 'Producto no encontrado.' })
+  findOne(@Param('id', ParseIntPipe) id: number): Producto {
+    return this.productosService.findOne(id);
+  }
+}">Copiar</button></div>
+        <pre>import { Controller, Get, Param, ParseIntPipe } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ProductosService, Producto } from './productos.service';
+
+@ApiTags('productos')
+@Controller('productos')
+export class ProductosController {
+  constructor(private readonly productosService: ProductosService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'Listar productos disponibles' })
+  @ApiResponse({ status: 200, description: 'Lista de productos.' })
+  findAll(): Producto[] {
+    return this.productosService.findAll();
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Obtener un producto por id' })
+  @ApiResponse({ status: 200, description: 'Producto encontrado.' })
+  @ApiResponse({ status: 404, description: 'Producto no encontrado.' })
+  findOne(@Param('id', ParseIntPipe) id: number): Producto {
+    return this.productosService.findOne(id);
+  }
+}</pre>
+      </div>
+      <p>Nota el prefijo <code>api/v1</code> (configurado globalmente en el Paso 3): tu primer contacto real con <strong>versionamiento de contratos</strong> (evolución controlada, sección 1.1). Nota también el <code>ParseIntPipe</code>: valida que <code>:id</code> sea un número antes de que tu código lo use — si alguien pide <code>GET /api/v1/productos/abc</code>, NestJS responde <code>400 Bad Request</code> automáticamente.</p>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 6</div>
+        <ul class="verify-list" data-step="step6">
+          <li><input type="checkbox" data-v="0"><span>Guardé ambos archivos y la consola recompiló sin errores de TypeScript.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step6" data-next="step7" disabled>✓ Marcar paso 6 completado → ir al paso 7</button>
+        <span class="step-done-note">Marca la verificación para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 7 -->
+    <section class="step" data-n="7" id="step7">
+      <span class="eyebrow">Paso 3.7</span>
+      <h2>Probar el endpoint en Swagger UI</h2>
+      <ol>
+        <li>Con <code>npm run start:dev</code> corriendo, abre <code>http://localhost:3000/api/docs</code>.</li>
+        <li>Expande <code>GET /productos</code> → <strong>Try it out → Execute</strong>.</li>
+        <li>Verifica el código de respuesta (200) y el cuerpo JSON — compáralo contra el mini-contrato del Paso 4.</li>
+        <li>Expande <code>GET /productos/{id}</code>, prueba con <code>id=1</code> (200 OK) y luego con <code>id=99</code> (debe dar 404).</li>
+        <li>Toma una captura de pantalla de ambas respuestas para tu evidencia.</li>
+      </ol>
+      <div class="callout warn">
+        <h4>Si ves un error 500 en vez de 404</h4>
+        <p style="margin:0;">Revisa que estés lanzando <code>NotFoundException</code> (importado de <code>@nestjs/common</code>) y no un <code>Error</code> genérico en <code>ProductosService.findOne</code>.</p>
+      </div>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 7</div>
+        <ul class="verify-list" data-step="step7">
+          <li><input type="checkbox" data-v="0"><span><code>GET /productos</code> responde 200 con 3 productos.</span></li>
+          <li><input type="checkbox" data-v="1"><span><code>GET /productos/99</code> responde 404 con un mensaje claro en el JSON.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step7" data-next="step8" disabled>✓ Marcar paso 7 completado → ir al reto</button>
+        <span class="step-done-note">Marca ambas casillas para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 8 -->
+    <section class="step" data-n="8" id="step8">
+      <span class="eyebrow">Paso 8 · Reto</span>
+      <h2>Caso propuesto para la práctica</h2>
+      <div class="case">
+        <span class="tag">Resuelve antes de terminar la sesión</span>
+        <p style="margin:0;">Agrega al menos <strong>dos decoradores <code>@ApiResponse</code></strong> adicionales que documenten explícitamente en Swagger la forma de la respuesta exitosa (usa <code>@ApiOkResponse</code> o describe el <code>schema</code> inline), y confirma que el cambio se refleja en <code>/api/docs</code> sin reiniciar el servidor manualmente.</p>
+      </div>
+      <p><strong>Actividades adicionales:</strong></p>
+      <ul>
+        <li>Agrega comentarios TSDoc (<code>/** ... */</code>) a <code>ProductosService</code> y observa si tu editor los aprovecha al pasar el cursor sobre el método.</li>
+        <li>Bitácora: ¿qué le falta a tu Swagger para que otro equipo (frontend) la use sin haber visto tu código?</li>
+        <li>Sube el proyecto a Git con un commit descriptivo. Asegúrate de que <code>.gitignore</code> excluya <code>node_modules/</code> (NestJS lo genera automáticamente).</li>
+      </ul>
+
+      <div class="ai-box">
+        <h4>🤖 Uso de IA en esta práctica</h4>
+        <div class="ai-grid">
+          <div class="yes">
+            <h5>Nivel 2–3: borrador / revisor</h5>
+            <ul>
+              <li>Pide que te explique un error de <code>npm run start:dev</code> o de TypeScript línea por línea.</li>
+              <li>Pide que te explique un decorador de NestJS antes de copiarlo (<code>@Controller</code>, <code>@Injectable</code>, <code>@ApiResponse</code>).</li>
+              <li>Pide ayuda para interpretar por qué un endpoint no aparece en Swagger UI.</li>
+            </ul>
+          </div>
+          <div class="no">
+            <h5>No permitido</h5>
+            <ul>
+              <li>Pedir el proyecto completo (controlador + servicio + módulo) para copiar y pegar sin ejecutar tú los pasos 1–7.</li>
+              <li>Pedir que "arregle" un error de TypeScript sin intentar primero leer el mensaje y ubicar la línea señalada.</li>
+            </ul>
+          </div>
+        </div>
+        <p style="font-family:'Manrope',sans-serif; font-size:12.5px; margin:12px 0 0; color:var(--ink-soft);">Detalle completo y prompts sugeridos en <code>guia-ia-semana01.md</code>. Si usaste IA en nivel 2–3, agrega esta declaración a tu entrega:</p>
+        <div class="declaration">### Declaración de uso de IA
+- Herramienta(s): ____________________
+- Nivel de uso: ______________________
+- Qué se le pidió: ___________________
+- Qué se modificó/verificó manualmente: ______</div>
+      </div>
+
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 8</div>
+        <ul class="verify-list" data-step="step8">
+          <li><input type="checkbox" data-v="0"><span>Agregué al menos dos <code>@ApiResponse</code> adicionales y los vi reflejados en Swagger.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step8" data-next="step9" disabled>✓ Marcar reto completado → ir al paso 9</button>
+        <span class="step-done-note">Marca la verificación para continuar.</span>
+      </div>
+    </section>
+
+    <!-- PASO 9 -->
+    <section class="step" data-n="9" id="step9">
+      <span class="eyebrow">Paso 9</span>
+      <h2>Documentar, confirmar y subir tu trabajo</h2>
+      <ol>
+        <li>En Swagger, revisa que ambos endpoints (<code>GET /productos</code>, <code>GET /productos/{id}</code>) aparezcan documentados con sus respuestas.</li>
+        <li>Bitácora: responde las preguntas de reflexión de los pasos 1, 5 y 8 (media página).</li>
+        <li>Si usaste IA en algún paso, agrega la declaración de uso.</li>
+        <li>Sube tu proyecto con un commit descriptivo:</li>
+      </ol>
+      <div class="term">
+        <div class="term-bar"><span>terminal</span><button class="term-copy" data-copy="git add .
+git commit -m &quot;feat: API base de productos con NestJS y Swagger&quot;">Copiar</button></div>
+        <pre><span class="k">$</span> git add .
+<span class="k">$</span> git commit -m "feat: API base de productos con NestJS y Swagger"</pre>
+      </div>
+      <div class="verify-box">
+        <div class="vt">Verificación del Paso 9</div>
+        <ul class="verify-list" data-step="step9">
+          <li><input type="checkbox" data-v="0"><span>Hice el commit y puedo verlo con <code>git log</code>.</span></li>
+        </ul>
+      </div>
+      <div class="step-actions">
+        <button class="step-done-btn" data-step="step9" data-next="exitCheck" disabled>✓ Marcar paso 9 completado → ir al checklist final</button>
+        <span class="step-done-note">Marca la verificación para continuar.</span>
+      </div>
+    </section>
+
+    <div class="final-check" id="exitCheck" style="scroll-margin-top:90px;">
+      <h3 style="margin:0 0 4px; font-size:16px;">Checklist de salida</h3>
+      <p style="font-family:'Manrope',sans-serif; font-size:12.5px; color:var(--ink-soft); margin:0 0 14px;">No te vayas del laboratorio sin esto. Se guarda en este navegador para que retomes donde quedaste.</p>
+      <ul class="checklist" id="exitChecklist">
+        <li><input type="checkbox" data-key="run"><span><code>npm run start:dev</code> inicia sin errores.</span></li>
+        <li><input type="checkbox" data-key="swagger"><span>Swagger (<code>/api/docs</code>) muestra ambos endpoints con ejemplos de respuesta.</span></li>
+        <li><input type="checkbox" data-key="explain"><span>Puedo explicar, sin ver el código, la diferencia entre <code>ProductosController</code> y <code>ProductosService</code>.</span></li>
+        <li><input type="checkbox" data-key="versioning"><span>Puedo explicar por qué usé <code>setGlobalPrefix('api/v1')</code>.</span></li>
+        <li><input type="checkbox" data-key="404"><span>Probé el caso 404 y entiendo por qué NestJS responde así con <code>NotFoundException</code>.</span></li>
+        <li><input type="checkbox" data-key="git"><span>Hice commit del proyecto.</span></li>
+      </ul>
+    </div>
+
+    <footer class="doc-foot">
+      <span>Integración de Sistemas · Semana 1 — Prácticas</span>
+      <a href="web-teoria.html">← Volver a la teoría en vivo</a>
+    </footer>
+  </div>
+</main>
+
+<script>
+(function(){
+  const root = document.documentElement;
+  const btn = document.getElementById('themeBtn');
+  const labels = {system:'Sistema', light:'Claro', dark:'Oscuro'};
+  let mode='system';
+  try{ mode = localStorage.getItem('s01-theme') || 'system'; }catch(e){}
+  function apply(){ if(mode==='system'){root.removeAttribute('data-theme');} else {root.setAttribute('data-theme',mode);} btn.textContent = labels[mode]; }
+  btn.addEventListener('click', ()=>{ mode = mode==='system'?'light':mode==='light'?'dark':'system'; try{localStorage.setItem('s01-theme',mode);}catch(e){} apply(); });
+  apply();
+})();
+
+document.querySelectorAll('.term-copy').forEach(btn=>{
+  btn.addEventListener('click', async ()=>{
+    const text = btn.getAttribute('data-copy');
+    try{ await navigator.clipboard.writeText(text); btn.textContent='¡Copiado!'; setTimeout(()=>btn.textContent='Copiar',1200); }
+    catch(e){ btn.textContent='No se pudo copiar'; setTimeout(()=>btn.textContent='Copiar',1200); }
+  });
+});
+
+// exit checklist persistence (independent of step gating) — sufijo -js para no chocar con progreso previo
+(function(){
+  let state = {};
+  try{ state = JSON.parse(localStorage.getItem('s01-practica-checklist-js')||'{}'); }catch(e){}
+  const boxes = document.querySelectorAll('#exitChecklist input[type="checkbox"]');
+  function save(){ try{ localStorage.setItem('s01-practica-checklist-js', JSON.stringify(state)); }catch(e){} }
+  boxes.forEach(b=>{
+    const key = 'exitChecklist:' + b.dataset.key;
+    if(state[key]) b.checked = true;
+    b.addEventListener('change', ()=>{ state[key]=b.checked; save(); });
+  });
+})();
+
+// ---------- Stepper + verification gating: no se puede saltar pasos ----------
+(function(){
+  const STEPS = ['step0','step1','step2','step3','step4','step5','step6','step7','step8','step9'];
+  const stepperItems = Array.from(document.querySelectorAll('.stepper-item'));
+  const sections = STEPS.map(id => document.getElementById(id));
+
+  let doneState = {};
+  let verifyState = {};
+  try{ doneState = JSON.parse(localStorage.getItem('s01-practica-steps-js')||'{}'); }catch(e){}
+  try{ verifyState = JSON.parse(localStorage.getItem('s01-practica-verify-js')||'{}'); }catch(e){}
+
+  function saveDone(){ try{ localStorage.setItem('s01-practica-steps-js', JSON.stringify(doneState)); }catch(e){} }
+  function saveVerify(){ try{ localStorage.setItem('s01-practica-verify-js', JSON.stringify(verifyState)); }catch(e){} }
+
+  function firstNotDone(){ const idx = STEPS.findIndex(id => !doneState[id]); return idx === -1 ? STEPS.length - 1 : idx; }
+
+  // restore verification checkboxes
+  document.querySelectorAll('.verify-list input[type="checkbox"]').forEach(cb=>{
+    const stepId = cb.closest('.verify-list').dataset.step;
+    const key = stepId + ':' + cb.dataset.v;
+    if(verifyState[key]) cb.checked = true;
+    cb.addEventListener('change', ()=>{
+      verifyState[key] = cb.checked;
+      saveVerify();
+      updateStepButton(stepId);
+    });
+  });
+
+  function updateStepButton(stepId){
+    const list = document.querySelector(`.verify-list[data-step="${stepId}"]`);
+    const boxes = list ? Array.from(list.querySelectorAll('input[type="checkbox"]')) : [];
+    const allChecked = boxes.length > 0 && boxes.every(b=>b.checked);
+    const btn = document.querySelector(`.step-done-btn[data-step="${stepId}"]`);
+    if(btn && !doneState[stepId]){ btn.disabled = !allChecked; }
+  }
+
+  function render(){
+    const currentIdx = firstNotDone();
+    STEPS.forEach((id, i)=>{
+      const isDone = !!doneState[id];
+      const isLocked = i > currentIdx;
+      sections[i].classList.toggle('done', isDone);
+      sections[i].classList.toggle('current', i === currentIdx);
+      sections[i].classList.toggle('locked', isLocked);
+      stepperItems[i].classList.toggle('done', isDone);
+      stepperItems[i].classList.toggle('current', i === currentIdx);
+      stepperItems[i].classList.toggle('locked', isLocked);
+      updateStepButton(id);
+    });
+    document.querySelectorAll('.step-done-btn').forEach(btn=>{
+      const id = btn.dataset.step;
+      btn.classList.toggle('on', !!doneState[id]);
+      if(doneState[id]){
+        btn.disabled = false;
+        btn.textContent = '✓ Paso completado (clic para desmarcar)';
+      } else {
+        btn.textContent = btn.dataset.label;
+      }
+    });
+    const doneCount = STEPS.filter(id=>doneState[id]).length;
+    document.getElementById('progressLabel').textContent = `${doneCount}/${STEPS.length} pasos`;
+    document.getElementById('progressFill').style.width = (doneCount/STEPS.length*100)+'%';
+  }
+
+  document.querySelectorAll('.step-done-btn').forEach(btn=>{ btn.dataset.label = btn.textContent; });
+
+  document.querySelectorAll('.step-done-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.step;
+      const wasDone = !!doneState[id];
+      if(!wasDone && btn.disabled) return; // gated: verification incomplete
+      doneState[id] = !wasDone;
+      saveDone(); render();
+      if(!wasDone && btn.dataset.next){
+        const target = document.getElementById(btn.dataset.next);
+        if(target) target.scrollIntoView({behavior:'smooth', block:'start'});
+      }
+    });
+  });
+
+  stepperItems.forEach(item=>{
+    item.addEventListener('click', ()=>{
+      const target = document.getElementById(item.dataset.target);
+      if(target) target.scrollIntoView({behavior:'smooth', block:'start'});
+    });
+  });
+
+  render();
+})();
+</script>
