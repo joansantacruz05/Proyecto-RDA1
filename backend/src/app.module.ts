@@ -19,18 +19,15 @@ import { AuthModule } from './modules/auth/auth.module';
       envFilePath: '.env',
     }),
 
-    // Configuración centralizada de TypeORM usando DATABASE_URL
+    // Configuración centralizada de TypeORM (Usando SQLite temporalmente por bloqueo de red)
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        url: configService.get('DATABASE_URL'),
+        type: 'sqlite',
+        database: 'booking.sqlite',
         autoLoadEntities: true,
         synchronize: true, // Útil para desarrollo, en prod se suelen usar migraciones
-        ssl: {
-          rejectUnauthorized: false, // Necesario para la mayoría de conexiones a Supabase
-        },
       }),
     }),
 

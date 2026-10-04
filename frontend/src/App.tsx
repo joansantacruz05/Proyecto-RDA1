@@ -32,8 +32,6 @@ const alojamientosData = [
   }
 ];
 
-const todasLasHabitaciones = alojamientosData.flatMap(h => h.habitaciones);
-const todosLosItems = [...alojamientosData, ...todasLasHabitaciones];
 
 const LandingPage = () => {
   const [activeTab, setActiveTab] = useState('todos');
@@ -44,6 +42,53 @@ const LandingPage = () => {
   const [searchPersonas, setSearchPersonas] = useState('');
   const [searchPresupuesto, setSearchPresupuesto] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
+
+  // Estados para datos reales del backend
+  const [alojamientosData, setAlojamientosData] = useState<any[]>([]);
+  const [todasLasHabitaciones, setTodasLasHabitaciones] = useState<any[]>([]);
+  const [todosLosItems, setTodosLosItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Obtener datos del backend al cargar la página
+  useEffect(() => {
+    fetch('/api/v1/admin/alojamientos')
+      .then(res => res.json())
+      .then(data => {
+        const alojamientos = Array.isArray(data) ? data.map((item: any, index: number) => ({
+          id: item.id || index + 1,
+          title: item.nombre,
+          location: item.destino,
+          rating: 4.8, // Valor por defecto
+          img: item.tienePiscina ? '/pool.jpg' : '/villa.jpg', // Asignación de imagen de prueba
+          type: 'alojamiento',
+          subtype: 'Hotel', // Valor por defecto
+          description: `Alojamiento con ${item.habitaciones} habitaciones.`,
+          amenities: item.tienePiscina ? ['Piscina', 'Wi-Fi'] : ['Wi-Fi'],
+          habitaciones: [
+            {
+              id: item.id + '-hab',
+              title: 'Habitación Estándar',
+              price: item.precioPorNoche,
+              capacity: item.capacidadAdultos + item.capacidadNinos,
+              img: '/room.jpg',
+              type: 'habitacion',
+              hotelName: item.nombre
+            }
+          ]
+        })) : [];
+        setAlojamientosData(alojamientos);
+        
+        const habitaciones = alojamientos.flatMap((h: any) => h.habitaciones || []);
+        setTodasLasHabitaciones(habitaciones);
+        setTodosLosItems([...alojamientos, ...habitaciones]);
+        
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Error fetching alojamientos:", err);
+        setLoading(false);
+      });
+  }, []);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
