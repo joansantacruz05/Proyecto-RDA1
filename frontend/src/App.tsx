@@ -1,7 +1,17 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Home, User, LogIn, MapPin, Star, ArrowLeft, Search, Users, DollarSign, Building, BedDouble, LayoutGrid, Info, CheckCircle2, Heart } from 'lucide-react';
+import { Home, User, LogIn, MapPin, Star, ArrowLeft, Search, Users, DollarSign, Building, BedDouble, LayoutGrid, Info, CheckCircle2, Heart, Plus, Edit2, Trash2, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+const getTokenData = () => {
+  const token = localStorage.getItem('token');
+  if (!token) return null;
+  try {
+    return JSON.parse(atob(token.split('.')[1]));
+  } catch (e) {
+    return null;
+  }
+};
 
 const alojamientosData = [
   { 
@@ -31,7 +41,66 @@ const alojamientosData = [
     ]
   }
 ];
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
+const ImageCarousel = ({ images, title }: { images: string[], title: string }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const nextImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIndex((prev) => (prev + 1) % images.length);
+  };
+
+  const prevImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+  };
+
+  if (!images || images.length === 0) {
+    return <img src="/villa.jpg" alt={title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />;
+  }
+
+  if (images.length === 1) {
+    return <img src={images[0]} alt={title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => e.currentTarget.src = '/villa.jpg'} />;
+  }
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }} className="carousel-container">
+      <AnimatePresence initial={false}>
+        <motion.img
+          key={currentIndex}
+          src={images[currentIndex]}
+          alt={`${title} - ${currentIndex + 1}`}
+          initial={{ opacity: 0, x: 100 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -100 }}
+          transition={{ duration: 0.3 }}
+          style={{ position: 'absolute', width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={(e) => e.currentTarget.src = '/villa.jpg'}
+        />
+      </AnimatePresence>
+      <button 
+        onClick={prevImage}
+        className="carousel-btn"
+        style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.8)', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}
+      >
+        <ChevronLeft size={20} />
+      </button>
+      <button 
+        onClick={nextImage}
+        className="carousel-btn"
+        style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.8)', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}
+      >
+        <ChevronRight size={20} />
+      </button>
+      <div style={{ position: 'absolute', bottom: '10px', left: '0', right: '0', display: 'flex', justifyContent: 'center', gap: '6px', zIndex: 10 }}>
+        {images.map((_, idx) => (
+          <div key={idx} style={{ width: '6px', height: '6px', borderRadius: '50%', background: idx === currentIndex ? 'white' : 'rgba(255,255,255,0.5)' }} />
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const LandingPage = () => {
   const [activeTab, setActiveTab] = useState('todos');
@@ -59,18 +128,18 @@ const LandingPage = () => {
           title: item.nombre,
           location: item.destino,
           rating: 4.8, // Valor por defecto
-          img: item.tienePiscina ? '/pool.jpg' : '/villa.jpg', // Asignación de imagen de prueba
+          img: item.imagenUrl || (item.tienePiscina ? '/pool.jpg' : '/villa.jpg'),
           type: 'alojamiento',
           subtype: 'Hotel', // Valor por defecto
-          description: `Alojamiento con ${item.habitaciones} habitaciones.`,
+          description: item.descripcion || `Alojamiento con ${item.habitaciones} habitaciones.`,
           amenities: item.tienePiscina ? ['Piscina', 'Wi-Fi'] : ['Wi-Fi'],
           habitaciones: [
             {
               id: item.id + '-hab',
               title: 'Habitación Estándar',
               price: item.precioPorNoche,
-              capacity: item.capacidadAdultos + item.capacidadNinos,
-              img: '/room.jpg',
+              capacity: Number(item.capacidadAdultos) + Number(item.capacidadNinos),
+              img: item.imagenUrl || '/room.jpg',
               type: 'habitacion',
               hotelName: item.nombre
             }
@@ -126,7 +195,7 @@ const LandingPage = () => {
         }}
       >
         <div className="card-img-container" style={{ position: 'relative' }}>
-          <img src={item.img} alt={item.title} />
+          <ImageCarousel images={item.images || [item.img]} title={item.title} />
           <div style={{ position: 'absolute', top: '15px', left: '15px', background: 'var(--nav-bg)', backdropFilter: 'blur(5px)', padding: '4px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold' }}>
             {isAlojamiento ? item.subtype : 'Habitación'}
           </div>
@@ -357,25 +426,47 @@ const ScrollToTop = () => {
   return null;
 };
 
-const NavBar = () => (
-  <nav className="navbar">
-    <div className="nav-logo">
-      <Link to="/" onClick={() => window.scrollTo(0,0)} style={{ color: 'inherit' }}>LuxeStays</Link>
-    </div>
-    <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
-      {/* Modificado para que siempre te lleve arriba si estás en inicio, o navegue a inicio si no lo estás */}
-      <Link to="/" onClick={() => window.scrollTo(0,0)} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '500' }}>
-        <Home size={18} /> Inicio
-      </Link>
-      <a href="#nosotros" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '500', cursor: 'pointer' }}>
-        <Info size={18} /> Nosotros
-      </a>
-      <Link to="/login" className="btn-primary" style={{ padding: '8px 20px' }}>
-        <User size={18} /> Acceder
-      </Link>
-    </div>
-  </nav>
-);
+const NavBar = () => {
+  const user = getTokenData();
+  const isAdmin = user && user.rol === 'Admin';
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    window.location.href = '/';
+  };
+
+  return (
+    <nav className="navbar">
+      <div className="nav-logo">
+        <Link to="/" onClick={() => window.scrollTo(0,0)} style={{ color: 'inherit' }}>LuxeStays</Link>
+      </div>
+      <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
+        <Link to="/" onClick={() => window.scrollTo(0,0)} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '500' }}>
+          <Home size={18} /> Inicio
+        </Link>
+        <a href="/#nosotros" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '500', cursor: 'pointer' }}>
+          <Info size={18} /> Nosotros
+        </a>
+        
+        {isAdmin && (
+          <Link to="/admin" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600', color: 'var(--accent-color)' }}>
+            <Settings size={18} /> Panel Admin
+          </Link>
+        )}
+
+        {user ? (
+          <button className="btn-outline" onClick={handleLogout} style={{ padding: '8px 20px', background: 'transparent' }}>
+            <User size={18} /> Salir
+          </button>
+        ) : (
+          <Link to="/login" className="btn-primary" style={{ padding: '8px 20px' }}>
+            <User size={18} /> Acceder
+          </Link>
+        )}
+      </div>
+    </nav>
+  );
+};
 
 const Footer = () => (
   <footer className="footer">
@@ -394,6 +485,739 @@ const Footer = () => (
   </footer>
 );
 
+const LoginPage = () => {
+  const [isLogin, setIsLogin] = useState(true);
+  const [formData, setFormData] = useState({ nombre: '', correo: '', contrasena: '' });
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const endpoint = isLogin ? '/api/v1/auth/login' : '/api/v1/auth/register';
+    const payload = isLogin ? { correo: formData.correo, contrasena: formData.contrasena } : formData;
+
+    try {
+      const response = await fetch(`http://localhost:3000${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        if (isLogin) {
+          localStorage.setItem('token', data.access_token);
+          alert(`¡Bienvenido ${data.usuario.rol}!`);
+          window.location.href = '/'; 
+        } else {
+          alert('¡Registro exitoso! Ahora puedes iniciar sesión.');
+          setIsLogin(true);
+        }
+      } else {
+        alert(`Error: ${data.message || 'Credenciales incorrectas'}`);
+      }
+    } catch (err) {
+      alert('Error de conexión con el servidor.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputStyle = {
+    width: '100%',
+    padding: '16px 20px',
+    marginBottom: '20px',
+    border: '1px solid rgba(255, 255, 255, 0.2)',
+    borderRadius: '12px',
+    background: 'rgba(0, 0, 0, 0.25)',
+    color: '#ffffff',
+    fontSize: '1.05rem',
+    backdropFilter: 'blur(10px)',
+    outline: 'none',
+    transition: 'all 0.3s ease'
+  };
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0, left: 0, right: 0, bottom: 0,
+      backgroundImage: 'url("/pool.jpg")',
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 9999
+    }}>
+      {/* Overlay oscuro para resaltar el panel */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.4)' }}></div>
+      
+      {/* CSS inyectado para mejorar los inputs de este formulario específico */}
+      <style>{`
+        .login-input::placeholder { color: rgba(255, 255, 255, 0.6); }
+        .login-input:focus { 
+          border-color: var(--accent-color) !important; 
+          box-shadow: 0 0 15px rgba(212, 175, 55, 0.4); 
+          background: rgba(0, 0, 0, 0.4) !important;
+        }
+        .login-btn {
+          background: linear-gradient(135deg, var(--accent-color), #E8B923);
+          box-shadow: 0 10px 20px -5px rgba(212, 175, 55, 0.5);
+        }
+        .login-btn:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 15px 25px -5px rgba(212, 175, 55, 0.7);
+        }
+      `}</style>
+
+      <div className="animate-in" style={{
+        position: 'relative',
+        background: 'rgba(17, 24, 39, 0.75)', // Glassmorphism oscuro
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        border: '1px solid rgba(255, 255, 255, 0.15)',
+        borderRadius: '24px',
+        padding: '50px 40px',
+        width: '90%',
+        maxWidth: '460px',
+        textAlign: 'center',
+        boxShadow: '0 30px 60px -15px rgba(0, 0, 0, 0.7)',
+        color: 'white'
+      }}>
+        {/* Botón de cerrar */}
+        <div style={{ position: 'absolute', top: '20px', right: '25px' }}>
+          <a href="/" style={{ color: 'white', opacity: 0.6, fontSize: '1.5rem', textDecoration: 'none' }}>&times;</a>
+        </div>
+
+        <h2 style={{ marginBottom: '10px', fontSize: '2.2rem', fontWeight: '700', color: '#fff', letterSpacing: '1px' }}>
+          LuxeStays
+        </h2>
+        <p style={{ color: 'rgba(255,255,255,0.7)', marginBottom: '35px', fontSize: '1.1rem' }}>
+          {isLogin ? 'Bienvenido a la exclusividad.' : 'Comienza tu viaje premium.'}
+        </p>
+
+        <form onSubmit={handleSubmit} style={{ textAlign: 'left' }}>
+          {!isLogin && (
+            <input
+              type="text"
+              placeholder="Nombre Completo"
+              required
+              className="login-input"
+              style={inputStyle}
+              value={formData.nombre}
+              onChange={(e) => setFormData({...formData, nombre: e.target.value})}
+            />
+          )}
+          <input
+            type="email"
+            placeholder="Correo Electrónico"
+            required
+            className="login-input"
+            style={inputStyle}
+            value={formData.correo}
+            onChange={(e) => setFormData({...formData, correo: e.target.value})}
+          />
+          <input
+            type="password"
+            placeholder="Contraseña"
+            required
+            className="login-input"
+            style={inputStyle}
+            value={formData.contrasena}
+            onChange={(e) => setFormData({...formData, contrasena: e.target.value})}
+          />
+          
+          <button type="submit" className="btn-primary login-btn" style={{ 
+            width: '100%', 
+            padding: '16px', 
+            fontSize: '1.1rem',
+            fontWeight: '600',
+            marginTop: '10px',
+            borderRadius: '12px',
+            color: '#000'
+          }} disabled={loading}>
+            {loading ? 'Validando...' : (isLogin ? 'Entrar a LuxeStays' : 'Crear Cuenta')}
+          </button>
+        </form>
+
+        <p style={{ marginTop: '30px', color: 'rgba(255,255,255,0.7)', fontSize: '1rem' }}>
+          {isLogin ? '¿Aún no tienes acceso?' : '¿Ya eres miembro?'}
+          <span 
+            onClick={() => setIsLogin(!isLogin)} 
+            style={{ 
+              color: 'var(--accent-color)', 
+              marginLeft: '8px', 
+              cursor: 'pointer', 
+              fontWeight: '600',
+              textDecoration: 'underline',
+              textUnderlineOffset: '4px'
+            }}>
+            {isLogin ? 'Regístrate' : 'Inicia Sesión'}
+          </span>
+        </p>
+      </div>
+    </div>
+  );
+};
+
+const AdminDashboard = () => {
+  const user = getTokenData();
+  const [alojamientos, setAlojamientos] = useState<any[]>([]);
+  const [editingItem, setEditingItem] = useState<any>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [editForm, setEditForm] = useState({
+    nombre: '', descripcion: '', imagenUrl: '', ubicacionId: 'UBI-001',
+    precioPorNoche: 0, capacidadAdultos: 0, capacidadNinos: 0, habitaciones: 0
+  });
+  const [saving, setSaving] = useState(false);
+  const [adminLogs, setAdminLogs] = useState<any[]>([]);
+
+  // Estado para Gestor de Habitaciones Individuales
+  const [roomsModalAlojamiento, setRoomsModalAlojamiento] = useState<any>(null);
+  const [roomsList, setRoomsList] = useState<any[]>([]);
+  const [loadingRooms, setLoadingRooms] = useState(false);
+  const [editingRoom, setEditingRoom] = useState<any>(null);
+  const [newRoomImageUrl, setNewRoomImageUrl] = useState('');
+
+  useEffect(() => {
+    const savedLogs = localStorage.getItem('adminLogs');
+    if (savedLogs) {
+      setAdminLogs(JSON.parse(savedLogs));
+    }
+    
+    fetch('/api/v1/admin/alojamientos')
+      .then(res => res.json())
+      .then(data => setAlojamientos(data))
+      .catch(err => console.error(err));
+  }, []);
+
+  const addLog = (action: string, detail: string) => {
+    const newLog = { id: Date.now(), time: new Date().toLocaleTimeString(), action, detail };
+    const newLogs = [newLog, ...adminLogs].slice(0, 10); // Keep last 10
+    setAdminLogs(newLogs);
+    localStorage.setItem('adminLogs', JSON.stringify(newLogs));
+  };
+
+  // ===== FUNCIONES DEL GESTOR DE HABITACIONES =====
+  const openRoomsManager = async (alojamiento: any) => {
+    setRoomsModalAlojamiento(alojamiento);
+    setLoadingRooms(true);
+    try {
+      const response = await fetch(`http://localhost:3000/api/v1/admin/alojamientos/${alojamiento.id}/habitaciones`);
+      const data = await response.json();
+      setRoomsList(data);
+    } catch (e) {
+      alert('Error cargando habitaciones.');
+    } finally {
+      setLoadingRooms(false);
+    }
+  };
+
+  const handleSaveRoom = async (roomData: any) => {
+    try {
+      if (roomData.id === 'Nueva') {
+        const res = await fetch(`http://localhost:3000/api/v1/admin/alojamientos/${roomsModalAlojamiento.id}/habitaciones`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(roomData)
+        });
+        if (res.ok) {
+          const newData = await res.json();
+          setRoomsList([...roomsList, { ...roomData, id: newData.id }]);
+          addLog('Habitación Creada', `Nueva habitación en ${roomsModalAlojamiento.nombre}`);
+          setEditingRoom(null);
+        }
+      } else {
+        const res = await fetch(`http://localhost:3000/api/v1/admin/habitaciones/${roomData.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(roomData)
+        });
+        if (res.ok) {
+          setRoomsList(roomsList.map(r => r.id === roomData.id ? roomData : r));
+          addLog('Habitación Editada', `Actualizada habitación ID: ${roomData.id}`);
+          setEditingRoom(null);
+        }
+      }
+    } catch(e) {
+      alert('Error guardando habitación.');
+    }
+  };
+
+  const handleDeleteRoom = async (habId: string) => {
+    if (window.confirm('¿Eliminar habitación permanentemente?')) {
+      const res = await fetch(`http://localhost:3000/api/v1/admin/habitaciones/${habId}`, { method: 'DELETE' });
+      if (res.ok) {
+        setRoomsList(roomsList.filter(r => r.id !== habId));
+        addLog('Habitación Eliminada', `Eliminada habitación ID: ${habId}`);
+      }
+    }
+  };
+
+  const handleEditClick = (alojamiento: any) => {
+    setIsCreating(false);
+    setEditingItem(alojamiento);
+    setEditForm({
+      nombre: alojamiento.nombre || '',
+      descripcion: alojamiento.descripcion || '',
+      imagenUrl: alojamiento.imagenUrl || '',
+      ubicacionId: alojamiento.ubicacionId || 'UBI-001',
+      precioPorNoche: alojamiento.precioPorNoche || 0,
+      capacidadAdultos: alojamiento.capacidadAdultos || 0,
+      capacidadNinos: alojamiento.capacidadNinos || 0,
+      habitaciones: alojamiento.habitaciones || 0
+    });
+  };
+
+  const handleCreateClick = () => {
+    setIsCreating(true);
+    setEditingItem({ id: 'Nuevo' });
+    setEditForm({
+      nombre: '', descripcion: '', imagenUrl: '', ubicacionId: 'UBI-001',
+      precioPorNoche: 0, capacidadAdultos: 1, capacidadNinos: 0, habitaciones: 1
+    });
+  };
+
+  const handleDeleteClick = async (id: string, nombre: string) => {
+    if (window.confirm(`¿Estás seguro de que deseas eliminar permanentemente "${nombre}"? Esta acción no se puede deshacer.`)) {
+      try {
+        const response = await fetch(`http://localhost:3000/api/v1/admin/alojamientos/${id}`, { method: 'DELETE' });
+        if (response.ok) {
+          setAlojamientos(alojamientos.filter(al => al.id !== id));
+          addLog('Eliminación', `Se eliminó permanentemente el alojamiento: ${nombre}`);
+          alert('🗑️ Alojamiento eliminado correctamente.');
+        } else {
+          alert('Error al intentar eliminar.');
+        }
+      } catch (e) {
+        alert('Error de conexión.');
+      }
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    setSaving(true);
+    try {
+      if (isCreating) {
+        const response = await fetch(`http://localhost:3000/api/v1/admin/alojamientos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(editForm)
+        });
+        if (response.ok) {
+          const newItem = await response.json();
+          const cityMap: any = { 'UBI-001': 'Quito', 'UBI-002': 'Guayaquil', 'UBI-003': 'Cuenca', 'UBI-004': 'Manta', 'UBI-005': 'Baños' };
+          setAlojamientos([...alojamientos, { ...newItem, ...editForm, destino: cityMap[editForm.ubicacionId] || 'Quito', propietario: user.nombre }]);
+          setEditingItem(null);
+          addLog('Creación', `Se creó el nuevo alojamiento: ${editForm.nombre}`);
+          alert('✨ Alojamiento y Habitaciones creados exitosamente.');
+        }
+      } else {
+        const response = await fetch(`http://localhost:3000/api/v1/admin/alojamientos/${editingItem.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(editForm)
+        });
+        if (response.ok) {
+          const cityMap: any = { 'UBI-001': 'Quito', 'UBI-002': 'Guayaquil', 'UBI-003': 'Cuenca', 'UBI-004': 'Manta', 'UBI-005': 'Baños' };
+          setAlojamientos(alojamientos.map(al => al.id === editingItem.id ? { ...al, ...editForm, destino: cityMap[editForm.ubicacionId] || al.destino } : al));
+          setEditingItem(null);
+          addLog('Modificación', `Se actualizaron los datos del alojamiento ID: ${editingItem.id}`);
+          alert('✏️ Datos actualizados en todas las tablas correctamente.');
+        }
+      }
+    } catch (e) {
+      alert('Error de conexión con el backend.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!user || user.rol !== 'Admin') {
+    return (
+      <div style={{ textAlign: 'center', marginTop: '150px' }}>
+        <h2 style={{ fontSize: '2rem', marginBottom: '20px' }}>Acceso Denegado</h2>
+        <p style={{ color: 'var(--text-secondary)' }}>No tienes permisos para ver esta página.</p>
+        <Link to="/" className="btn-primary" style={{ marginTop: '20px' }}>Volver al Inicio</Link>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', flexWrap: 'wrap', gap: '20px' }}>
+        <div>
+          <h1 style={{ fontSize: '2.5rem', marginBottom: '10px' }}>Panel de Administración</h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Gestiona los alojamientos, reservas y usuarios de LuxeStays.</p>
+        </div>
+        <div style={{ background: 'var(--accent-color)', color: 'white', padding: '15px 25px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '15px', boxShadow: '0 10px 20px -5px rgba(212, 175, 55, 0.4)' }}>
+           <img src="https://ui-avatars.com/api/?name=Admin&background=fff&color=d4af37&bold=true" style={{ borderRadius: '50%', width: '50px' }} alt="Admin" />
+           <div>
+             <h3 style={{ margin: 0, fontSize: '1.1rem' }}>{user.nombre}</h3>
+             <p style={{ margin: 0, opacity: 0.9, fontSize: '0.85rem' }}>Administrador Principal</p>
+           </div>
+        </div>
+      </div>
+
+      {/* Tarjetas de Estadísticas */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '40px' }}>
+         <div className="card" style={{ padding: '25px', borderLeft: '4px solid var(--accent-color)' }}>
+            <h3 style={{ color: 'var(--text-secondary)', fontSize: '1rem', marginBottom: '10px' }}>Alojamientos Activos</h3>
+            <p style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>{alojamientos.length}</p>
+         </div>
+         <div className="card" style={{ padding: '25px', borderLeft: '4px solid #3B82F6' }}>
+            <h3 style={{ color: 'var(--text-secondary)', fontSize: '1rem', marginBottom: '10px' }}>Reservas Hoy</h3>
+            <p style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>12</p>
+         </div>
+         <div className="card" style={{ padding: '25px', borderLeft: '4px solid #10B981' }}>
+            <h3 style={{ color: 'var(--text-secondary)', fontSize: '1rem', marginBottom: '10px' }}>Ingresos Mensuales</h3>
+            <p style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>$8,450</p>
+         </div>
+      </div>
+
+      {/* Tabla de Alojamientos */}
+      <div className="card" style={{ padding: '30px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
+          <h2 style={{ fontSize: '1.5rem' }}>Gestión de Alojamientos</h2>
+          <button className="btn-primary" onClick={handleCreateClick}>
+            <Plus size={18} /> Nuevo Alojamiento
+          </button>
+        </div>
+        
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', whiteSpace: 'nowrap' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                <th style={{ padding: '15px 10px' }}>ID</th>
+                <th style={{ padding: '15px 10px' }}>Nombre</th>
+                <th style={{ padding: '15px 10px' }}>Destino</th>
+                <th style={{ padding: '15px 10px' }}>Propietario</th>
+                <th style={{ padding: '15px 10px', textAlign: 'center' }}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {alojamientos.length === 0 ? (
+                <tr>
+                  <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-secondary)' }}>Cargando alojamientos...</td>
+                </tr>
+              ) : (
+                alojamientos.map((al: any) => (
+                  <tr key={al.id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                    <td style={{ padding: '15px 10px', fontWeight: '600', color: 'var(--text-secondary)' }}>{al.id}</td>
+                    <td style={{ padding: '15px 10px', fontWeight: '500' }}>{al.nombre}</td>
+                    <td style={{ padding: '15px 10px' }}>{al.destino}</td>
+                    <td style={{ padding: '15px 10px' }}>{al.propietario}</td>
+                    <td style={{ padding: '15px 10px', textAlign: 'center' }}>
+                      <button onClick={() => handleEditClick(al)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#3B82F6', marginRight: '15px', padding: '5px' }} title="Editar Alojamiento Completo">
+                        <Edit2 size={18} />
+                      </button>
+                      <button onClick={() => openRoomsManager(al)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#10B981', marginRight: '15px', padding: '5px' }} title="Gestor de Habitaciones Específicas">
+                        <BedDouble size={18} />
+                      </button>
+                      <button onClick={() => handleDeleteClick(al.id, al.nombre)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#EF4444', padding: '5px' }} title="Eliminar Permanentemente">
+                        <Trash2 size={18} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Historial de Actividad */}
+      <div className="card" style={{ padding: '30px', marginTop: '30px' }}>
+        <h2 style={{ fontSize: '1.5rem', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          🕒 Registro de Cambios Recientes
+        </h2>
+        {adminLogs.length === 0 ? (
+          <p style={{ color: 'var(--text-secondary)' }}>No hay actividad reciente registrada en esta sesión.</p>
+        ) : (
+          <ul style={{ listStyle: 'none', padding: 0 }}>
+            {adminLogs.map(log => (
+              <li key={log.id} style={{ display: 'flex', gap: '15px', borderBottom: '1px solid var(--border-color)', padding: '12px 0' }}>
+                <span style={{ color: 'var(--text-secondary)', minWidth: '80px' }}>{log.time}</span>
+                <span style={{ fontWeight: 'bold', color: log.action === 'Eliminación' ? '#EF4444' : log.action === 'Creación' ? '#10B981' : '#3B82F6' }}>
+                  [{log.action}]
+                </span>
+                <span>{log.detail}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* MODAL DE EDICIÓN COMPLETO (Glassmorphism) */}
+      <AnimatePresence>
+        {editingItem && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000,
+              padding: '20px', overflowY: 'auto'
+            }}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              style={{
+                background: 'var(--card-bg)', borderRadius: '20px', padding: '40px', width: '95%', maxWidth: '1200px',
+                boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', position: 'relative',
+                maxHeight: '90vh', overflowY: 'auto'
+              }}
+            >
+              <button 
+                onClick={() => setEditingItem(null)} 
+                style={{ position: 'absolute', top: '15px', right: '20px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--text-secondary)' }}
+              >&times;</button>
+              
+              <h2 style={{ marginBottom: '5px', fontSize: '1.8rem', color: 'var(--accent-color)' }}>
+                {isCreating ? 'Crear Alojamiento Total' : 'Editor Avanzado de Alojamiento'}
+              </h2>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '30px' }}>
+                {isCreating ? 'Configura todos los parámetros del nuevo establecimiento.' : `ID: ${editingItem.id} | Modifica alojamiento y habitaciones en un solo lugar.`}
+              </p>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '25px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Nombre del Alojamiento</label>
+                  <input type="text" value={editForm.nombre} onChange={(e) => setEditForm({...editForm, nombre: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', outline: 'none' }} placeholder="Ej. Hotel Paraíso" />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Ubicación (Destino)</label>
+                  <select value={editForm.ubicacionId} onChange={(e) => setEditForm({...editForm, ubicacionId: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', outline: 'none', backgroundColor: 'transparent' }}>
+                    <option value="UBI-001">Quito</option>
+                    <option value="UBI-002">Guayaquil</option>
+                    <option value="UBI-003">Cuenca</option>
+                    <option value="UBI-004">Manta</option>
+                    <option value="UBI-005">Baños</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '25px', padding: '15px', border: '1px solid var(--border-color)', borderRadius: '12px', background: 'var(--bg-color)' }}>
+                <label style={{ display: 'block', marginBottom: '12px', fontWeight: 'bold' }}>Portada del Alojamiento</label>
+                <div style={{ display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ width: '200px', height: '130px', borderRadius: '10px', overflow: 'hidden', border: '1px solid var(--border-color)', flexShrink: 0, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                     <img src={editForm.imagenUrl || '/villa.jpg'} alt="Portada" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => e.currentTarget.src = '/villa.jpg'} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: '250px' }}>
+                     <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>Ingresa el enlace web de la foto principal que verán los usuarios al buscar alojamientos.</p>
+                     <input type="text" value={editForm.imagenUrl} onChange={(e) => setEditForm({...editForm, imagenUrl: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', outline: 'none', background: 'var(--card-bg)' }} placeholder="Pega aquí el enlace de tu foto (https://...)" />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '25px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Descripción</label>
+                <textarea value={editForm.descripcion} onChange={(e) => setEditForm({...editForm, descripcion: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', outline: 'none', minHeight: '80px', resize: 'vertical' }} placeholder="Descripción completa..." />
+              </div>
+
+              <h3 style={{ fontSize: '1.2rem', marginBottom: '15px', paddingBottom: '10px', borderBottom: '1px solid var(--border-color)' }}>Configuración de Habitaciones / Espacios</h3>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '20px', marginBottom: '30px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Precio x Noche ($)</label>
+                  <input type="number" value={editForm.precioPorNoche} onChange={(e) => setEditForm({...editForm, precioPorNoche: Number(e.target.value)})} style={{ width: '100%', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', outline: 'none' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Cantidad Habitaciones</label>
+                  <input type="number" value={editForm.habitaciones} onChange={(e) => setEditForm({...editForm, habitaciones: Number(e.target.value)})} style={{ width: '100%', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', outline: 'none' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Capacidad Adultos</label>
+                  <input type="number" value={editForm.capacidadAdultos} onChange={(e) => setEditForm({...editForm, capacidadAdultos: Number(e.target.value)})} style={{ width: '100%', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', outline: 'none' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Capacidad Niños</label>
+                  <input type="number" value={editForm.capacidadNinos} onChange={(e) => setEditForm({...editForm, capacidadNinos: Number(e.target.value)})} style={{ width: '100%', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', outline: 'none' }} />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
+                <button className="btn-outline" onClick={() => setEditingItem(null)} disabled={saving} style={{ padding: '12px 25px' }}>Cancelar</button>
+                <button className="btn-primary" onClick={handleSaveEdit} disabled={saving} style={{ padding: '12px 30px', background: 'var(--accent-color)', fontSize: '1.05rem' }}>
+                  {saving ? 'Guardando en BD...' : (isCreating ? 'Crear Alojamiento' : 'Guardar Todo')}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+    {/* MODAL GESTOR DE HABITACIONES */}
+      <AnimatePresence>
+        {roomsModalAlojamiento && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 11000,
+              padding: '20px', overflowY: 'auto'
+            }}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              style={{
+                background: 'var(--card-bg)', borderRadius: '20px', padding: '40px', width: '95%', maxWidth: '1200px',
+                boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', position: 'relative',
+                maxHeight: '90vh', overflowY: 'auto'
+              }}
+            >
+              <button onClick={() => { setRoomsModalAlojamiento(null); setEditingRoom(null); }} style={{ position: 'absolute', top: '15px', right: '20px', background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--text-secondary)' }}>&times;</button>
+              
+              <h2 style={{ marginBottom: '5px', fontSize: '1.8rem', color: '#10B981' }}>
+                Habitaciones de {roomsModalAlojamiento.nombre}
+              </h2>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '30px' }}>Gestor específico de espacios y tarifas.</p>
+
+              {!editingRoom ? (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
+                    <button className="btn-primary" style={{ background: '#10B981' }} onClick={() => setEditingRoom({ id: 'Nueva', nombre: '', precioPorNoche: 50, capacidadAdultos: 2, capacidadNinos: 0, cantidadDisponible: 1 })}>
+                      <Plus size={18} /> Nueva Habitación
+                    </button>
+                  </div>
+                  
+                  {loadingRooms ? <p>Cargando habitaciones...</p> : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                          <th style={{ padding: '10px' }}>Nombre</th>
+                          <th style={{ padding: '10px' }}>Capacidad</th>
+                          <th style={{ padding: '10px' }}>Precio</th>
+                          <th style={{ padding: '10px' }}>Stock</th>
+                          <th style={{ padding: '10px', textAlign: 'center' }}>Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {roomsList.length === 0 && <tr><td colSpan={5} style={{ padding: '20px', textAlign: 'center' }}>No hay habitaciones.</td></tr>}
+                        {roomsList.map((room) => (
+                          <tr key={room.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={{ padding: '15px 10px', fontWeight: '500' }}>{room.nombre}</td>
+                            <td style={{ padding: '15px 10px' }}>{room.capacidadAdultos} Adul. / {room.capacidadNinos} Niños</td>
+                            <td style={{ padding: '15px 10px', fontWeight: 'bold' }}>${Number(room.precioPorNoche).toFixed(2)}</td>
+                            <td style={{ padding: '15px 10px' }}>{room.cantidadDisponible} dispo.</td>
+                            <td style={{ padding: '15px 10px', textAlign: 'center' }}>
+                              <button onClick={() => setEditingRoom({...room})} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#3B82F6', marginRight: '15px' }}><Edit2 size={18} /></button>
+                              <button onClick={() => handleDeleteRoom(room.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#EF4444' }}><Trash2 size={18} /></button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </>
+              ) : (
+                <div style={{ background: 'var(--bg-color)', padding: '20px', borderRadius: '12px' }}>
+                  <h3 style={{ marginBottom: '20px' }}>{editingRoom.id === 'Nueva' ? 'Agregar Nueva Habitación' : `Editando ${editingRoom.nombre}`}</h3>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '20px' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px' }}>Nombre de la Habitación</label>
+                      <input type="text" value={editingRoom.nombre} onChange={(e) => setEditingRoom({...editingRoom, nombre: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }} placeholder="Ej. Suite Presidencial" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px' }}>Precio x Noche ($)</label>
+                      <input type="number" value={editingRoom.precioPorNoche} onChange={(e) => setEditingRoom({...editingRoom, precioPorNoche: Number(e.target.value)})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px' }}>Stock (Cantidad)</label>
+                      <input type="number" value={editingRoom.cantidadDisponible} onChange={(e) => setEditingRoom({...editingRoom, cantidadDisponible: Number(e.target.value)})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px' }}>Adultos Max</label>
+                      <input type="number" value={editingRoom.capacidadAdultos} onChange={(e) => setEditingRoom({...editingRoom, capacidadAdultos: Number(e.target.value)})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px' }}>Niños Max</label>
+                      <input type="number" value={editingRoom.capacidadNinos} onChange={(e) => setEditingRoom({...editingRoom, capacidadNinos: Number(e.target.value)})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }} />
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: '20px', borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
+                    <label style={{ display: 'block', marginBottom: '12px', fontWeight: 'bold' }}>Galería de Fotos de la Habitación</label>
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+                      <input 
+                        type="text" 
+                        value={newRoomImageUrl} 
+                        onChange={(e) => setNewRoomImageUrl(e.target.value)} 
+                        style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }} 
+                        placeholder="Pega aquí el enlace web de la foto (Ej. https://...)" 
+                        onKeyDown={(e) => {
+                          if(e.key === 'Enter') {
+                            e.preventDefault();
+                            if(newRoomImageUrl.trim()) {
+                              const arr = editingRoom.imagenesUrls ? editingRoom.imagenesUrls.split(',').filter(Boolean) : [];
+                              setEditingRoom({...editingRoom, imagenesUrls: [...arr, newRoomImageUrl.trim()].join(',')});
+                              setNewRoomImageUrl('');
+                            }
+                          }
+                        }}
+                      />
+                      <button 
+                        className="btn-primary" 
+                        style={{ background: '#3B82F6', whiteSpace: 'nowrap' }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if(newRoomImageUrl.trim()) {
+                            const arr = editingRoom.imagenesUrls ? editingRoom.imagenesUrls.split(',').filter(Boolean) : [];
+                            setEditingRoom({...editingRoom, imagenesUrls: [...arr, newRoomImageUrl.trim()].join(',')});
+                            setNewRoomImageUrl('');
+                          }
+                        }}
+                      >
+                        <Plus size={18} /> Agregar Foto
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '15px' }}>
+                      {(editingRoom.imagenesUrls ? editingRoom.imagenesUrls.split(',').filter(Boolean) : []).map((url: string, idx: number) => (
+                        <div key={idx} style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', height: '100px', border: '1px solid var(--border-color)' }}>
+                          <img src={url} alt={`Room foto ${idx}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => e.currentTarget.src = '/villa.jpg'} />
+                          <button 
+                            style={{ position: 'absolute', top: '5px', right: '5px', background: 'rgba(239, 68, 68, 0.9)', color: 'white', border: 'none', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                            onClick={(e) => {
+                               e.preventDefault();
+                               const arr = editingRoom.imagenesUrls.split(',').filter(Boolean);
+                               arr.splice(idx, 1);
+                               setEditingRoom({...editingRoom, imagenesUrls: arr.join(',')});
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                    <button className="btn-outline" onClick={() => setEditingRoom(null)}>Cancelar Edición</button>
+                    <button className="btn-primary" onClick={() => handleSaveRoom(editingRoom)} style={{ background: '#10B981' }}>Guardar Habitación</button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 function App() {
   return (
     <BrowserRouter>
@@ -404,15 +1228,8 @@ function App() {
         <main className="main-content" style={{ flex: 1, width: '100%', maxWidth: '1200px', margin: '100px auto 0 auto' }}>
           <Routes>
             <Route path="/" element={<LandingPage />} />
-            <Route path="/login" element={
-              <div className="animate-in card" style={{ textAlign: 'center', maxWidth: '400px', margin: '80px auto', padding: '40px' }}>
-                <h2 style={{ marginBottom: '20px' }}>Iniciar Sesión</h2>
-                <p style={{ color: 'var(--text-secondary)', marginBottom: '30px' }}>Bienvenido de nuevo a LuxeStays.</p>
-                <button className="btn-primary" style={{ width: '100%' }} onClick={() => alert('¡Formulario de inicio de sesión próximamente!')}>
-                  Entrar
-                </button>
-              </div>
-            } />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/admin" element={<AdminDashboard />} />
           </Routes>
         </main>
         <Footer />

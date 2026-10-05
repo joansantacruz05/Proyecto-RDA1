@@ -1,4 +1,4 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, PrimaryColumn } from 'typeorm';
 
 export enum Role {
   USER = 'USER',
@@ -7,21 +7,18 @@ export enum Role {
 
 @Entity('usuarios')
 export class Usuario {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn({ type: 'varchar', length: 50 })
   id: string;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ name: 'nombreCompleto', type: 'varchar', length: 255 })
   nombre: string;
 
-  @Column({ type: 'varchar', length: 255, unique: true })
+  @Column({ name: 'email', type: 'varchar', length: 255, unique: true })
   correo: string;
 
   @Column({ type: 'varchar', length: 255 })
   contrasena: string;
 
-  @Column({ type: 'varchar', length: 20, default: Role.USER })
-  rol: string;
-
-  @Column({ type: 'boolean', default: true })
-  activo: boolean;
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  telefono: string;
 }

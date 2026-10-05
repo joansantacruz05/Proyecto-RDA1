@@ -1,33 +1,22 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
-import { ColumnNumericTransformer } from '../../../common/transformers/column-numeric.transformer';
+import { Column, Entity, PrimaryColumn } from 'typeorm';
 
 @Entity('alojamientos')
 export class Alojamiento {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn({ type: 'varchar', length: 50 })
   id: string;
+
+  @Column({ name: 'anfitrionId', type: 'varchar', length: 50, nullable: true })
+  anfitrionId: string;
+
+  @Column({ name: 'tipoId', type: 'varchar', length: 50, nullable: true })
+  tipoId: string;
+
+  @Column({ name: 'ubicacionId', type: 'varchar', length: 50, nullable: true })
+  ubicacionId: string;
 
   @Column({ type: 'varchar', length: 255 })
   nombre: string;
 
-  @Column({ type: 'varchar', length: 255 })
-  destino: string;
-
-  @Column('numeric', {
-    precision: 10,
-    scale: 2,
-    transformer: new ColumnNumericTransformer(),
-  })
-  precioPorNoche: number;
-
-  @Column({ type: 'int' })
-  capacidadAdultos: number;
-
-  @Column({ type: 'int' })
-  capacidadNinos: number;
-
-  @Column({ type: 'int' })
-  habitaciones: number;
-
-  @Column({ type: 'boolean' })
-  tienePiscina: boolean;
+  @Column({ type: 'text', nullable: true })
+  descripcion: string;
 }

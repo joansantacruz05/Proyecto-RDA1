@@ -16,30 +16,109 @@ export class AlojamientosService {
   //  Módulo de Administración (CRUD)
   // ═══════════════════════════════════════════════════════════════════════
 
-  async createAdmin(dto: CrearAlojamientoDto): Promise<Alojamiento> {
-    const nuevo = this.alojamientoRepository.create(dto);
-    return await this.alojamientoRepository.save(nuevo);
+  async createAdmin(dto: any): Promise<any> {
+    const id = `ALO-${Math.floor(Math.random() * 900) + 100}`;
+    await this.alojamientoRepository.query(
+      'INSERT INTO alojamientos (id, nombre, descripcion, "imagenUrl", "ubicacionId") VALUES ($1, $2, $3, $4, $5)',
+      [id, dto.nombre || 'Nuevo Alojamiento', dto.descripcion || '', dto.imagenUrl || '/villa.jpg', dto.ubicacionId || 'UBI-001']
+    );
+
+    const habId = `HAB-${Math.floor(Math.random() * 900) + 100}`;
+    await this.alojamientoRepository.query(
+        'INSERT INTO espacios_rentables (id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible") VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        [habId, id, 'Habitación Estándar', dto.capacidadAdultos || 2, dto.capacidadNinos || 0, dto.precioPorNoche || 100, dto.habitaciones || 1]
+    );
+
+    return { id, nombre: dto.nombre, descripcion: dto.descripcion, imagenUrl: dto.imagenUrl };
   }
 
-  async findAllAdmin(): Promise<Alojamiento[]> {
-    return await this.alojamientoRepository.find();
+  async findAllAdmin(): Promise<any[]> {
+    const result = await this.alojamientoRepository.query(`
+      SELECT 
+        a.id, 
+        a.nombre, 
+        a.descripcion,
+        a."imagenUrl",
+        a."ubicacionId",
+        c.nombre as destino,
+        (SELECT "precioPorNoche" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "precioPorNoche",
+        (SELECT "capacidadAdultos" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "capacidadAdultos",
+        (SELECT "capacidadNinos" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "capacidadNinos",
+        (SELECT COUNT(*) FROM espacios_rentables er WHERE er."alojamientoId" = a.id)::int as habitaciones,
+        EXISTS (
+          SELECT 1 FROM alojamientos_servicios aser 
+          JOIN servicios s ON s.id = aser."servicioId"
+          WHERE aser."alojamientoId" = a.id AND s.nombre = 'Piscina'
+        ) as "tienePiscina"
+      FROM alojamientos a
+      LEFT JOIN ubicaciones u ON a."ubicacionId" = u.id
+      LEFT JOIN ciudades c ON u."ciudadId" = c.id
+    `);
+    return result;
   }
 
-  async findOneAdmin(id: string): Promise<Alojamiento> {
-    const alojamiento = await this.alojamientoRepository.findOne({ where: { id } });
-    if (!alojamiento) throw new NotFoundException(`Alojamiento ${id} no encontrado`);
-    return alojamiento;
+  async findOneAdmin(id: string): Promise<any> {
+    const result = await this.alojamientoRepository.query('SELECT * FROM alojamientos WHERE id = $1', [id]);
+    if (!result.length) throw new NotFoundException(`Alojamiento ${id} no encontrado`);
+    return result[0];
   }
 
-  async updateAdmin(id: string, dto: ActualizarAlojamientoDto): Promise<Alojamiento> {
-    const alojamiento = await this.findOneAdmin(id);
-    Object.assign(alojamiento, dto);
-    return await this.alojamientoRepository.save(alojamiento);
+  async updateAdmin(id: string, dto: any): Promise<any> {
+    await this.alojamientoRepository.query(
+      'UPDATE alojamientos SET nombre = $1, descripcion = $2, "imagenUrl" = COALESCE($3, "imagenUrl"), "ubicacionId" = COALESCE($4, "ubicacionId") WHERE id = $5',
+      [dto.nombre, dto.descripcion, dto.imagenUrl, dto.ubicacionId, id]
+    );
+    
+    if (dto.precioPorNoche !== undefined || dto.capacidadAdultos !== undefined || dto.capacidadNinos !== undefined || dto.habitaciones !== undefined) {
+      const er = await this.alojamientoRepository.query('SELECT id FROM espacios_rentables WHERE "alojamientoId" = $1 LIMIT 1', [id]);
+      if (er.length > 0) {
+          await this.alojamientoRepository.query(
+              'UPDATE espacios_rentables SET "precioPorNoche" = COALESCE($1, "precioPorNoche"), "capacidadAdultos" = COALESCE($2, "capacidadAdultos"), "capacidadNinos" = COALESCE($3, "capacidadNinos"), "cantidadDisponible" = COALESCE($4, "cantidadDisponible") WHERE id = $5',
+              [dto.precioPorNoche, dto.capacidadAdultos, dto.capacidadNinos, dto.habitaciones, er[0].id]
+          );
+      } else {
+          const habId = `HAB-${Math.floor(Math.random() * 900) + 100}`;
+          await this.alojamientoRepository.query(
+              'INSERT INTO espacios_rentables (id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible") VALUES ($1, $2, $3, $4, $5, $6, $7)',
+              [habId, id, 'Habitación Principal', dto.capacidadAdultos || 2, dto.capacidadNinos || 0, dto.precioPorNoche || 100, dto.habitaciones || 1]
+          );
+      }
+    }
+    
+    return { id, nombre: dto.nombre, descripcion: dto.descripcion, imagenUrl: dto.imagenUrl };
   }
 
   async removeAdmin(id: string): Promise<void> {
-    const alojamiento = await this.findOneAdmin(id);
-    await this.alojamientoRepository.remove(alojamiento);
+    await this.alojamientoRepository.query('DELETE FROM alojamientos WHERE id = $1', [id]);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  Gestor de Habitaciones (Espacios Rentables)
+  // ═══════════════════════════════════════════════════════════════════════
+  
+  async getRoomsAdmin(alojamientoId: string): Promise<any[]> {
+    return await this.alojamientoRepository.query('SELECT * FROM espacios_rentables WHERE "alojamientoId" = $1 ORDER BY nombre', [alojamientoId]);
+  }
+
+  async createRoomAdmin(alojamientoId: string, dto: any): Promise<any> {
+    const habId = `HAB-${Math.floor(Math.random() * 900) + 100}`;
+    await this.alojamientoRepository.query(
+        'INSERT INTO espacios_rentables (id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible", "imagenesUrls") VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [habId, alojamientoId, dto.nombre || 'Nueva Habitación', dto.capacidadAdultos || 2, dto.capacidadNinos || 0, dto.precioPorNoche || 100, dto.cantidadDisponible || 1, dto.imagenesUrls || '']
+    );
+    return { id: habId, nombre: dto.nombre };
+  }
+
+  async updateRoomAdmin(habId: string, dto: any): Promise<any> {
+    await this.alojamientoRepository.query(
+        'UPDATE espacios_rentables SET nombre = $1, "precioPorNoche" = $2, "capacidadAdultos" = $3, "capacidadNinos" = $4, "cantidadDisponible" = $5, "imagenesUrls" = COALESCE($6, "imagenesUrls") WHERE id = $7',
+        [dto.nombre, dto.precioPorNoche, dto.capacidadAdultos, dto.capacidadNinos, dto.cantidadDisponible, dto.imagenesUrls, habId]
+    );
+    return { id: habId };
+  }
+
+  async deleteRoomAdmin(habId: string): Promise<void> {
+    await this.alojamientoRepository.query('DELETE FROM espacios_rentables WHERE id = $1', [habId]);
   }
 
   // ═══════════════════════════════════════════════════════════════════════

@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Delete, Body, Param, Headers, Put, Patch,
-  ParseUUIDPipe, UseGuards, HttpCode, HttpStatus, Header,
+  UseGuards, HttpCode, HttpStatus, Header, ParseUUIDPipe
 } from '@nestjs/common';
 import {
   ApiTags, ApiOperation, ApiResponse, ApiParam,
@@ -45,7 +45,7 @@ export class AlojamientosController {
   @ApiOperation({ summary: 'Obtener un alojamiento por ID' })
   @ApiResponse({ status: 200, description: 'Alojamiento encontrado.' })
   @ApiResponse({ status: 404, description: 'Alojamiento no encontrado.' })
-  findOneAdmin(@Param('id', ParseUUIDPipe) id: string) {
+  findOneAdmin(@Param('id') id: string) {
     return this.alojamientosService.findOneAdmin(id);
   }
 
@@ -55,7 +55,7 @@ export class AlojamientosController {
   @ApiResponse({ status: 200, description: 'Alojamiento reemplazado.' })
   @ApiResponse({ status: 404, description: 'Alojamiento no encontrado.' })
   updateAdmin(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: ActualizarAlojamientoDto,
   ) {
     return this.alojamientosService.updateAdmin(id, dto);
@@ -67,7 +67,7 @@ export class AlojamientosController {
   @ApiResponse({ status: 200, description: 'Alojamiento actualizado.' })
   @ApiResponse({ status: 404, description: 'Alojamiento no encontrado.' })
   patchAdmin(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() dto: ActualizarAlojamientoDto,
   ) {
     return this.alojamientosService.updateAdmin(id, dto);
@@ -79,13 +79,41 @@ export class AlojamientosController {
   @ApiResponse({ status: 204, description: 'Alojamiento eliminado.' })
   @ApiResponse({ status: 404, description: 'Alojamiento no encontrado.' })
   @HttpCode(HttpStatus.NO_CONTENT)
-  removeAdmin(@Param('id', ParseUUIDPipe) id: string) {
+  removeAdmin(@Param('id') id: string) {
     return this.alojamientosService.removeAdmin(id);
   }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  Habitaciones (Admin)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  @Get('admin/alojamientos/:id/habitaciones')
+  @ApiTags('Administración')
+  getRoomsAdmin(@Param('id') id: string) {
+    return this.alojamientosService.getRoomsAdmin(id);
+  }
+
+  @Post('admin/alojamientos/:id/habitaciones')
+  @ApiTags('Administración')
+  createRoomAdmin(@Param('id') id: string, @Body() dto: any) {
+    return this.alojamientosService.createRoomAdmin(id, dto);
+  }
+
+  @Patch('admin/habitaciones/:habId')
+  @ApiTags('Administración')
+  updateRoomAdmin(@Param('habId') habId: string, @Body() dto: any) {
+    return this.alojamientosService.updateRoomAdmin(habId, dto);
+  }
+
+  @Delete('admin/habitaciones/:habId')
+  @ApiTags('Administración')
+  deleteRoomAdmin(@Param('habId') habId: string) {
+    return this.alojamientosService.deleteRoomAdmin(habId);
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
   //  Búsqueda y Catálogo
   // ══════════════════════════════════════════════════════════════════════════
-
   @Post('search')
   @ApiTags('Búsqueda y Catálogo')
   @ApiOperation({ summary: 'Búsqueda de alojamientos' })
