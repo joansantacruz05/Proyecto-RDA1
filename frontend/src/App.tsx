@@ -1508,7 +1508,7 @@ const AdminDashboard = () => {
           <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Gestiona los alojamientos, reservas y usuarios de LuxeStays.</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <a href=`${API_URL}/api/docs` target="_blank" rel="noreferrer" className="btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', textDecoration: 'none' }}>
+          <a href={`${API_URL}/api/docs`} target="_blank" rel="noreferrer" className="btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', textDecoration: 'none' }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
             API Swagger
           </a>
