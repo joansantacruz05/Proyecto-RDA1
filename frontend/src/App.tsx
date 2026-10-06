@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-do
 import { Home, User, MapPin, Star, ArrowLeft, Search, Users, DollarSign, Building, BedDouble, LayoutGrid, Info, CheckCircle2, Heart, Plus, Edit2, Trash2, Settings, CreditCard, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 const getTokenData = () => {
   const token = localStorage.getItem('token');
   if (!token) return null;
@@ -131,7 +133,7 @@ const MiPerfil = () => {
   useEffect(() => {
     const user = getTokenData();
     if (!user) return;
-    fetch(`http://localhost:3000/api/v1/auth/me`, {
+    fetch(`${API_URL}/api/v1/auth/me`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ correo: user.correo })
@@ -155,7 +157,7 @@ const MiPerfil = () => {
     setSaving(true);
     setMessage('');
     try {
-      const res = await fetch(`http://localhost:3000/api/v1/auth/update-profile`, {
+      const res = await fetch(`${API_URL}/api/v1/auth/update-profile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...perfil, edad: Number(perfil.edad) })
@@ -251,7 +253,7 @@ const MisReservas = () => {
   const [procesandoPago, setProcesandoPago] = useState(false);
   
   useEffect(() => {
-    fetch('/api/v1/pagos/metodos')
+    fetch(`${API_URL}/api/v1/pagos/metodos`)
       .then(r => r.json())
       .then(data => setMetodosPago(data))
       .catch(console.error);
@@ -260,7 +262,7 @@ const MisReservas = () => {
       setLoading(false);
       return;
     }
-    fetch(`http://localhost:3000/api/v1/reservas/usuario/${user.correo}`)
+    fetch(`${API_URL}/api/v1/reservas/usuario/${user.correo}`)
       .then(r => r.json())
       .then(data => {
         setReservas(data);
@@ -280,7 +282,7 @@ const MisReservas = () => {
     const comentario = prompt('Deja un breve comentario sobre el sitio:');
     
     try {
-      const res = await fetch(`http://localhost:3000/api/v1/reservas/${id}/calificar`, {
+      const res = await fetch(`${API_URL}/api/v1/reservas/${id}/calificar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ calificacion: Number(calificacion), comentario: comentario || '' })
@@ -298,7 +300,7 @@ const MisReservas = () => {
 
   const firmarContrato = async (id: string) => {
     try {
-      const res = await fetch(`http://localhost:3000/api/v1/reservas/${id}/firmar-contrato`, {
+      const res = await fetch(`${API_URL}/api/v1/reservas/${id}/firmar-contrato`, {
         method: 'POST',
       });
       if (res.ok) {
@@ -315,7 +317,7 @@ const MisReservas = () => {
   const cancelarReserva = async (id: string) => {
     if(!confirm('¿Estás seguro que deseas cancelar esta reserva? Esta acción no se puede deshacer.')) return;
     try {
-      const res = await fetch(`http://localhost:3000/api/v1/reservas/${id}/cancelar`, { method: 'POST' });
+      const res = await fetch(`${API_URL}/api/v1/reservas/${id}/cancelar`, { method: 'POST' });
       if (res.ok) {
         alert('Reserva cancelada correctamente.');
         setReservas(prev => prev.map(r => r.id === id ? {...r, estado: 'Cancelada'} : r));
@@ -331,7 +333,7 @@ const MisReservas = () => {
     e.preventDefault();
     setProcesandoPago(true);
     try {
-      const res = await fetch('http://localhost:3000/api/v1/pagos', {
+      const res = await fetch(`${API_URL}/api/v1/pagos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -560,7 +562,7 @@ const LandingPage = () => {
 
   // Obtener datos del backend al cargar la página
   useEffect(() => {
-    fetch('/api/v1/admin/alojamientos')
+    fetch(`${API_URL}/api/v1/admin/alojamientos`)
       .then(res => res.json())
       .then(data => {
         const alojamientos = Array.isArray(data) ? data.map((item: any, index: number) => ({
@@ -935,7 +937,7 @@ const LandingPage = () => {
                 const totalPagar = diffDays * bookingItem.price;
 
                 try {
-                  const res = await fetch('http://localhost:3000/api/v1/reservas', {
+                  const res = await fetch(`${API_URL}/api/v1/reservas`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1290,7 +1292,7 @@ const AdminDashboard = () => {
   const [activeAdminTab, setActiveAdminTab] = useState('alojamientos');
 
   const refreshStats = () => {
-    fetch('/api/v1/admin/dashboard-stats')
+    fetch(`${API_URL}/api/v1/admin/dashboard-stats`)
       .then(res => res.json())
       .then(data => {
         if(data) setStats(data);
@@ -1304,7 +1306,7 @@ const AdminDashboard = () => {
       .then(data => {
         setToast({ message: data.message, type: 'success' });
         // Recargar datos
-        fetch('/api/v1/reservas/admin/todas').then(r => r.json()).then(setTodasReservas);
+        fetch(`${API_URL}/api/v1/reservas/admin/todas`).then(r => r.json()).then(setTodasReservas);
         refreshStats();
         addLog('Reserva Aprobada', `Se aprobó la reserva ${id}`);
       });
@@ -1316,28 +1318,28 @@ const AdminDashboard = () => {
       setAdminLogs(JSON.parse(savedLogs));
     }
     
-    fetch('/api/v1/admin/alojamientos')
+    fetch(`${API_URL}/api/v1/admin/alojamientos`)
       .then(res => res.json())
       .then(data => setAlojamientos(data))
       .catch(err => console.error(err));
 
     refreshStats();
 
-    fetch('/api/v1/reservas/admin/cancelaciones')
+    fetch(`${API_URL}/api/v1/reservas/admin/cancelaciones`)
       .then(res => res.json())
       .then(data => {
         if(Array.isArray(data)) setCancelaciones(data);
       })
       .catch(err => console.error(err));
 
-    fetch('/api/v1/admin/facturas')
+    fetch(`${API_URL}/api/v1/admin/facturas`)
       .then(res => res.json())
       .then(data => {
         if(Array.isArray(data)) setFacturas(data);
       })
       .catch(err => console.error(err));
 
-    fetch('/api/v1/reservas/admin/todas')
+    fetch(`${API_URL}/api/v1/reservas/admin/todas`)
       .then(res => res.json())
       .then(data => {
         if(Array.isArray(data)) setTodasReservas(data);
@@ -1357,7 +1359,7 @@ const AdminDashboard = () => {
     setRoomsModalAlojamiento(alojamiento);
     setLoadingRooms(true);
     try {
-      const response = await fetch(`http://localhost:3000/api/v1/admin/alojamientos/${alojamiento.id}/habitaciones`);
+      const response = await fetch(`${API_URL}/api/v1/admin/alojamientos/${alojamiento.id}/habitaciones`);
       const data = await response.json();
       setRoomsList(data);
     } catch {
@@ -1370,7 +1372,7 @@ const AdminDashboard = () => {
   const handleSaveRoom = async (roomData: any) => {
     try {
       if (roomData.id === 'Nueva') {
-        const res = await fetch(`http://localhost:3000/api/v1/admin/alojamientos/${roomsModalAlojamiento.id}/habitaciones`, {
+        const res = await fetch(`${API_URL}/api/v1/admin/alojamientos/${roomsModalAlojamiento.id}/habitaciones`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(roomData)
@@ -1382,7 +1384,7 @@ const AdminDashboard = () => {
           setEditingRoom(null);
         }
       } else {
-        const res = await fetch(`http://localhost:3000/api/v1/admin/habitaciones/${roomData.id}`, {
+        const res = await fetch(`${API_URL}/api/v1/admin/habitaciones/${roomData.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(roomData)
@@ -1400,7 +1402,7 @@ const AdminDashboard = () => {
 
   const handleDeleteRoom = async (habId: string) => {
     if (window.confirm('¿Eliminar habitación permanentemente?')) {
-      const res = await fetch(`http://localhost:3000/api/v1/admin/habitaciones/${habId}`, { method: 'DELETE' });
+      const res = await fetch(`${API_URL}/api/v1/admin/habitaciones/${habId}`, { method: 'DELETE' });
       if (res.ok) {
         setRoomsList(roomsList.filter(r => r.id !== habId));
         addLog('Habitación Eliminada', `Eliminada habitación ID: ${habId}`);
@@ -1435,7 +1437,7 @@ const AdminDashboard = () => {
   const handleDeleteClick = async (id: string, nombre: string) => {
     if (window.confirm(`¿Estás seguro de que deseas eliminar permanentemente "${nombre}"? Esta acción no se puede deshacer.`)) {
       try {
-        const response = await fetch(`http://localhost:3000/api/v1/admin/alojamientos/${id}`, { method: 'DELETE' });
+        const response = await fetch(`${API_URL}/api/v1/admin/alojamientos/${id}`, { method: 'DELETE' });
         if (response.ok) {
           setAlojamientos(alojamientos.filter(al => al.id !== id));
           addLog('Eliminación', `Se eliminó permanentemente el alojamiento: ${nombre}`);
@@ -1454,7 +1456,7 @@ const AdminDashboard = () => {
     setSaving(true);
     try {
       if (isCreating) {
-        const response = await fetch(`http://localhost:3000/api/v1/admin/alojamientos`, {
+        const response = await fetch(`${API_URL}/api/v1/admin/alojamientos`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(editForm)
@@ -1468,7 +1470,7 @@ const AdminDashboard = () => {
           alert('✨ Alojamiento y Habitaciones creados exitosamente.');
         }
       } else {
-        const response = await fetch(`http://localhost:3000/api/v1/admin/alojamientos/${editingItem.id}`, {
+        const response = await fetch(`${API_URL}/api/v1/admin/alojamientos/${editingItem.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(editForm)
@@ -1506,7 +1508,7 @@ const AdminDashboard = () => {
           <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Gestiona los alojamientos, reservas y usuarios de LuxeStays.</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <a href="http://localhost:3000/api/docs" target="_blank" rel="noreferrer" className="btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', textDecoration: 'none' }}>
+          <a href=`${API_URL}/api/docs` target="_blank" rel="noreferrer" className="btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', textDecoration: 'none' }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
             API Swagger
           </a>
