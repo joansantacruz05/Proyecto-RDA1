@@ -562,6 +562,28 @@ const LandingPage = () => {
   const [bookingLoading, setBookingLoading] = useState(false);
   const [toast, setToast] = useState<{message: string, type: string} | null>(null);
 
+  // Generar imágenes hermosas para el carrusel basadas en el ID para que no cambien en cada render
+  const getBeautifulImages = (id: string | number) => {
+    const sum = String(id).split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+    const pool = [
+      'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&q=80&w=1000',
+      'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&q=80&w=1000',
+      'https://images.unsplash.com/photo-1582719478250-c89404bb8a0e?auto=format&fit=crop&q=80&w=1000',
+      'https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&q=80&w=1000',
+      'https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?auto=format&fit=crop&q=80&w=1000',
+      'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&q=80&w=1000',
+      'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&q=80&w=1000',
+      'https://images.unsplash.com/photo-1578683010236-d716f9a3f461?auto=format&fit=crop&q=80&w=1000',
+      'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&q=80&w=1000'
+    ];
+    return [
+      pool[sum % pool.length],
+      pool[(sum + 1) % pool.length],
+      pool[(sum + 2) % pool.length],
+      pool[(sum + 3) % pool.length]
+    ];
+  };
+
   // Obtener datos del backend al cargar la página
   useEffect(() => {
     fetch(`${API_URL}/api/v1/admin/alojamientos`)
@@ -573,6 +595,7 @@ const LandingPage = () => {
           location: item.destino,
           rating: 4.8, // Valor por defecto
           img: item.imagenUrl || (item.tienePiscina ? '/pool.jpg' : '/villa.jpg'),
+          images: getBeautifulImages(item.id),
           type: 'alojamiento',
           subtype: 'Hotel', // Valor por defecto
           description: item.descripcion || `Alojamiento con ${item.habitaciones} habitaciones.`,
@@ -587,6 +610,7 @@ const LandingPage = () => {
               price: item.precioPorNoche,
               capacity: Number(item.capacidadAdultos) + Number(item.capacidadNinos),
               img: item.imagenUrl || '/room.jpg',
+              images: getBeautifulImages(item.id + '-hab'),
               type: 'habitacion',
               hotelName: item.nombre,
               estado: item.estado || 'Activo'
