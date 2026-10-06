@@ -556,7 +556,7 @@ const LandingPage = () => {
 
   // Estados para Modal de Reserva
   const [bookingItem, setBookingItem] = useState<any>(null);
-  const [bookingForm, setBookingForm] = useState({ nombreCliente: '', emailCliente: '', fechaInicio: '', fechaFin: '', numeroPersonas: 1 });
+  const [bookingForm, setBookingForm] = useState<{ nombreCliente: string, emailCliente: string, fechaInicio: string, fechaFin: string, numeroPersonas: number | string }>({ nombreCliente: '', emailCliente: '', fechaInicio: '', fechaFin: '', numeroPersonas: 1 });
   const [bookingLoading, setBookingLoading] = useState(false);
   const [toast, setToast] = useState<{message: string, type: string} | null>(null);
 
