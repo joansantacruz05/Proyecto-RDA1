@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Home, User, MapPin, Star, ArrowLeft, Search, Users, DollarSign, Building, BedDouble, LayoutGrid, Info, CheckCircle2, Heart, Plus, Edit2, Trash2, Settings, CreditCard, X } from 'lucide-react';
+import { Home, User, MapPin, Star, ArrowLeft, Search, Users, DollarSign, Building, BedDouble, LayoutGrid, Info, CheckCircle2, Heart, Plus, Edit2, Trash2, Settings, CreditCard, X, Calendar, XCircle, Clock, Terminal, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -1640,70 +1640,112 @@ const AdminDashboard = () => {
   }
 
   return (
-    <div style={{ marginTop: '20px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', flexWrap: 'wrap', gap: '20px' }}>
-        <div>
-          <h1 style={{ fontSize: '2.5rem', marginBottom: '10px' }}>Panel de Administración</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Gestiona los alojamientos, reservas y usuarios de LuxeStays.</p>
+    <div style={{ display: 'flex', minHeight: 'calc(100vh - 80px)', background: 'var(--bg-color)', margin: '-40px' }}>
+      {/* Sidebar Profesional */}
+      <aside style={{ 
+        width: '280px', 
+        background: 'var(--card-bg)', 
+        borderRight: '1px solid var(--border-color)', 
+        padding: '30px 20px',
+        display: 'flex', flexDirection: 'column', gap: '8px',
+        position: 'sticky', top: '80px', height: 'calc(100vh - 80px)', overflowY: 'auto'
+      }}>
+        <div style={{ marginBottom: '40px', padding: '0 10px' }}>
+          <h2 style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: 'bold' }}>Admin Panel</h2>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <a href={`${API_URL}/api/docs`} target="_blank" rel="noreferrer" className="btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', textDecoration: 'none' }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
-            API Swagger
-          </a>
-          <div style={{ background: 'var(--accent-color)', color: 'white', padding: '15px 25px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '15px', boxShadow: '0 10px 20px -5px rgba(212, 175, 55, 0.4)' }}>
-             <img src="https://ui-avatars.com/api/?name=Admin&background=fff&color=d4af37&bold=true" style={{ borderRadius: '50%', width: '50px' }} alt="Admin" />
-             <div>
-               <h3 style={{ margin: 0, fontSize: '1.1rem' }}>{user.nombre}</h3>
-               <p style={{ margin: 0, opacity: 0.9, fontSize: '0.85rem' }}>Administrador Principal</p>
-             </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Tarjetas de Estadísticas desde la Base de Datos */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '40px' }}>
-         <div className="card" style={{ padding: '25px', borderLeft: '4px solid var(--accent-color)' }}>
-            <h3 style={{ color: 'var(--text-secondary)', fontSize: '1rem', marginBottom: '10px' }}>Alojamientos Activos</h3>
-            <p style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>{stats.total_alojamientos}</p>
-         </div>
-         <div className="card" style={{ padding: '25px', borderLeft: '4px solid #3B82F6' }}>
-            <h3 style={{ color: 'var(--text-secondary)', fontSize: '1rem', marginBottom: '10px' }}>Reservas Activas</h3>
-            <p style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>{stats.reservas_activas}</p>
-         </div>
-         <div className="card" style={{ padding: '25px', borderLeft: '4px solid #10B981' }}>
-            <h3 style={{ color: 'var(--text-secondary)', fontSize: '1rem', marginBottom: '10px' }}>Ingresos Mensuales</h3>
-            <p style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>${Number(stats.ingresos_totales).toLocaleString()}</p>
-         </div>
-      </div>
-
-      {/* Pestañas de Navegación Admin */}
-      <div style={{ display: 'flex', gap: '15px', marginBottom: '30px', borderBottom: '2px solid var(--border-color)', paddingBottom: '10px', overflowX: 'auto' }}>
         {[
-          { id: 'alojamientos', label: '🏨 Alojamientos' },
-          { id: 'reservas', label: '📅 Reservas' },
-          { id: 'facturacion', label: '💳 Facturación' },
-          { id: 'cancelaciones', label: '⚠️ Cancelaciones' },
-          { id: 'actividad', label: '🕒 Actividad' }
+          { id: 'alojamientos', label: 'Alojamientos', icon: <Building size={20} /> },
+          { id: 'reservas', label: 'Reservas', icon: <Calendar size={20} /> },
+          { id: 'facturacion', label: 'Facturación', icon: <CreditCard size={20} /> },
+          { id: 'cancelaciones', label: 'Cancelaciones', icon: <XCircle size={20} /> },
+          { id: 'actividad', label: 'Actividad', icon: <Clock size={20} /> }
         ].map(tab => (
           <button 
             key={tab.id}
             onClick={() => setActiveAdminTab(tab.id)}
             style={{ 
-              background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.05rem', fontWeight: activeAdminTab === tab.id ? 'bold' : '500', 
-              color: activeAdminTab === tab.id ? 'var(--accent-color)' : 'var(--text-secondary)',
-              padding: '10px 15px', position: 'relative', whiteSpace: 'nowrap', transition: 'color 0.2s'
+              display: 'flex', alignItems: 'center', gap: '15px',
+              width: '100%', padding: '15px 20px', borderRadius: '12px',
+              background: activeAdminTab === tab.id ? 'var(--accent-color)' : 'transparent',
+              color: activeAdminTab === tab.id ? 'white' : 'var(--text-secondary)',
+              border: 'none', cursor: 'pointer', fontSize: '1.05rem', fontWeight: '500',
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', textAlign: 'left',
+              boxShadow: activeAdminTab === tab.id ? '0 10px 20px -5px rgba(212,175,55,0.4)' : 'none'
             }}
+            onMouseEnter={(e) => { if(activeAdminTab !== tab.id) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+            onMouseLeave={(e) => { if(activeAdminTab !== tab.id) e.currentTarget.style.background = 'transparent' }}
           >
+            {tab.icon}
             {tab.label}
-            {activeAdminTab === tab.id && (
-              <motion.div layoutId="adminTabIndicator" style={{ position: 'absolute', bottom: '-12px', left: 0, right: 0, height: '3px', background: 'var(--accent-color)', borderRadius: '3px 3px 0 0' }} />
-            )}
           </button>
         ))}
-      </div>
+      </aside>
 
-      {/* Tabla de Alojamientos */}
+      {/* Main Content */}
+      <div style={{ flex: 1, padding: '40px 60px', overflowX: 'hidden' }}>
+        {/* Header Dashboard */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '50px', flexWrap: 'wrap', gap: '20px' }}>
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+            <h1 style={{ fontSize: '2.5rem', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '15px' }}>
+              Bienvenido, {user.nombre} <span style={{ fontSize: '1.5rem', animation: 'wave 2s infinite' }}>👋</span>
+            </h1>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem', margin: 0 }}>Aquí está un resumen de lo que pasa en LuxeStays hoy.</p>
+          </motion.div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <a href={`${API_URL}/api/docs`} target="_blank" rel="noreferrer" className="btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', textDecoration: 'none', borderRadius: '12px' }}>
+              <Terminal size={18} /> API Swagger
+            </a>
+            <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', padding: '8px 20px 8px 8px', borderRadius: '40px', display: 'flex', alignItems: 'center', gap: '15px' }}>
+               <img src={`https://ui-avatars.com/api/?name=${user.nombre}&background=d4af37&color=fff&bold=true`} style={{ borderRadius: '50%', width: '40px' }} alt="Admin" />
+               <div>
+                 <p style={{ margin: 0, fontWeight: 'bold', fontSize: '0.95rem' }}>Admin</p>
+               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tarjetas de Estadísticas (Rediseñadas) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '30px', marginBottom: '50px' }}>
+           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }} whileHover={{ y: -8, boxShadow: '0 20px 25px -5px rgba(212,175,55,0.1)' }} className="card" style={{ padding: '30px', background: 'linear-gradient(145deg, var(--card-bg) 0%, rgba(212,175,55,0.05) 100%)', border: '1px solid var(--border-color)', borderRadius: '24px', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <h3 style={{ color: 'var(--text-secondary)', fontSize: '1rem', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1.5px', fontWeight: 'bold' }}>Alojamientos</h3>
+                  <p style={{ fontSize: '3.5rem', fontWeight: '800', margin: 0, color: 'var(--text-primary)', lineHeight: 1 }}>{stats.total_alojamientos}</p>
+                </div>
+                <div style={{ background: 'rgba(212,175,55,0.1)', padding: '15px', borderRadius: '16px' }}>
+                  <Building size={32} color="var(--accent-color)" />
+                </div>
+              </div>
+           </motion.div>
+
+           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }} whileHover={{ y: -8, boxShadow: '0 20px 25px -5px rgba(59,130,246,0.1)' }} className="card" style={{ padding: '30px', background: 'linear-gradient(145deg, var(--card-bg) 0%, rgba(59,130,246,0.05) 100%)', border: '1px solid var(--border-color)', borderRadius: '24px', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <h3 style={{ color: 'var(--text-secondary)', fontSize: '1rem', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1.5px', fontWeight: 'bold' }}>Reservas Activas</h3>
+                  <p style={{ fontSize: '3.5rem', fontWeight: '800', margin: 0, color: 'var(--text-primary)', lineHeight: 1 }}>{stats.reservas_activas}</p>
+                </div>
+                <div style={{ background: 'rgba(59,130,246,0.1)', padding: '15px', borderRadius: '16px' }}>
+                  <Calendar size={32} color="#3B82F6" />
+                </div>
+              </div>
+           </motion.div>
+
+           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }} whileHover={{ y: -8, boxShadow: '0 20px 25px -5px rgba(16,185,129,0.1)' }} className="card" style={{ padding: '30px', background: 'linear-gradient(145deg, var(--card-bg) 0%, rgba(16,185,129,0.05) 100%)', border: '1px solid var(--border-color)', borderRadius: '24px', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <h3 style={{ color: 'var(--text-secondary)', fontSize: '1rem', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1.5px', fontWeight: 'bold' }}>Ingresos Mensuales</h3>
+                  <p style={{ fontSize: '3.5rem', fontWeight: '800', margin: 0, color: 'var(--text-primary)', lineHeight: 1 }}>${Number(stats.ingresos_totales).toLocaleString()}</p>
+                </div>
+                <div style={{ background: 'rgba(16,185,129,0.1)', padding: '15px', borderRadius: '16px' }}>
+                  <DollarSign size={32} color="#10B981" />
+                </div>
+              </div>
+           </motion.div>
+        </div>
+
+        {/* CONTENIDO PRINCIPAL SEGUN TAB */}
+        <AnimatePresence mode="wait">
       {activeAdminTab === 'alojamientos' && (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card" style={{ padding: '30px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
@@ -2249,6 +2291,7 @@ const AdminDashboard = () => {
       </AnimatePresence>
 
       {toast && <ToastNotification message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      </div>
     </div>
   );
 };
