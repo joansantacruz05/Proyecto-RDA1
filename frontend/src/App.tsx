@@ -963,7 +963,7 @@ const LandingPage = () => {
               }}>
                 <div style={{ display: 'flex', gap: '15px', marginBottom: '12px' }}>
                   <input required type="text" placeholder="Nombre completo" value={bookingForm.nombreCliente} onChange={e => setBookingForm({...bookingForm, nombreCliente: e.target.value})} style={{ flex: 2, padding: '12px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none' }} />
-                  <input required type="number" min="1" max={bookingItem.capacity || 10} placeholder="Personas" value={bookingForm.numeroPersonas} onChange={e => setBookingForm({...bookingForm, numeroPersonas: Number(e.target.value)})} style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none' }} title="Número de personas" />
+                  <input required type="number" min="1" max={bookingItem.capacity || 10} placeholder="Personas" value={bookingForm.numeroPersonas} onChange={e => setBookingForm({...bookingForm, numeroPersonas: e.target.value === '' ? '' : Number(e.target.value)})} style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none' }} title="Número de personas" />
                 </div>
                 <input required type="email" placeholder="Correo electrónico" value={bookingForm.emailCliente} onChange={e => setBookingForm({...bookingForm, emailCliente: e.target.value})} style={{ width: '100%', marginBottom: '15px', padding: '12px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none' }} />
                 <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
