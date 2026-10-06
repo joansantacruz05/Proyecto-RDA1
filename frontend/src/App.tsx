@@ -248,6 +248,7 @@ const MisReservas = () => {
   const [reservas, setReservas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [pagandoReserva, setPagandoReserva] = useState<any>(null);
+  const [toast, setToast] = useState<{message: string, type: string} | null>(null);
   const [pagoForm, setPagoForm] = useState({ metodoId: 'MET-001', requiereFactura: false, identificacion: '', nombre: '', direccion: '' });
   const [metodosPago, setMetodosPago] = useState<any[]>([]);
   const [procesandoPago, setProcesandoPago] = useState(false);
@@ -276,7 +277,7 @@ const MisReservas = () => {
   const rateReserva = async (id: string) => {
     const calificacion = prompt('Del 1 al 5, ¿cómo calificarías tu estancia?');
     if (!calificacion || isNaN(Number(calificacion)) || Number(calificacion) < 1 || Number(calificacion) > 5) {
-      alert('Ingresa un número válido del 1 al 5');
+      setToast({ message: 'Ingresa un número válido del 1 al 5', type: 'error' });
       return;
     }
     const comentario = prompt('Deja un breve comentario sobre el sitio:');
@@ -288,13 +289,13 @@ const MisReservas = () => {
         body: JSON.stringify({ calificacion: Number(calificacion), comentario: comentario || '' })
       });
       if (res.ok) {
-        alert('¡Gracias por tu calificación!');
+        setToast({ message: '¡Gracias por tu calificación!', type: 'success' });
         setReservas(prev => prev.map(r => r.id === id ? {...r, calificacion: Number(calificacion), comentario} : r));
       } else {
-        alert('Error al guardar la calificación');
+        setToast({ message: 'Error al guardar la calificación', type: 'error' });
       }
     } catch {
-      alert('Error de conexión');
+      setToast({ message: 'Error de conexión', type: 'error' });
     }
   };
 
@@ -304,13 +305,13 @@ const MisReservas = () => {
         method: 'POST',
       });
       if (res.ok) {
-        alert('¡Contrato firmado exitosamente!');
+        setToast({ message: '¡Contrato firmado exitosamente!', type: 'error' });
         setReservas(prev => prev.map(r => r.id === id ? {...r, contratoFirmado: true} : r));
       } else {
-        alert('Error al firmar el contrato');
+        setToast({ message: 'Error al firmar el contrato', type: 'error' });
       }
     } catch {
-      alert('Error de conexión al firmar');
+      setToast({ message: 'Error de conexión al firmar', type: 'error' });
     }
   };
 
@@ -319,13 +320,13 @@ const MisReservas = () => {
     try {
       const res = await fetch(`${API_URL}/api/v1/reservas/${id}/cancelar`, { method: 'POST' });
       if (res.ok) {
-        alert('Reserva cancelada correctamente.');
+        setToast({ message: 'Reserva cancelada correctamente.', type: 'success' });
         setReservas(prev => prev.map(r => r.id === id ? {...r, estado: 'Cancelada'} : r));
       } else {
-        alert('Error al cancelar la reserva');
+        setToast({ message: 'Error al cancelar la reserva', type: 'error' });
       }
     } catch {
-      alert('Error de conexión al cancelar');
+      setToast({ message: 'Error de conexión al cancelar', type: 'error' });
     }
   };
 
@@ -345,14 +346,14 @@ const MisReservas = () => {
         })
       });
       if (res.ok) {
-        alert('Pago procesado correctamente.');
+        setToast({ message: 'Pago procesado correctamente.', type: 'success' });
         setReservas(prev => prev.map(r => r.id === pagandoReserva.id ? {...r, estado: 'Confirmada', pagoCompletado: true} : r));
         setPagandoReserva(null);
       } else {
-        alert('Error al procesar el pago.');
+        setToast({ message: 'Error al procesar el pago.', type: 'error' });
       }
     } catch {
-      alert('Error de conexión');
+      setToast({ message: 'Error de conexión', type: 'error' });
     } finally {
       setProcesandoPago(false);
     }
@@ -364,6 +365,7 @@ const MisReservas = () => {
 
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'left', animation: 'fadeIn 0.3s' }}>
+      {toast && <ToastNotification message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <h2 style={{ marginBottom: '20px', fontSize: '2rem' }}>Historial de Reservas</h2>
       {reservas.map(res => {
         const canRate = new Date(res.fechaFin) < new Date() && !res.calificacion;
@@ -927,7 +929,7 @@ const LandingPage = () => {
                 const start = new Date(bookingForm.fechaInicio);
                 const end = new Date(bookingForm.fechaFin);
                 if (end <= start) {
-                  alert('La fecha de fin debe ser mayor a la fecha de inicio');
+                  setToast({ message: 'La fecha de fin debe ser mayor a la fecha de inicio', type: 'warning' });
                   setBookingLoading(false);
                   return;
                 }
@@ -948,15 +950,15 @@ const LandingPage = () => {
                   });
                   
                   if (res.ok) {
-                    alert('¡Reserva confirmada con éxito! Te contactaremos pronto.');
+                    setToast({ message: '¡Reserva confirmada con éxito! Te contactaremos pronto.', type: 'success' });
                     setBookingItem(null);
                     setBookingForm({ nombreCliente: '', emailCliente: '', fechaInicio: '', fechaFin: '', numeroPersonas: 1 });
                   } else {
                     const errorData = await res.json();
-                    alert(`Error: ${errorData.message || 'No se pudo realizar la reserva'}`);
+                    setToast({ message: `Error: ${errorData.message || 'No se pudo realizar la reserva'}`, type: 'error' });
                   }
                 } catch {
-                  alert('Error de conexión al servidor.');
+                  setToast({ message: 'Error de conexión al servidor.', type: 'error' });
                 } finally {
                   setBookingLoading(false);
                 }
@@ -1396,7 +1398,7 @@ const AdminDashboard = () => {
         }
       }
     } catch {
-      alert('Error guardando habitación.');
+      setToast({ message: 'Error guardando habitación.', type: 'error' });
     }
   };
 
@@ -1467,7 +1469,7 @@ const AdminDashboard = () => {
           setAlojamientos([...alojamientos, { ...newItem, ...editForm, destino: cityMap[editForm.ubicacionId] || 'Quito', propietario: user.nombre }]);
           setEditingItem(null);
           addLog('Creación', `Se creó el nuevo alojamiento: ${editForm.nombre}`);
-          alert('✨ Alojamiento y Habitaciones creados exitosamente.');
+          setToast({ message: '✨ Alojamiento y Habitaciones creados exitosamente.', type: 'error' });
         }
       } else {
         const response = await fetch(`${API_URL}/api/v1/admin/alojamientos/${editingItem.id}`, {
@@ -1480,11 +1482,11 @@ const AdminDashboard = () => {
           setAlojamientos(alojamientos.map(al => al.id === editingItem.id ? { ...al, ...editForm, destino: cityMap[editForm.ubicacionId] || al.destino } : al));
           setEditingItem(null);
           addLog('Modificación', `Se actualizaron los datos del alojamiento ID: ${editingItem.id}`);
-          alert('✏️ Datos actualizados en todas las tablas correctamente.');
+          setToast({ message: '✏️ Datos actualizados en todas las tablas correctamente.', type: 'success' });
         }
       }
     } catch {
-      alert('Error de conexión con el backend.');
+      setToast({ message: 'Error de conexión con el backend.', type: 'error' });
     } finally {
       setSaving(false);
     }
