@@ -63,7 +63,7 @@ export class ReservasService {
       LEFT JOIN alojamientos al ON esp."alojamientoId" = al.id
       LEFT JOIN contratos c ON c."reservaId" = r.id
       LEFT JOIN pagos p ON p."reservaId" = r.id
-      ORDER BY r."fechaReserva" DESC
+      ORDER BY r."fechaEntrada" DESC
     `);
   }
 
