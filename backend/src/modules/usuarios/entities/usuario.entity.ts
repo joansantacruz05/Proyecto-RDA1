@@ -21,4 +21,7 @@ export class Usuario {
 
   @Column({ type: 'varchar', length: 50, nullable: true })
   telefono: string;
+
+  @Column({ type: 'int', nullable: true })
+  edad: number;
 }

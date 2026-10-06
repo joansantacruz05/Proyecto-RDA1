@@ -5,6 +5,7 @@
 
 -- ¡ATENCIÓN! Esto borrará las tablas existentes para evitar conflictos
 DROP TABLE IF EXISTS HISTORIAL_RESERVAS CASCADE;
+DROP TABLE IF EXISTS CONTRATOS CASCADE;
 DROP TABLE IF EXISTS RESERVAS CASCADE;
 DROP TABLE IF EXISTS ESTADOS_RESERVA CASCADE;
 DROP TABLE IF EXISTS ESPACIOS_RENTABLES CASCADE;
@@ -53,7 +54,10 @@ CREATE TABLE USUARIOS (
     "nombreCompleto" VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     telefono VARCHAR(50),
-    contrasena VARCHAR(255) NOT NULL
+    contrasena VARCHAR(255) NOT NULL,
+    edad INT,
+    direccion TEXT,
+    pais VARCHAR(100)
 );
 
 -- 6. USUARIOS_ROLES
@@ -83,7 +87,9 @@ CREATE TABLE ALOJAMIENTOS (
     "tipoId" VARCHAR(50) REFERENCES TIPOS_ALOJAMIENTO(id) ON DELETE SET NULL,
     "ubicacionId" VARCHAR(50) REFERENCES UBICACIONES(id) ON DELETE SET NULL,
     nombre VARCHAR(255) NOT NULL,
-    descripcion TEXT
+    descripcion TEXT,
+    "politicaCancelacion" TEXT DEFAULT 'Cancelación gratuita hasta 24 horas antes del check-in. Caso contrario se cobrará el 100% de la primera noche.',
+    estado VARCHAR(20) DEFAULT 'Activo'
 );
 
 -- 10. ALOJAMIENTOS_SERVICIOS
@@ -101,7 +107,8 @@ CREATE TABLE ESPACIOS_RENTABLES (
     "capacidadAdultos" INT NOT NULL,
     "capacidadNinos" INT NOT NULL,
     "precioPorNoche" DECIMAL(10, 2) NOT NULL,
-    "cantidadDisponible" INT NOT NULL
+    "cantidadDisponible" INT NOT NULL,
+    estado VARCHAR(20) DEFAULT 'Activo'
 );
 
 -- 12. ESTADOS_RESERVA
@@ -118,8 +125,27 @@ CREATE TABLE RESERVAS (
     "estadoId" VARCHAR(50) REFERENCES ESTADOS_RESERVA(id) ON DELETE SET NULL,
     "fechaEntrada" DATE NOT NULL,
     "fechaSalida" DATE NOT NULL,
-    "precioTotal" DECIMAL(10, 2) NOT NULL
+    "precioTotal" DECIMAL(10, 2) NOT NULL,
+    "numeroPersonas" INT DEFAULT 1,
+    calificacion INT,
+    comentario TEXT
 );
+
+-- 13.1 CONTRATOS
+CREATE TABLE CONTRATOS (
+    id VARCHAR(50) PRIMARY KEY,
+    "reservaId" VARCHAR(50) REFERENCES RESERVAS(id) ON DELETE CASCADE,
+    terminos TEXT NOT NULL,
+    firmado BOOLEAN DEFAULT false,
+    "fechaFirma" TIMESTAMP
+);
+
+-- 13.2 VISTAS DEL SISTEMA (DASHBOARD)
+CREATE OR REPLACE VIEW vista_dashboard_admin AS
+SELECT 
+    (SELECT COUNT(*) FROM alojamientos WHERE estado = 'Activo') AS total_alojamientos,
+    (SELECT COUNT(*) FROM reservas WHERE "fechaEntrada" >= CURRENT_DATE) AS reservas_activas,
+    (SELECT COALESCE(SUM("precioTotal"), 0) FROM reservas WHERE "estadoId" = 'EST-002') AS ingresos_totales;
 
 -- 14. HISTORIAL_RESERVAS
 CREATE TABLE HISTORIAL_RESERVAS (
@@ -129,6 +155,37 @@ CREATE TABLE HISTORIAL_RESERVAS (
     "estadoNuevoId" VARCHAR(50) REFERENCES ESTADOS_RESERVA(id) ON DELETE SET NULL,
     "fechaCambio" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     notas TEXT
+);
+
+-- 15. METODOS_PAGO
+CREATE TABLE METODOS_PAGO (
+    id VARCHAR(50) PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    estado VARCHAR(20) DEFAULT 'Activo'
+);
+
+-- 16. PAGOS
+CREATE TABLE PAGOS (
+    id VARCHAR(50) PRIMARY KEY,
+    "reservaId" VARCHAR(50) REFERENCES RESERVAS(id) ON DELETE CASCADE,
+    "metodoPagoId" VARCHAR(50) REFERENCES METODOS_PAGO(id) ON DELETE RESTRICT,
+    monto DECIMAL(10, 2) NOT NULL,
+    "fechaPago" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    estado VARCHAR(20) DEFAULT 'Completado'
+);
+
+-- 17. FACTURAS
+CREATE TABLE FACTURAS (
+    id VARCHAR(50) PRIMARY KEY,
+    "pagoId" VARCHAR(50) REFERENCES PAGOS(id) ON DELETE CASCADE,
+    "numeroFactura" VARCHAR(50) UNIQUE NOT NULL,
+    "identificacionCliente" VARCHAR(20) NOT NULL,
+    "nombreRazonSocial" VARCHAR(150) NOT NULL,
+    direccion TEXT,
+    "fechaEmision" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    subtotal DECIMAL(10, 2) NOT NULL,
+    iva DECIMAL(10, 2) NOT NULL,
+    total DECIMAL(10, 2) NOT NULL
 );
 
 -- =========================================================================
@@ -322,3 +379,9 @@ INSERT INTO ESPACIOS_RENTABLES (id, "alojamientoId", nombre, "capacidadAdultos",
 ('ESP-024', 'ALO-024', 'Habitacion/Espacio Estandar 24', 4, 2, 280.00, 3),
 ('ESP-025', 'ALO-025', 'Habitacion/Espacio Estandar 25', 1, 2, 290.00, 3);
 
+-- 12. METODOS_PAGO
+INSERT INTO METODOS_PAGO (id, nombre) VALUES 
+('MET-001', 'Tarjeta de Crédito'),
+('MET-002', 'Tarjeta de Débito'),
+('MET-003', 'Transferencia Bancaria'),
+('MET-004', 'PayPal');

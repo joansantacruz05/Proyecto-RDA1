@@ -19,4 +19,7 @@ export class Alojamiento {
 
   @Column({ type: 'text', nullable: true })
   descripcion: string;
+
+  @Column({ type: 'text', nullable: true, name: 'politicaCancelacion' })
+  politicaCancelacion: string;
 }

@@ -10,6 +10,7 @@ import { AuthModule } from './modules/auth/auth.module';
 // import { AutosModule } from './modules/autos/autos.module';
 // import { AtraccionesModule } from './modules/atracciones/atracciones.module';
 // import { VuelosModule } from './modules/vuelos/vuelos.module';
+import { PagosModule } from './modules/pagos/pagos.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { AuthModule } from './modules/auth/auth.module';
     ReservasModule,
     UsuariosModule,
     AuthModule,
+    PagosModule,
     // AutosModule,
     // AtraccionesModule,
     // VuelosModule,

@@ -13,7 +13,7 @@ export class UsuariosService {
   ) {}
 
   async create(crearUsuarioDto: CrearUsuarioDto) {
-    const { correo, contrasena, nombre } = crearUsuarioDto;
+    const { correo, contrasena, nombre, telefono, edad } = crearUsuarioDto;
 
     const existe = await this.findOneByEmail(correo);
     if (existe) {
@@ -26,9 +26,9 @@ export class UsuariosService {
     const newId = 'USU-' + randomNum; 
 
     await this.usuarioRepository.query(`
-      INSERT INTO usuarios (id, "nombreCompleto", email, contrasena) 
-      VALUES ($1, $2, $3, $4)
-    `, [newId, nombre, correo, hashedPassword]);
+      INSERT INTO usuarios (id, "nombreCompleto", email, contrasena, telefono, edad) 
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [newId, nombre, correo, hashedPassword, telefono || null, edad || null]);
     
     // Asignar el rol por defecto: Cliente (ROL-002)
     await this.usuarioRepository.query(`
@@ -42,7 +42,7 @@ export class UsuariosService {
   async findOneByEmail(correo: string) {
     const result = await this.usuarioRepository.query(`
       SELECT 
-        u.id, u."nombreCompleto" as nombre, u.email as correo, u.contrasena, r.nombre as rol
+        u.id, u."nombreCompleto" as nombre, u.email as correo, u.contrasena, u.telefono, u.edad, u.direccion, u.pais, r.nombre as rol
       FROM usuarios u
       LEFT JOIN usuarios_roles ur ON u.id = ur."usuarioId"
       LEFT JOIN roles r ON ur."rolId" = r.id
@@ -59,5 +59,15 @@ export class UsuariosService {
       LEFT JOIN usuarios_roles ur ON u.id = ur."usuarioId"
       LEFT JOIN roles r ON ur."rolId" = r.id
     `);
+  }
+
+  async updateProfile(correo: string, data: { nombre: string, telefono?: string, edad?: number, direccion?: string, pais?: string }) {
+    await this.usuarioRepository.query(`
+      UPDATE usuarios
+      SET "nombreCompleto" = $1, telefono = $2, edad = $3, direccion = $4, pais = $5
+      WHERE email = $6
+    `, [data.nombre, data.telefono || null, data.edad || null, data.direccion || null, data.pais || null, correo]);
+    
+    return this.findOneByEmail(correo);
   }
 }

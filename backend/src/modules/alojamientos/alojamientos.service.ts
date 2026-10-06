@@ -16,6 +16,11 @@ export class AlojamientosService {
   //  Módulo de Administración (CRUD)
   // ═══════════════════════════════════════════════════════════════════════
 
+  async getDashboardStats() {
+    const result = await this.alojamientoRepository.query(`SELECT * FROM vista_dashboard_admin`);
+    return result[0];
+  }
+
   async createAdmin(dto: any): Promise<any> {
     const id = `ALO-${Math.floor(Math.random() * 900) + 100}`;
     await this.alojamientoRepository.query(
@@ -40,11 +45,13 @@ export class AlojamientosService {
         a.descripcion,
         a."imagenUrl",
         a."ubicacionId",
+        a.estado,
         c.nombre as destino,
         (SELECT "precioPorNoche" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "precioPorNoche",
         (SELECT "capacidadAdultos" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "capacidadAdultos",
         (SELECT "capacidadNinos" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "capacidadNinos",
         (SELECT COUNT(*) FROM espacios_rentables er WHERE er."alojamientoId" = a.id)::int as habitaciones,
+        (SELECT COUNT(*) FROM espacios_rentables er WHERE er."alojamientoId" = a.id AND er.estado = 'Activo')::int as habitaciones_disponibles,
         EXISTS (
           SELECT 1 FROM alojamientos_servicios aser 
           JOIN servicios s ON s.id = aser."servicioId"
@@ -65,9 +72,16 @@ export class AlojamientosService {
 
   async updateAdmin(id: string, dto: any): Promise<any> {
     await this.alojamientoRepository.query(
-      'UPDATE alojamientos SET nombre = $1, descripcion = $2, "imagenUrl" = COALESCE($3, "imagenUrl"), "ubicacionId" = COALESCE($4, "ubicacionId") WHERE id = $5',
-      [dto.nombre, dto.descripcion, dto.imagenUrl, dto.ubicacionId, id]
+      'UPDATE alojamientos SET nombre = COALESCE($1, nombre), descripcion = COALESCE($2, descripcion), "imagenUrl" = COALESCE($3, "imagenUrl"), "ubicacionId" = COALESCE($4, "ubicacionId"), estado = COALESCE($5, estado) WHERE id = $6',
+      [dto.nombre, dto.descripcion, dto.imagenUrl, dto.ubicacionId, dto.estado, id]
     );
+
+    if (dto.estado === 'Inactivo') {
+      await this.alojamientoRepository.query(
+        'UPDATE espacios_rentables SET estado = $1 WHERE "alojamientoId" = $2',
+        ['Inactivo', id]
+      );
+    }
     
     if (dto.precioPorNoche !== undefined || dto.capacidadAdultos !== undefined || dto.capacidadNinos !== undefined || dto.habitaciones !== undefined) {
       const er = await this.alojamientoRepository.query('SELECT id FROM espacios_rentables WHERE "alojamientoId" = $1 LIMIT 1', [id]);
@@ -103,16 +117,16 @@ export class AlojamientosService {
   async createRoomAdmin(alojamientoId: string, dto: any): Promise<any> {
     const habId = `HAB-${Math.floor(Math.random() * 900) + 100}`;
     await this.alojamientoRepository.query(
-        'INSERT INTO espacios_rentables (id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible", "imagenesUrls") VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-        [habId, alojamientoId, dto.nombre || 'Nueva Habitación', dto.capacidadAdultos || 2, dto.capacidadNinos || 0, dto.precioPorNoche || 100, dto.cantidadDisponible || 1, dto.imagenesUrls || '']
+        'INSERT INTO espacios_rentables (id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible", "imagenesUrls", estado) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+        [habId, alojamientoId, dto.nombre || 'Nueva Habitación', dto.capacidadAdultos || 2, dto.capacidadNinos || 0, dto.precioPorNoche || 100, dto.cantidadDisponible || 1, dto.imagenesUrls || '', dto.estado || 'Activo']
     );
     return { id: habId, nombre: dto.nombre };
   }
 
   async updateRoomAdmin(habId: string, dto: any): Promise<any> {
     await this.alojamientoRepository.query(
-        'UPDATE espacios_rentables SET nombre = $1, "precioPorNoche" = $2, "capacidadAdultos" = $3, "capacidadNinos" = $4, "cantidadDisponible" = $5, "imagenesUrls" = COALESCE($6, "imagenesUrls") WHERE id = $7',
-        [dto.nombre, dto.precioPorNoche, dto.capacidadAdultos, dto.capacidadNinos, dto.cantidadDisponible, dto.imagenesUrls, habId]
+        'UPDATE espacios_rentables SET nombre = COALESCE($1, nombre), "precioPorNoche" = COALESCE($2, "precioPorNoche"), "capacidadAdultos" = COALESCE($3, "capacidadAdultos"), "capacidadNinos" = COALESCE($4, "capacidadNinos"), "cantidadDisponible" = COALESCE($5, "cantidadDisponible"), "imagenesUrls" = COALESCE($6, "imagenesUrls"), estado = COALESCE($7, estado) WHERE id = $8',
+        [dto.nombre, dto.precioPorNoche, dto.capacidadAdultos, dto.capacidadNinos, dto.cantidadDisponible, dto.imagenesUrls, dto.estado, habId]
     );
     return { id: habId };
   }

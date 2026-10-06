@@ -23,6 +23,13 @@ export class AlojamientosController {
   //  Módulo de Administración (CRUD)
   // ══════════════════════════════════════════════════════════════════════════
 
+  @Get('admin/dashboard-stats')
+  @ApiTags('Administración')
+  @ApiOperation({ summary: 'Obtener estadísticas del dashboard admin desde la Vista SQL' })
+  getDashboardStats() {
+    return this.alojamientosService.getDashboardStats();
+  }
+
   @Post('admin/alojamientos')
   @ApiTags('Administración')
   @ApiOperation({ summary: 'Crear un nuevo alojamiento' })

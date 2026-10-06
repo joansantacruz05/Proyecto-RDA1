@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Home, User, LogIn, MapPin, Star, ArrowLeft, Search, Users, DollarSign, Building, BedDouble, LayoutGrid, Info, CheckCircle2, Heart, Plus, Edit2, Trash2, Settings } from 'lucide-react';
+import { Home, User, MapPin, Star, ArrowLeft, Search, Users, DollarSign, Building, BedDouble, LayoutGrid, Info, CheckCircle2, Heart, Plus, Edit2, Trash2, Settings, CreditCard, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const getTokenData = () => {
@@ -8,12 +8,12 @@ const getTokenData = () => {
   if (!token) return null;
   try {
     return JSON.parse(atob(token.split('.')[1]));
-  } catch (e) {
+  } catch {
     return null;
   }
 };
 
-const alojamientosData = [
+export const alojamientosData = [
   { 
     id: 1, title: 'Hotel Grand Costa', location: 'Manta, Ecuador', rating: 4.9, img: '/villa.jpg', type: 'alojamiento', subtype: 'Hotel',
     description: 'Un lujoso hotel frente al mar con servicio todo incluido. Perfecto para desconectar de la rutina.',
@@ -102,6 +102,440 @@ const ImageCarousel = ({ images, title }: { images: string[], title: string }) =
   );
 };
 
+const ToastNotification = ({ message, type = 'success', onClose }: { message: string, type?: string, onClose: () => void }) => {
+  useEffect(() => {
+    const timer = setTimeout(() => onClose(), 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div style={{
+      position: 'fixed', bottom: '20px', right: '20px', zIndex: 9999,
+      background: type === 'success' ? '#10B981' : '#EF4444', color: 'white',
+      padding: '16px 24px', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+      display: 'flex', alignItems: 'center', gap: '12px',
+      animation: 'slideUp 0.3s ease-out'
+    }}>
+      <span style={{ fontWeight: '600' }}>{message}</span>
+      <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.2rem', padding: '0 0 0 10px' }}>&times;</button>
+    </div>
+  );
+};
+
+const MiPerfil = () => {
+  const [perfil, setPerfil] = useState({ nombre: '', telefono: '', edad: '', correo: '', direccion: '', pais: '' });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    const user = getTokenData();
+    if (!user) return;
+    fetch(`http://localhost:3000/api/v1/auth/me`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ correo: user.correo })
+    })
+    .then(r => r.json())
+    .then(data => {
+      setPerfil({ 
+        nombre: data.nombre || '', 
+        telefono: data.telefono || '', 
+        edad: data.edad || '', 
+        correo: data.correo || '',
+        direccion: data.direccion || '',
+        pais: data.pais || ''
+      });
+      setLoading(false);
+    });
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setMessage('');
+    try {
+      const res = await fetch(`http://localhost:3000/api/v1/auth/update-profile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...perfil, edad: Number(perfil.edad) })
+      });
+      if (res.ok) {
+        setMessage('¡Perfil actualizado con éxito!');
+        setTimeout(() => setMessage(''), 3000);
+      } else {
+        setMessage('Error al actualizar el perfil.');
+      }
+    } catch {
+      setMessage('Error de red.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <div style={{textAlign:'center', padding:'50px'}}>Cargando perfil...</div>;
+
+  return (
+    <div style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'left', animation: 'fadeIn 0.3s' }}>
+      <h2 style={{ marginBottom: '20px', fontSize: '2rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <User size={32} color="var(--accent-color)" /> Mi Perfil
+      </h2>
+      
+      {message && <div style={{ background: message.includes('Error') ? '#EF4444' : 'var(--accent-color)', color: message.includes('Error') ? 'white' : 'black', padding: '12px', borderRadius: '8px', marginBottom: '20px', fontWeight: 'bold' }}>{message}</div>}
+      
+      <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap' }}>
+        {/* Columna Izquierda: Resumen / Avatar */}
+        <div style={{ flex: '1', minWidth: '250px', background: 'var(--card-bg)', padding: '30px', borderRadius: '16px', border: '1px solid var(--border-color)', textAlign: 'center', height: 'fit-content' }}>
+          <div style={{ width: '120px', height: '120px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--accent-color), #8B5CF6)', margin: '0 auto 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '3rem', color: 'black', fontWeight: 'bold' }}>
+            {perfil.nombre ? perfil.nombre.charAt(0).toUpperCase() : 'U'}
+          </div>
+          <h3 style={{ margin: '0 0 10px 0', fontSize: '1.5rem' }}>{perfil.nombre || 'Usuario'}</h3>
+          <p style={{ color: 'var(--text-secondary)', margin: '0 0 5px 0' }}>{perfil.correo}</p>
+          <div style={{ marginTop: '20px', padding: '15px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', textAlign: 'left' }}>
+            <p style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}><strong>Estado:</strong> Activo</p>
+            <p style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}><strong>Rol:</strong> {getTokenData()?.rol || 'Cliente'}</p>
+            <p style={{ margin: '0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}><strong>Miembro desde:</strong> 2026</p>
+          </div>
+        </div>
+
+        {/* Columna Derecha: Formulario */}
+        <div style={{ flex: '2', minWidth: '300px' }}>
+          <form onSubmit={handleSave} style={{ background: 'var(--card-bg)', padding: '30px', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+            <h4 style={{ marginTop: '0', marginBottom: '20px', fontSize: '1.2rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>Información Personal</h4>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '20px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Nombre Completo</label>
+                <input required type="text" value={perfil.nombre} onChange={e => setPerfil({...perfil, nombre: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', background: 'white', color: 'black' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Teléfono (Celular)</label>
+                <input type="tel" placeholder="Ej: 0999999999" value={perfil.telefono} onChange={e => setPerfil({...perfil, telefono: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', background: 'white', color: 'black' }} />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '20px', marginBottom: '20px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Edad</label>
+                <input type="number" min="18" placeholder="18+" value={perfil.edad} onChange={e => setPerfil({...perfil, edad: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', background: 'white', color: 'black' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>País de Residencia</label>
+                <input type="text" placeholder="Ej: Ecuador" value={perfil.pais} onChange={e => setPerfil({...perfil, pais: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', background: 'white', color: 'black' }} />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '30px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Dirección Completa</label>
+              <input type="text" placeholder="Calle principal, ciudad..." value={perfil.direccion} onChange={e => setPerfil({...perfil, direccion: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none', background: 'white', color: 'black' }} />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '15px' }}>
+              <button type="submit" className="btn-primary" disabled={saving} style={{ padding: '12px 30px', fontSize: '1rem' }}>
+                {saving ? 'Guardando cambios...' : 'Guardar Cambios'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MisReservas = () => {
+  const [reservas, setReservas] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pagandoReserva, setPagandoReserva] = useState<any>(null);
+  const [pagoForm, setPagoForm] = useState({ metodoId: 'MET-001', requiereFactura: false, identificacion: '', nombre: '', direccion: '' });
+  const [metodosPago, setMetodosPago] = useState<any[]>([]);
+  const [procesandoPago, setProcesandoPago] = useState(false);
+  
+  useEffect(() => {
+    fetch('/api/v1/pagos/metodos')
+      .then(r => r.json())
+      .then(data => setMetodosPago(data))
+      .catch(console.error);
+    const user = getTokenData();
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    fetch(`http://localhost:3000/api/v1/reservas/usuario/${user.correo}`)
+      .then(r => r.json())
+      .then(data => {
+        setReservas(data);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div style={{ textAlign: 'center', padding: '50px' }}>Cargando reservas...</div>;
+
+  const rateReserva = async (id: string) => {
+    const calificacion = prompt('Del 1 al 5, ¿cómo calificarías tu estancia?');
+    if (!calificacion || isNaN(Number(calificacion)) || Number(calificacion) < 1 || Number(calificacion) > 5) {
+      alert('Ingresa un número válido del 1 al 5');
+      return;
+    }
+    const comentario = prompt('Deja un breve comentario sobre el sitio:');
+    
+    try {
+      const res = await fetch(`http://localhost:3000/api/v1/reservas/${id}/calificar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ calificacion: Number(calificacion), comentario: comentario || '' })
+      });
+      if (res.ok) {
+        alert('¡Gracias por tu calificación!');
+        setReservas(prev => prev.map(r => r.id === id ? {...r, calificacion: Number(calificacion), comentario} : r));
+      } else {
+        alert('Error al guardar la calificación');
+      }
+    } catch {
+      alert('Error de conexión');
+    }
+  };
+
+  const firmarContrato = async (id: string) => {
+    try {
+      const res = await fetch(`http://localhost:3000/api/v1/reservas/${id}/firmar-contrato`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        alert('¡Contrato firmado exitosamente!');
+        setReservas(prev => prev.map(r => r.id === id ? {...r, contratoFirmado: true} : r));
+      } else {
+        alert('Error al firmar el contrato');
+      }
+    } catch {
+      alert('Error de conexión al firmar');
+    }
+  };
+
+  const cancelarReserva = async (id: string) => {
+    if(!confirm('¿Estás seguro que deseas cancelar esta reserva? Esta acción no se puede deshacer.')) return;
+    try {
+      const res = await fetch(`http://localhost:3000/api/v1/reservas/${id}/cancelar`, { method: 'POST' });
+      if (res.ok) {
+        alert('Reserva cancelada correctamente.');
+        setReservas(prev => prev.map(r => r.id === id ? {...r, estado: 'Cancelada'} : r));
+      } else {
+        alert('Error al cancelar la reserva');
+      }
+    } catch {
+      alert('Error de conexión al cancelar');
+    }
+  };
+
+  const realizarPago = async (e: any) => {
+    e.preventDefault();
+    setProcesandoPago(true);
+    try {
+      const res = await fetch('http://localhost:3000/api/v1/pagos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reservaId: pagandoReserva.id,
+          metodoPagoId: pagoForm.metodoId,
+          monto: pagandoReserva.totalPagar,
+          requiereFactura: pagoForm.requiereFactura,
+          factura: pagoForm.requiereFactura ? { identificacion: pagoForm.identificacion, nombre: pagoForm.nombre, direccion: pagoForm.direccion } : null
+        })
+      });
+      if (res.ok) {
+        alert('Pago procesado correctamente.');
+        setReservas(prev => prev.map(r => r.id === pagandoReserva.id ? {...r, estado: 'Confirmada', pagoCompletado: true} : r));
+        setPagandoReserva(null);
+      } else {
+        alert('Error al procesar el pago.');
+      }
+    } catch {
+      alert('Error de conexión');
+    } finally {
+      setProcesandoPago(false);
+    }
+  };
+
+  if (loading) return <div style={{textAlign:'center', padding:'50px'}}>Cargando reservas...</div>;
+  if (!getTokenData()) return <div style={{textAlign:'center', padding:'50px', color: 'var(--text-secondary)'}}>Inicia sesión para ver tus reservas.</div>;
+  if (reservas.length === 0) return <div style={{textAlign:'center', padding:'50px', color: 'var(--text-secondary)'}}>No tienes reservas en tu historial aún.</div>;
+
+  return (
+    <div style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'left', animation: 'fadeIn 0.3s' }}>
+      <h2 style={{ marginBottom: '20px', fontSize: '2rem' }}>Historial de Reservas</h2>
+      {reservas.map(res => {
+        const canRate = new Date(res.fechaFin) < new Date() && !res.calificacion;
+        return (
+          <div key={res.id} style={{ padding: '24px', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.4rem' }}>{res.alojamiento?.nombre || 'Alojamiento Eliminado'}</h3>
+              <span style={{ 
+                padding: '4px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 'bold',
+                background: res.estado === 'Cancelada' ? 'rgba(239, 68, 68, 0.1)' : res.estado === 'Confirmada' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                color: res.estado === 'Cancelada' ? '#EF4444' : res.estado === 'Confirmada' ? '#10B981' : '#F59E0B'
+              }}>
+                {res.estado}
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '15px' }}>
+              <p style={{ color: 'var(--text-secondary)' }}><strong>Llegada:</strong> <br/>{res.fechaInicio}</p>
+              <p style={{ color: 'var(--text-secondary)' }}><strong>Salida:</strong> <br/>{res.fechaFin}</p>
+            </div>
+            <p style={{ fontWeight: 'bold', marginBottom: '20px', fontSize: '1.2rem', color: 'var(--accent-color)' }}>Total pagado: ${res.totalPagar}</p>
+            
+            {res.calificacion ? (
+              <div style={{ background: 'rgba(212, 175, 55, 0.05)', padding: '16px', borderRadius: '8px', border: '1px dashed var(--accent-color)', marginBottom: '15px' }}>
+                <p style={{ marginBottom: '5px' }}><strong>Tu calificación:</strong> <Star size={16} fill="var(--accent-color)" color="var(--accent-color)" style={{ display:'inline', marginBottom:'-2px' }}/> {res.calificacion} / 5</p>
+                <p style={{ fontStyle: 'italic', color: 'var(--text-secondary)' }}>"{res.comentario}"</p>
+              </div>
+            ) : canRate ? (
+              <div style={{ marginBottom: '15px' }}>
+                <button className="btn-primary" onClick={() => rateReserva(res.id)} style={{ padding: '8px 20px' }}>Calificar sitio</button>
+              </div>
+            ) : (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '15px' }}><Info size={16} /> Podrás calificar después de tu fecha de salida.</p>
+            )}
+
+            {/* Contrato y Políticas */}
+            <div style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '15px', borderRadius: '8px', borderLeft: '4px solid var(--accent-color)' }}>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '1.1rem' }}>Política de Cancelación</h4>
+              <p style={{ margin: '0 0 15px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                {res.politicaCancelacion || 'Cancelación gratuita hasta 24 horas antes del check-in.'}
+              </p>
+              
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '1.1rem' }}>Contrato de Arrendamiento</h4>
+              {res.contratoTerminos ? (
+                <>
+                  <p style={{ margin: '0 0 10px 0', fontSize: '0.85rem', color: '#999', whiteSpace: 'pre-wrap', maxHeight: '60px', overflowY: 'auto', background: '#111', padding: '10px', borderRadius: '6px' }}>
+                    {res.contratoTerminos}
+                  </p>
+                  {res.contratoFirmado ? (
+                    <p style={{ color: '#10B981', fontWeight: 'bold', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                      Contrato firmado digitalmente
+                    </p>
+                  ) : (
+                    <button className="btn-secondary" onClick={() => firmarContrato(res.id)} style={{ padding: '6px 16px', fontSize: '0.9rem' }}>
+                      Firmar Contrato
+                    </button>
+                  )}
+                </>
+              ) : (
+                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>No hay contrato generado para esta reserva.</p>
+              )}
+
+              {/* Botón de Pagar */}
+              {res.estado === 'Pendiente' && res.contratoFirmado && !res.pagoCompletado && (
+                <div style={{ marginTop: '15px' }}>
+                  <button className="btn-primary" onClick={() => setPagandoReserva(res)} style={{ width: '100%', padding: '10px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
+                    <CreditCard size={18} /> Pagar Reserva (${res.totalPagar})
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Acciones de Cancelación */}
+            {res.estado !== 'Cancelada' && (
+              <div style={{ marginTop: '20px', textAlign: 'right' }}>
+                <button 
+                  onClick={() => cancelarReserva(res.id)} 
+                  style={{ background: 'transparent', border: '1px solid #EF4444', color: '#EF4444', padding: '8px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem' }}
+                >
+                  Cancelar Reserva
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Modal de Pago */}
+      <AnimatePresence>
+        {pagandoReserva && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="modal-overlay" style={{ zIndex: 10000 }}>
+            <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="modal-content glass-panel" style={{ maxWidth: '500px', width: '90%' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h3 style={{ margin: 0, fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <CreditCard color="var(--accent-color)" /> Pasarela de Pago
+                </h3>
+                <button onClick={() => setPagandoReserva(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><X size={24} /></button>
+              </div>
+
+              <form onSubmit={realizarPago}>
+                <div style={{ background: 'rgba(212, 175, 55, 0.05)', padding: '15px', borderRadius: '8px', border: '1px solid var(--accent-color)', marginBottom: '20px' }}>
+                  <p style={{ margin: '0 0 5px 0', color: 'var(--text-secondary)' }}>A pagar por la reserva:</p>
+                  <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>${pagandoReserva.totalPagar}</p>
+                </div>
+
+                <div className="form-group">
+                  <label>Método de Pago</label>
+                  <select 
+                    value={pagoForm.metodoId} 
+                    onChange={e => setPagoForm({...pagoForm, metodoId: e.target.value})}
+                    style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }}
+                  >
+                    {metodosPago.map(m => (
+                      <option key={m.id} value={m.id}>{m.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Simulador de Tarjeta si eligen tarjeta (MET-001 o MET-002) */}
+                {(pagoForm.metodoId === 'MET-001' || pagoForm.metodoId === 'MET-002') && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Número de Tarjeta</label>
+                      <input type="text" placeholder="0000 0000 0000 0000" maxLength={19} required style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Expiración</label>
+                      <input type="text" placeholder="MM/YY" maxLength={5} required style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>CVV</label>
+                      <input type="text" placeholder="123" maxLength={4} required style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={pagoForm.requiereFactura} onChange={e => setPagoForm({...pagoForm, requiereFactura: e.target.checked})} style={{ width: '18px', height: '18px', accentColor: 'var(--accent-color)' }} />
+                    <span>Requiero Factura Electrónica con Datos Personales</span>
+                  </label>
+                </div>
+
+                <AnimatePresence>
+                  {pagoForm.requiereFactura && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden' }}>
+                      <div className="form-group">
+                        <label>RUC / Cédula de Identidad</label>
+                        <input type="text" value={pagoForm.identificacion} onChange={e => setPagoForm({...pagoForm, identificacion: e.target.value})} required style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
+                      </div>
+                      <div className="form-group">
+                        <label>Nombre / Razón Social</label>
+                        <input type="text" value={pagoForm.nombre} onChange={e => setPagoForm({...pagoForm, nombre: e.target.value})} required style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: '20px' }}>
+                        <label>Dirección (Opcional)</label>
+                        <input type="text" value={pagoForm.direccion} onChange={e => setPagoForm({...pagoForm, direccion: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <button type="submit" disabled={procesandoPago} className="btn-primary" style={{ width: '100%', padding: '15px', fontSize: '1.1rem', marginTop: '10px' }}>
+                  {procesandoPago ? 'Procesando pago seguro...' : 'Pagar Ahora'}
+                </button>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 const LandingPage = () => {
   const [activeTab, setActiveTab] = useState('todos');
   const [selectedHotel, setSelectedHotel] = useState<any>(null);
@@ -118,6 +552,12 @@ const LandingPage = () => {
   const [todosLosItems, setTodosLosItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Estados para Modal de Reserva
+  const [bookingItem, setBookingItem] = useState<any>(null);
+  const [bookingForm, setBookingForm] = useState({ nombreCliente: '', emailCliente: '', fechaInicio: '', fechaFin: '', numeroPersonas: 1 });
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [toast, setToast] = useState<{message: string, type: string} | null>(null);
+
   // Obtener datos del backend al cargar la página
   useEffect(() => {
     fetch('/api/v1/admin/alojamientos')
@@ -133,15 +573,19 @@ const LandingPage = () => {
           subtype: 'Hotel', // Valor por defecto
           description: item.descripcion || `Alojamiento con ${item.habitaciones} habitaciones.`,
           amenities: item.tienePiscina ? ['Piscina', 'Wi-Fi'] : ['Wi-Fi'],
+          estado: item.estado || 'Activo',
+          habitaciones_disponibles: item.habitaciones_disponibles,
           habitaciones: [
             {
               id: item.id + '-hab',
+              alojamientoId: item.id,
               title: 'Habitación Estándar',
               price: item.precioPorNoche,
               capacity: Number(item.capacidadAdultos) + Number(item.capacidadNinos),
               img: item.imagenUrl || '/room.jpg',
               type: 'habitacion',
-              hotelName: item.nombre
+              hotelName: item.nombre,
+              estado: item.estado || 'Activo'
             }
           ]
         })) : [];
@@ -158,6 +602,8 @@ const LandingPage = () => {
         setLoading(false);
       });
   }, []);
+
+  if (loading) return <div style={{ textAlign: 'center', padding: '50px', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Cargando datos...</div>;
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
@@ -196,7 +642,16 @@ const LandingPage = () => {
       >
         <div className="card-img-container" style={{ position: 'relative' }}>
           <ImageCarousel images={item.images || [item.img]} title={item.title} />
-          <div style={{ position: 'absolute', top: '15px', left: '15px', background: 'var(--nav-bg)', backdropFilter: 'blur(5px)', padding: '4px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+          
+          {(isAlojamiento ? (item.habitaciones_disponibles === 0 || item.estado !== 'Activo') : item.estado !== 'Activo') && (
+            <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10 }}>
+              <span style={{ background: '#EF4444', color: 'white', padding: '8px 24px', borderRadius: '4px', fontSize: '1.5rem', fontWeight: 'bold', letterSpacing: '2px', transform: 'rotate(-15deg)', border: '2px solid white' }}>
+                {item.estado === 'Inactivo' ? 'INACTIVO' : 'LLENO'}
+              </span>
+            </div>
+          )}
+
+          <div style={{ position: 'absolute', top: '15px', left: '15px', background: 'var(--nav-bg)', backdropFilter: 'blur(5px)', padding: '4px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold', zIndex: 11 }}>
             {isAlojamiento ? item.subtype : 'Habitación'}
           </div>
         </div>
@@ -230,8 +685,23 @@ const LandingPage = () => {
                     <span style={{ fontWeight: '700', fontSize: '1.4rem' }}>${item.price}</span>
                     <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>/noche</span>
                  </div>
-                 <button className="btn-primary" style={{ padding: '8px 20px', fontSize: '0.9rem' }} onClick={() => alert(`Iniciando reserva para ${item.title}...`)}>
-                   Reservar
+                  <button 
+                    className="btn-primary" 
+                    style={{ padding: '8px 20px', fontSize: '0.9rem', opacity: item.estado !== 'Activo' ? 0.5 : 1, cursor: item.estado !== 'Activo' ? 'not-allowed' : 'pointer' }} 
+                    disabled={item.estado !== 'Activo'}
+                    onClick={(e) => { 
+                   e.stopPropagation(); 
+                   if (item.estado !== 'Activo') return;
+                   const user = getTokenData();
+                   if (!user) {
+                     setToast({ message: 'Debe iniciar sesión primero para poder reservar.', type: 'error' });
+                     setTimeout(() => window.location.href = '/login', 2500);
+                     return;
+                   }
+                   setBookingItem(item); 
+                   setBookingForm(prev => ({...prev, nombreCliente: user.nombre || '', emailCliente: user.correo || ''}));
+                 }}>
+                   {item.estado !== 'Activo' ? 'No Disponible' : 'Reservar'}
                  </button>
                </>
             )}
@@ -256,6 +726,7 @@ const LandingPage = () => {
 
   return (
     <div className="animate-in" style={{ textAlign: 'center', marginTop: '5vh', paddingBottom: '40px' }}>
+      {toast && <ToastNotification message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
       {!selectedHotel && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -279,6 +750,16 @@ const LandingPage = () => {
             <button className={`tab-btn ${activeTab === 'buscar' ? 'active' : ''}`} onClick={() => handleTabChange('buscar')} style={{ borderColor: 'var(--accent-color)' }}>
               <Search size={18} style={{ display: 'inline', marginBottom: '-4px', marginRight: '6px' }}/> Búsqueda
             </button>
+            {getTokenData() && (
+              <>
+                <button className={`tab-btn ${activeTab === 'mis-reservas' ? 'active' : ''}`} onClick={() => handleTabChange('mis-reservas')} style={{ marginLeft: '10px' }}>
+                  Mis Reservas
+                </button>
+                <button className={`tab-btn ${activeTab === 'mi-perfil' ? 'active' : ''}`} onClick={() => handleTabChange('mi-perfil')}>
+                  <User size={18} style={{ display: 'inline', marginBottom: '-4px', marginRight: '6px' }}/> Mi Perfil
+                </button>
+              </>
+            )}
           </div>
 
           <AnimatePresence>
@@ -312,7 +793,15 @@ const LandingPage = () => {
         </motion.div>
       )}
 
-      {!selectedHotel && (
+      {!selectedHotel && activeTab === 'mis-reservas' && (
+        <MisReservas />
+      )}
+
+      {!selectedHotel && activeTab === 'mi-perfil' && (
+        <MiPerfil />
+      )}
+
+      {!selectedHotel && activeTab !== 'mis-reservas' && activeTab !== 'mi-perfil' && (
         <motion.div layout style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '30px', textAlign: 'left' }}>
           <AnimatePresence>
             {activeTab === 'buscar' && !hasSearched ? (
@@ -413,6 +902,96 @@ const LandingPage = () => {
         </div>
       )}
 
+      {/* Modal de Reserva */}
+      <AnimatePresence>
+        {bookingItem && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.5)', zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              style={{ background: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '500px', color: 'black', textAlign: 'left' }}
+            >
+              <h2 style={{ marginBottom: '15px', fontSize: '1.5rem', fontWeight: 'bold' }}>Reservar {bookingItem.title}</h2>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '20px' }}>{bookingItem.hotelName} - ${bookingItem.price} por noche</p>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                setBookingLoading(true);
+                
+                const start = new Date(bookingForm.fechaInicio);
+                const end = new Date(bookingForm.fechaFin);
+                if (end <= start) {
+                  alert('La fecha de fin debe ser mayor a la fecha de inicio');
+                  setBookingLoading(false);
+                  return;
+                }
+
+                const diffTime = Math.abs(end.getTime() - start.getTime());
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+                const totalPagar = diffDays * bookingItem.price;
+
+                try {
+                  const res = await fetch('http://localhost:3000/api/v1/reservas', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      ...bookingForm,
+                      totalPagar,
+                      alojamientoId: bookingItem.alojamientoId || bookingItem.id
+                    })
+                  });
+                  
+                  if (res.ok) {
+                    alert('¡Reserva confirmada con éxito! Te contactaremos pronto.');
+                    setBookingItem(null);
+                    setBookingForm({ nombreCliente: '', emailCliente: '', fechaInicio: '', fechaFin: '', numeroPersonas: 1 });
+                  } else {
+                    const errorData = await res.json();
+                    alert(`Error: ${errorData.message || 'No se pudo realizar la reserva'}`);
+                  }
+                } catch {
+                  alert('Error de conexión al servidor.');
+                } finally {
+                  setBookingLoading(false);
+                }
+              }}>
+                <div style={{ display: 'flex', gap: '15px', marginBottom: '12px' }}>
+                  <input required type="text" placeholder="Nombre completo" value={bookingForm.nombreCliente} onChange={e => setBookingForm({...bookingForm, nombreCliente: e.target.value})} style={{ flex: 2, padding: '12px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none' }} />
+                  <input required type="number" min="1" max={bookingItem.capacity || 10} placeholder="Personas" value={bookingForm.numeroPersonas} onChange={e => setBookingForm({...bookingForm, numeroPersonas: Number(e.target.value)})} style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none' }} title="Número de personas" />
+                </div>
+                <input required type="email" placeholder="Correo electrónico" value={bookingForm.emailCliente} onChange={e => setBookingForm({...bookingForm, emailCliente: e.target.value})} style={{ width: '100%', marginBottom: '15px', padding: '12px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none' }} />
+                <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '0.9rem', color: '#666', display: 'block', marginBottom: '6px' }}>Fecha Llegada</label>
+                    <input required type="date" value={bookingForm.fechaInicio} onChange={e => setBookingForm({...bookingForm, fechaInicio: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none' }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ fontSize: '0.9rem', color: '#666', display: 'block', marginBottom: '6px' }}>Fecha Salida</label>
+                    <input required type="date" value={bookingForm.fechaFin} onChange={e => setBookingForm({...bookingForm, fechaFin: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', outline: 'none' }} />
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--accent-color)' }}>
+                    Total aprox: ${bookingForm.fechaInicio && bookingForm.fechaFin && new Date(bookingForm.fechaFin) > new Date(bookingForm.fechaInicio) ? Math.ceil(Math.abs(new Date(bookingForm.fechaFin).getTime() - new Date(bookingForm.fechaInicio).getTime()) / (1000 * 60 * 60 * 24)) * bookingItem.price : bookingItem.price}
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button type="button" className="btn-outline" onClick={() => setBookingItem(null)} style={{ padding: '10px 20px', borderRadius: '8px' }}>Cancelar</button>
+                    <button type="submit" className="btn-primary" disabled={bookingLoading} style={{ padding: '10px 20px', borderRadius: '8px' }}>
+                      {bookingLoading ? 'Procesando...' : 'Confirmar'}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 };
@@ -487,15 +1066,16 @@ const Footer = () => (
 
 const LoginPage = () => {
   const [isLogin, setIsLogin] = useState(true);
-  const [formData, setFormData] = useState({ nombre: '', correo: '', contrasena: '' });
+  const [formData, setFormData] = useState({ nombre: '', correo: '', contrasena: '', telefono: '', edad: '' });
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{message: string, type: string} | null>(null);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     const endpoint = isLogin ? '/api/v1/auth/login' : '/api/v1/auth/register';
-    const payload = isLogin ? { correo: formData.correo, contrasena: formData.contrasena } : formData;
+    const payload = isLogin ? { correo: formData.correo, contrasena: formData.contrasena } : { ...formData, edad: formData.edad ? Number(formData.edad) : undefined };
 
     try {
       const response = await fetch(`http://localhost:3000${endpoint}`, {
@@ -509,17 +1089,17 @@ const LoginPage = () => {
       if (response.ok) {
         if (isLogin) {
           localStorage.setItem('token', data.access_token);
-          alert(`¡Bienvenido ${data.usuario.rol}!`);
-          window.location.href = '/'; 
+          setToast({ message: `¡Bienvenido ${data.usuario.rol}!`, type: 'success' });
+          setTimeout(() => { window.location.href = '/'; }, 1000);
         } else {
-          alert('¡Registro exitoso! Ahora puedes iniciar sesión.');
+          setToast({ message: '¡Registro exitoso! Ahora puedes iniciar sesión.', type: 'success' });
           setIsLogin(true);
         }
       } else {
-        alert(`Error: ${data.message || 'Credenciales incorrectas'}`);
+        setToast({ message: `Error: ${data.message || 'Credenciales incorrectas'}`, type: 'error' });
       }
-    } catch (err) {
-      alert('Error de conexión con el servidor.');
+    } catch {
+      setToast({ message: 'Error de conexión con el servidor.', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -586,6 +1166,7 @@ const LoginPage = () => {
         boxShadow: '0 30px 60px -15px rgba(0, 0, 0, 0.7)',
         color: 'white'
       }}>
+        {toast && <ToastNotification message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         {/* Botón de cerrar */}
         <div style={{ position: 'absolute', top: '20px', right: '25px' }}>
           <a href="/" style={{ color: 'white', opacity: 0.6, fontSize: '1.5rem', textDecoration: 'none' }}>&times;</a>
@@ -600,15 +1181,36 @@ const LoginPage = () => {
 
         <form onSubmit={handleSubmit} style={{ textAlign: 'left' }}>
           {!isLogin && (
-            <input
-              type="text"
-              placeholder="Nombre Completo"
-              required
-              className="login-input"
-              style={inputStyle}
-              value={formData.nombre}
-              onChange={(e) => setFormData({...formData, nombre: e.target.value})}
-            />
+            <>
+              <input
+                type="text"
+                placeholder="Nombre Completo"
+                required
+                className="login-input"
+                style={inputStyle}
+                value={formData.nombre}
+                onChange={(e) => setFormData({...formData, nombre: e.target.value})}
+              />
+              <div style={{ display: 'flex', gap: '15px' }}>
+                <input
+                  type="tel"
+                  placeholder="Teléfono (Opcional)"
+                  className="login-input"
+                  style={{...inputStyle, flex: 2}}
+                  value={formData.telefono}
+                  onChange={(e) => setFormData({...formData, telefono: e.target.value})}
+                />
+                <input
+                  type="number"
+                  placeholder="Edad"
+                  className="login-input"
+                  style={{...inputStyle, flex: 1}}
+                  min="18"
+                  value={formData.edad}
+                  onChange={(e) => setFormData({...formData, edad: e.target.value})}
+                />
+              </div>
+            </>
           )}
           <input
             type="email"
@@ -673,6 +1275,9 @@ const AdminDashboard = () => {
   });
   const [saving, setSaving] = useState(false);
   const [adminLogs, setAdminLogs] = useState<any[]>([]);
+  const [stats, setStats] = useState({ total_alojamientos: 0, reservas_activas: 0, ingresos_totales: 0 });
+  const [cancelaciones, setCancelaciones] = useState<any[]>([]);
+  const [toast, setToast] = useState<{message: string, type: string} | null>(null);
 
   // Estado para Gestor de Habitaciones Individuales
   const [roomsModalAlojamiento, setRoomsModalAlojamiento] = useState<any>(null);
@@ -680,6 +1285,30 @@ const AdminDashboard = () => {
   const [loadingRooms, setLoadingRooms] = useState(false);
   const [editingRoom, setEditingRoom] = useState<any>(null);
   const [newRoomImageUrl, setNewRoomImageUrl] = useState('');
+  const [facturas, setFacturas] = useState<any[]>([]);
+  const [todasReservas, setTodasReservas] = useState<any[]>([]);
+  const [activeAdminTab, setActiveAdminTab] = useState('alojamientos');
+
+  const refreshStats = () => {
+    fetch('/api/v1/admin/dashboard-stats')
+      .then(res => res.json())
+      .then(data => {
+        if(data) setStats(data);
+      })
+      .catch(err => console.error(err));
+  };
+
+  const handleAprobarReserva = (id: string) => {
+    fetch(`/api/v1/reservas/${id}/aprobar`, { method: 'POST' })
+      .then(res => res.json())
+      .then(data => {
+        setToast({ message: data.message, type: 'success' });
+        // Recargar datos
+        fetch('/api/v1/reservas/admin/todas').then(r => r.json()).then(setTodasReservas);
+        refreshStats();
+        addLog('Reserva Aprobada', `Se aprobó la reserva ${id}`);
+      });
+  };
 
   useEffect(() => {
     const savedLogs = localStorage.getItem('adminLogs');
@@ -690,6 +1319,29 @@ const AdminDashboard = () => {
     fetch('/api/v1/admin/alojamientos')
       .then(res => res.json())
       .then(data => setAlojamientos(data))
+      .catch(err => console.error(err));
+
+    refreshStats();
+
+    fetch('/api/v1/reservas/admin/cancelaciones')
+      .then(res => res.json())
+      .then(data => {
+        if(Array.isArray(data)) setCancelaciones(data);
+      })
+      .catch(err => console.error(err));
+
+    fetch('/api/v1/admin/facturas')
+      .then(res => res.json())
+      .then(data => {
+        if(Array.isArray(data)) setFacturas(data);
+      })
+      .catch(err => console.error(err));
+
+    fetch('/api/v1/reservas/admin/todas')
+      .then(res => res.json())
+      .then(data => {
+        if(Array.isArray(data)) setTodasReservas(data);
+      })
       .catch(err => console.error(err));
   }, []);
 
@@ -708,8 +1360,8 @@ const AdminDashboard = () => {
       const response = await fetch(`http://localhost:3000/api/v1/admin/alojamientos/${alojamiento.id}/habitaciones`);
       const data = await response.json();
       setRoomsList(data);
-    } catch (e) {
-      alert('Error cargando habitaciones.');
+    } catch {
+      setToast({ message: 'Error cargando habitaciones', type: 'error' });
     } finally {
       setLoadingRooms(false);
     }
@@ -741,7 +1393,7 @@ const AdminDashboard = () => {
           setEditingRoom(null);
         }
       }
-    } catch(e) {
+    } catch {
       alert('Error guardando habitación.');
     }
   };
@@ -787,12 +1439,13 @@ const AdminDashboard = () => {
         if (response.ok) {
           setAlojamientos(alojamientos.filter(al => al.id !== id));
           addLog('Eliminación', `Se eliminó permanentemente el alojamiento: ${nombre}`);
-          alert('🗑️ Alojamiento eliminado correctamente.');
+          setToast({ message: 'Alojamiento eliminado correctamente', type: 'success' });
+          refreshStats();
         } else {
-          alert('Error al intentar eliminar.');
+          setToast({ message: 'Error al intentar eliminar', type: 'error' });
         }
-      } catch (e) {
-        alert('Error de conexión.');
+      } catch {
+        setToast({ message: 'Error de conexión', type: 'error' });
       }
     }
   };
@@ -828,7 +1481,7 @@ const AdminDashboard = () => {
           alert('✏️ Datos actualizados en todas las tablas correctamente.');
         }
       }
-    } catch (e) {
+    } catch {
       alert('Error de conexión con el backend.');
     } finally {
       setSaving(false);
@@ -852,33 +1505,66 @@ const AdminDashboard = () => {
           <h1 style={{ fontSize: '2.5rem', marginBottom: '10px' }}>Panel de Administración</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Gestiona los alojamientos, reservas y usuarios de LuxeStays.</p>
         </div>
-        <div style={{ background: 'var(--accent-color)', color: 'white', padding: '15px 25px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '15px', boxShadow: '0 10px 20px -5px rgba(212, 175, 55, 0.4)' }}>
-           <img src="https://ui-avatars.com/api/?name=Admin&background=fff&color=d4af37&bold=true" style={{ borderRadius: '50%', width: '50px' }} alt="Admin" />
-           <div>
-             <h3 style={{ margin: 0, fontSize: '1.1rem' }}>{user.nombre}</h3>
-             <p style={{ margin: 0, opacity: 0.9, fontSize: '0.85rem' }}>Administrador Principal</p>
-           </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <a href="http://localhost:3000/api/docs" target="_blank" rel="noreferrer" className="btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', textDecoration: 'none' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+            API Swagger
+          </a>
+          <div style={{ background: 'var(--accent-color)', color: 'white', padding: '15px 25px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '15px', boxShadow: '0 10px 20px -5px rgba(212, 175, 55, 0.4)' }}>
+             <img src="https://ui-avatars.com/api/?name=Admin&background=fff&color=d4af37&bold=true" style={{ borderRadius: '50%', width: '50px' }} alt="Admin" />
+             <div>
+               <h3 style={{ margin: 0, fontSize: '1.1rem' }}>{user.nombre}</h3>
+               <p style={{ margin: 0, opacity: 0.9, fontSize: '0.85rem' }}>Administrador Principal</p>
+             </div>
+          </div>
         </div>
       </div>
 
-      {/* Tarjetas de Estadísticas */}
+      {/* Tarjetas de Estadísticas desde la Base de Datos */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '40px' }}>
          <div className="card" style={{ padding: '25px', borderLeft: '4px solid var(--accent-color)' }}>
             <h3 style={{ color: 'var(--text-secondary)', fontSize: '1rem', marginBottom: '10px' }}>Alojamientos Activos</h3>
-            <p style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>{alojamientos.length}</p>
+            <p style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>{stats.total_alojamientos}</p>
          </div>
          <div className="card" style={{ padding: '25px', borderLeft: '4px solid #3B82F6' }}>
-            <h3 style={{ color: 'var(--text-secondary)', fontSize: '1rem', marginBottom: '10px' }}>Reservas Hoy</h3>
-            <p style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>12</p>
+            <h3 style={{ color: 'var(--text-secondary)', fontSize: '1rem', marginBottom: '10px' }}>Reservas Activas</h3>
+            <p style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>{stats.reservas_activas}</p>
          </div>
          <div className="card" style={{ padding: '25px', borderLeft: '4px solid #10B981' }}>
             <h3 style={{ color: 'var(--text-secondary)', fontSize: '1rem', marginBottom: '10px' }}>Ingresos Mensuales</h3>
-            <p style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>$8,450</p>
+            <p style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>${Number(stats.ingresos_totales).toLocaleString()}</p>
          </div>
       </div>
 
+      {/* Pestañas de Navegación Admin */}
+      <div style={{ display: 'flex', gap: '15px', marginBottom: '30px', borderBottom: '2px solid var(--border-color)', paddingBottom: '10px', overflowX: 'auto' }}>
+        {[
+          { id: 'alojamientos', label: '🏨 Alojamientos' },
+          { id: 'reservas', label: '📅 Reservas' },
+          { id: 'facturacion', label: '💳 Facturación' },
+          { id: 'cancelaciones', label: '⚠️ Cancelaciones' },
+          { id: 'actividad', label: '🕒 Actividad' }
+        ].map(tab => (
+          <button 
+            key={tab.id}
+            onClick={() => setActiveAdminTab(tab.id)}
+            style={{ 
+              background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.05rem', fontWeight: activeAdminTab === tab.id ? 'bold' : '500', 
+              color: activeAdminTab === tab.id ? 'var(--accent-color)' : 'var(--text-secondary)',
+              padding: '10px 15px', position: 'relative', whiteSpace: 'nowrap', transition: 'color 0.2s'
+            }}
+          >
+            {tab.label}
+            {activeAdminTab === tab.id && (
+              <motion.div layoutId="adminTabIndicator" style={{ position: 'absolute', bottom: '-12px', left: 0, right: 0, height: '3px', background: 'var(--accent-color)', borderRadius: '3px 3px 0 0' }} />
+            )}
+          </button>
+        ))}
+      </div>
+
       {/* Tabla de Alojamientos */}
-      <div className="card" style={{ padding: '30px' }}>
+      {activeAdminTab === 'alojamientos' && (
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card" style={{ padding: '30px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
           <h2 style={{ fontSize: '1.5rem' }}>Gestión de Alojamientos</h2>
           <button className="btn-primary" onClick={handleCreateClick}>
@@ -894,6 +1580,7 @@ const AdminDashboard = () => {
                 <th style={{ padding: '15px 10px' }}>Nombre</th>
                 <th style={{ padding: '15px 10px' }}>Destino</th>
                 <th style={{ padding: '15px 10px' }}>Propietario</th>
+                <th style={{ padding: '15px 10px' }}>Estado</th>
                 <th style={{ padding: '15px 10px', textAlign: 'center' }}>Acciones</th>
               </tr>
             </thead>
@@ -909,6 +1596,30 @@ const AdminDashboard = () => {
                     <td style={{ padding: '15px 10px', fontWeight: '500' }}>{al.nombre}</td>
                     <td style={{ padding: '15px 10px' }}>{al.destino}</td>
                     <td style={{ padding: '15px 10px' }}>{al.propietario}</td>
+                    <td style={{ padding: '15px 10px' }}>
+                      <select 
+                        value={al.estado || 'Activo'}
+                        onChange={(e) => {
+                          const newEstado = e.target.value;
+                          fetch(`/api/v1/admin/alojamientos/${al.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ estado: newEstado })
+                          }).then(res => {
+                            if(res.ok) {
+                              setAlojamientos(prev => prev.map((a: any) => a.id === al.id ? {...a, estado: newEstado} : a));
+                              setToast({ message: 'Estado del alojamiento actualizado', type: 'success' });
+                              addLog('Actualización', `Alojamiento ${al.nombre} cambió a estado ${newEstado}`);
+                              refreshStats();
+                            } else setToast({ message: 'Error actualizando estado', type: 'error' });
+                          });
+                        }}
+                        style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: al.estado === 'Inactivo' ? '#FEE2E2' : '#D1FAE5', color: al.estado === 'Inactivo' ? '#991B1B' : '#065F46' }}
+                      >
+                        <option value="Activo">Activo</option>
+                        <option value="Inactivo">Inactivo</option>
+                      </select>
+                    </td>
                     <td style={{ padding: '15px 10px', textAlign: 'center' }}>
                       <button onClick={() => handleEditClick(al)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#3B82F6', marginRight: '15px', padding: '5px' }} title="Editar Alojamiento Completo">
                         <Edit2 size={18} />
@@ -926,10 +1637,165 @@ const AdminDashboard = () => {
             </tbody>
           </table>
         </div>
-      </div>
+      </motion.div>
+      )}
+
+      {/* Reporte de Cancelaciones */}
+      {activeAdminTab === 'cancelaciones' && (
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card" style={{ padding: '30px', marginTop: '10px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
+          <h2 style={{ fontSize: '1.5rem', color: '#EF4444' }}>Reporte de Cancelaciones</h2>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', whiteSpace: 'nowrap' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                <th style={{ padding: '15px 10px' }}>Reserva ID</th>
+                <th style={{ padding: '15px 10px' }}>Cliente</th>
+                <th style={{ padding: '15px 10px' }}>Alojamiento</th>
+                <th style={{ padding: '15px 10px' }}>Fechas</th>
+                <th style={{ padding: '15px 10px' }}>Monto Perdido</th>
+                <th style={{ padding: '15px 10px' }}>Política</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cancelaciones.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-secondary)' }}>No hay reservas canceladas.</td>
+                </tr>
+              ) : (
+                cancelaciones.map((c: any) => (
+                  <tr key={c.reservaId} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.2s' }}>
+                    <td style={{ padding: '15px 10px', fontWeight: '600', color: 'var(--text-secondary)' }}>{c.reservaId}</td>
+                    <td style={{ padding: '15px 10px', fontWeight: '500' }}>{c.cliente}</td>
+                    <td style={{ padding: '15px 10px' }}>{c.alojamiento}</td>
+                    <td style={{ padding: '15px 10px' }}>{c.fechaEntrada} a {c.fechaSalida}</td>
+                    <td style={{ padding: '15px 10px', color: '#EF4444', fontWeight: 'bold' }}>${c.precioTotal}</td>
+                    <td style={{ padding: '15px 10px' }}>
+                      <span style={{ fontSize: '0.85rem', padding: '4px 8px', background: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', borderRadius: '4px' }}>
+                        {c.politicaCancelacion}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </motion.div>
+      )}
+
+      {/* Tabla de Facturación y Pagos */}
+      {activeAdminTab === 'facturacion' && (
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card" style={{ padding: '30px', marginTop: '10px', marginBottom: '30px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
+          <h2 style={{ fontSize: '1.5rem', color: '#10B981' }}>Facturación y Pagos</h2>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', whiteSpace: 'nowrap' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                <th style={{ padding: '15px 10px' }}>Factura Nº</th>
+                <th style={{ padding: '15px 10px' }}>Fecha</th>
+                <th style={{ padding: '15px 10px' }}>Cliente</th>
+                <th style={{ padding: '15px 10px' }}>RUC / CI</th>
+                <th style={{ padding: '15px 10px' }}>Reserva</th>
+                <th style={{ padding: '15px 10px' }}>Método</th>
+                <th style={{ padding: '15px 10px' }}>Total Pagado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {facturas.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-secondary)' }}>No hay facturas emitidas aún.</td>
+                </tr>
+              ) : (
+                facturas.map((fac: any) => (
+                  <tr key={fac.id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                    <td style={{ padding: '15px 10px', fontWeight: 'bold' }}>{fac.numeroFactura}</td>
+                    <td style={{ padding: '15px 10px' }}>{new Date(fac.fechaEmision).toLocaleString()}</td>
+                    <td style={{ padding: '15px 10px' }}>{fac.nombreRazonSocial}</td>
+                    <td style={{ padding: '15px 10px' }}>{fac.identificacionCliente}</td>
+                    <td style={{ padding: '15px 10px', color: '#3B82F6', fontWeight: 'bold' }}>{fac.reservaId}</td>
+                    <td style={{ padding: '15px 10px' }}>{fac.metodoPago}</td>
+                    <td style={{ padding: '15px 10px', fontWeight: 'bold', color: '#10B981' }}>${Number(fac.total).toFixed(2)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </motion.div>
+      )}
+
+      {/* Gestión de Todas las Reservas */}
+      {activeAdminTab === 'reservas' && (
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card" style={{ padding: '30px', marginTop: '10px', marginBottom: '30px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
+          <h2 style={{ fontSize: '1.5rem', color: 'var(--accent-color)' }}>Gestión de Reservas</h2>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', whiteSpace: 'nowrap' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                <th style={{ padding: '15px 10px' }}>ID Reserva</th>
+                <th style={{ padding: '15px 10px' }}>Cliente</th>
+                <th style={{ padding: '15px 10px' }}>Alojamiento</th>
+                <th style={{ padding: '15px 10px' }}>Fechas</th>
+                <th style={{ padding: '15px 10px' }}>Total</th>
+                <th style={{ padding: '15px 10px' }}>Estado</th>
+                <th style={{ padding: '15px 10px' }}>Pago/Contrato</th>
+                <th style={{ padding: '15px 10px', textAlign: 'center' }}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {todasReservas.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-secondary)' }}>No hay reservas registradas aún.</td>
+                </tr>
+              ) : (
+                todasReservas.map((res: any) => (
+                  <tr key={res.id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                    <td style={{ padding: '15px 10px', fontWeight: 'bold', color: 'var(--text-secondary)' }}>{res.id}</td>
+                    <td style={{ padding: '15px 10px' }}>{res.cliente || 'Desconocido'}</td>
+                    <td style={{ padding: '15px 10px', fontWeight: '500' }}>{res.alojamiento}</td>
+                    <td style={{ padding: '15px 10px' }}>{new Date(res.fechaInicio).toLocaleDateString()} a {new Date(res.fechaFin).toLocaleDateString()}</td>
+                    <td style={{ padding: '15px 10px', fontWeight: 'bold', color: '#10B981' }}>${Number(res.totalPagar).toFixed(2)}</td>
+                    <td style={{ padding: '15px 10px' }}>
+                      <span style={{ padding: '5px 10px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 'bold', 
+                        background: res.estado === 'Confirmada' ? 'rgba(16, 185, 129, 0.1)' : res.estado === 'Cancelada' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                        color: res.estado === 'Confirmada' ? '#10B981' : res.estado === 'Cancelada' ? '#EF4444' : '#F59E0B'
+                      }}>
+                        {res.estado}
+                      </span>
+                    </td>
+                    <td style={{ padding: '15px 10px', fontSize: '0.9rem' }}>
+                      {res.pagoCompletado ? <span style={{ color: '#10B981', fontWeight: 'bold' }}>✓ Pagado</span> : res.contratoFirmado ? <span style={{ color: '#F59E0B', fontWeight: 'bold' }}>✎ Contrato Firmado</span> : <span style={{ color: '#EF4444', fontWeight: 'bold' }}>⏳ Pendiente</span>}
+                    </td>
+                    <td style={{ padding: '15px 10px', textAlign: 'center' }}>
+                      {res.estado !== 'Confirmada' && res.estado !== 'Cancelada' && (
+                        <button 
+                          onClick={() => handleAprobarReserva(res.id)}
+                          style={{
+                            background: '#10B981', color: 'white', border: 'none', borderRadius: '6px',
+                            padding: '6px 12px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold'
+                          }}>
+                          Aprobar
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </motion.div>
+      )}
 
       {/* Historial de Actividad */}
-      <div className="card" style={{ padding: '30px', marginTop: '30px' }}>
+      {activeAdminTab === 'actividad' && (
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card" style={{ padding: '30px', marginTop: '10px' }}>
         <h2 style={{ fontSize: '1.5rem', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
           🕒 Registro de Cambios Recientes
         </h2>
@@ -948,7 +1814,8 @@ const AdminDashboard = () => {
             ))}
           </ul>
         )}
-      </div>
+      </motion.div>
+      )}
 
       {/* MODAL DE EDICIÓN COMPLETO (Glassmorphism) */}
       <AnimatePresence>
@@ -1100,6 +1967,7 @@ const AdminDashboard = () => {
                           <th style={{ padding: '10px' }}>Capacidad</th>
                           <th style={{ padding: '10px' }}>Precio</th>
                           <th style={{ padding: '10px' }}>Stock</th>
+                          <th style={{ padding: '10px' }}>Estado</th>
                           <th style={{ padding: '10px', textAlign: 'center' }}>Acciones</th>
                         </tr>
                       </thead>
@@ -1111,6 +1979,30 @@ const AdminDashboard = () => {
                             <td style={{ padding: '15px 10px' }}>{room.capacidadAdultos} Adul. / {room.capacidadNinos} Niños</td>
                             <td style={{ padding: '15px 10px', fontWeight: 'bold' }}>${Number(room.precioPorNoche).toFixed(2)}</td>
                             <td style={{ padding: '15px 10px' }}>{room.cantidadDisponible} dispo.</td>
+                            <td style={{ padding: '15px 10px' }}>
+                              <select 
+                                value={room.estado || 'Activo'}
+                                onChange={(e) => {
+                                  const newEstado = e.target.value;
+                                  fetch(`/api/v1/admin/habitaciones/${room.id}`, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ estado: newEstado })
+                                  }).then(res => {
+                                    if(res.ok) {
+                                      setRoomsList(prev => prev.map((r: any) => r.id === room.id ? {...r, estado: newEstado} : r));
+                                      setToast({ message: 'Estado de habitación actualizado', type: 'success' });
+                                      addLog('Actualización', `Habitación ${room.nombre} cambió a estado ${newEstado}`);
+                                    } else setToast({ message: 'Error actualizando estado', type: 'error' });
+                                  });
+                                }}
+                                style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: room.estado === 'Inactivo' ? '#FEE2E2' : room.estado === 'Reservado' ? '#FEF3C7' : '#D1FAE5', color: room.estado === 'Inactivo' ? '#991B1B' : room.estado === 'Reservado' ? '#92400E' : '#065F46' }}
+                              >
+                                <option value="Activo">Activo</option>
+                                <option value="Inactivo">Inactivo</option>
+                                <option value="Reservado">Reservado</option>
+                              </select>
+                            </td>
                             <td style={{ padding: '15px 10px', textAlign: 'center' }}>
                               <button onClick={() => setEditingRoom({...room})} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#3B82F6', marginRight: '15px' }}><Edit2 size={18} /></button>
                               <button onClick={() => handleDeleteRoom(room.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#EF4444' }}><Trash2 size={18} /></button>
@@ -1214,6 +2106,8 @@ const AdminDashboard = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {toast && <ToastNotification message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 };

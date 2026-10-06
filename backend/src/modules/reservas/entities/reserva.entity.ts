@@ -19,6 +19,9 @@ export class Reserva {
   @Column({ type: 'date' })
   fechaFin: Date;
 
+  @Column({ type: 'int', default: 1 })
+  numeroPersonas: number;
+
   @Column('numeric', {
     precision: 10,
     scale: 2,
@@ -28,6 +31,12 @@ export class Reserva {
 
   @Column({ type: 'varchar', length: 50, default: 'PENDIENTE' })
   estado: string;
+
+  @Column({ type: 'int', nullable: true })
+  calificacion: number;
+
+  @Column({ type: 'text', nullable: true })
+  comentario: string;
 
   // Relación Muchos a Uno con Alojamiento
   @ManyToOne(() => Alojamiento)

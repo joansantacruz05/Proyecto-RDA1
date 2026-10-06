@@ -19,12 +19,17 @@ export class CrearReservaDto {
   @IsDateString()
   fechaFin: string;
 
+  @ApiProperty({ example: 2, description: 'Número de personas' })
+  @IsNumber()
+  @IsPositive()
+  numeroPersonas: number;
+
   @ApiProperty({ example: 180.50, description: 'Total a pagar' })
   @IsNumber()
   @IsPositive()
   totalPagar: number;
 
   @ApiProperty({ example: '123e4567-e89b-12d3-a456-426614174000', description: 'ID del alojamiento a reservar' })
-  @IsUUID()
+  @IsString()
   alojamientoId: string;
 }
