@@ -248,3 +248,26 @@ a:hover {
   margin-top: 15px;
   margin-bottom: 30px;
 }
+
+/* Estilos para imprimir facturas */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .printable-invoice, .printable-invoice * {
+    visibility: visible;
+  }
+  .printable-invoice {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    border: none;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

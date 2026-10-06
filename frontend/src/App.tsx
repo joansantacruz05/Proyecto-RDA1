@@ -244,10 +244,103 @@ const MiPerfil = () => {
   );
 };
 
+const FacturaModal = ({ reserva, onClose }: { reserva: any, onClose: () => void }) => {
+  const usuario = getTokenData();
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+      <div className="printable-invoice" style={{ background: 'white', color: 'black', width: '100%', maxWidth: '700px', borderRadius: '8px', padding: '40px', maxHeight: '90vh', overflowY: 'auto', position: 'relative', border: '1px solid #e5e7eb' }}>
+        
+        {/* Cabecera de la factura */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #D4AF37', paddingBottom: '20px', marginBottom: '20px' }}>
+          <div>
+            <h1 style={{ color: '#D4AF37', margin: 0, fontSize: '2.5rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Building size={32} /> RDA1
+            </h1>
+            <p style={{ margin: '5px 0', color: '#6B7280' }}>Plataforma de Alojamientos Premium</p>
+            <p style={{ margin: '0', color: '#6B7280' }}>RUC: 0999999999001</p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <h2 style={{ margin: 0, color: '#111827', fontSize: '1.8rem' }}>FACTURA ELECTRÓNICA</h2>
+            <p style={{ margin: '5px 0', color: '#6B7280', fontWeight: 'bold' }}>Nº FAC-{reserva.id.slice(-6).toUpperCase()}</p>
+            <p style={{ margin: '0', color: '#6B7280' }}>Fecha de emisión: {new Date().toLocaleDateString()}</p>
+          </div>
+        </div>
+
+        {/* Datos del Cliente */}
+        <div style={{ background: '#f9fafb', padding: '20px', borderRadius: '8px', marginBottom: '30px' }}>
+          <h3 style={{ margin: '0 0 10px 0', fontSize: '1.1rem', color: '#111827' }}>Datos del Cliente</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.95rem' }}>
+            <p style={{ margin: 0 }}><strong>Nombre:</strong> {usuario?.nombre || 'Cliente Final'}</p>
+            <p style={{ margin: 0 }}><strong>Email:</strong> {usuario?.correo || 'correo@ejemplo.com'}</p>
+          </div>
+        </div>
+
+        {/* Detalles de la Reserva */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '30px' }}>
+          <thead>
+            <tr style={{ background: '#D4AF37', color: 'white' }}>
+              <th style={{ padding: '12px', textAlign: 'left' }}>Descripción</th>
+              <th style={{ padding: '12px', textAlign: 'center' }}>Fechas</th>
+              <th style={{ padding: '12px', textAlign: 'right' }}>Precio Neto</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+              <td style={{ padding: '15px 12px' }}>
+                <p style={{ margin: 0, fontWeight: 'bold' }}>Servicio de alojamiento</p>
+                <p style={{ margin: '5px 0 0 0', fontSize: '0.85rem', color: '#6B7280' }}>{reserva.alojamiento?.nombre || 'Alojamiento'}</p>
+              </td>
+              <td style={{ padding: '15px 12px', textAlign: 'center' }}>
+                {reserva.fechaInicio}<br/>al<br/>{reserva.fechaFin}
+              </td>
+              <td style={{ padding: '15px 12px', textAlign: 'right' }}>
+                ${(Number(reserva.totalPagar) / 1.15).toFixed(2)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* Totales */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '40px' }}>
+          <div style={{ width: '250px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <span style={{ color: '#6B7280' }}>Subtotal:</span>
+              <span>${(Number(reserva.totalPagar) / 1.15).toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <span style={{ color: '#6B7280' }}>IVA (15%):</span>
+              <span>${(Number(reserva.totalPagar) - (Number(reserva.totalPagar) / 1.15)).toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px solid #D4AF37', paddingTop: '10px', fontWeight: 'bold', fontSize: '1.2rem' }}>
+              <span>Total:</span>
+              <span>${Number(reserva.totalPagar).toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Botones */}
+        <div className="no-print" style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginTop: '20px' }}>
+          <button onClick={handlePrint} className="btn-primary" style={{ padding: '10px 30px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            🖨️ Imprimir Factura
+          </button>
+          <button onClick={onClose} style={{ padding: '10px 30px', background: 'transparent', border: '1px solid #EF4444', color: '#EF4444', borderRadius: '8px', cursor: 'pointer' }}>
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const MisReservas = () => {
   const [reservas, setReservas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [pagandoReserva, setPagandoReserva] = useState<any>(null);
+  const [verFactura, setVerFactura] = useState<any>(null);
   const [toast, setToast] = useState<{message: string, type: string} | null>(null);
   const [pagoForm, setPagoForm] = useState({ metodoId: 'MET-001', requiereFactura: false, identificacion: '', nombre: '', direccion: '' });
   const [metodosPago, setMetodosPago] = useState<any[]>([]);
@@ -369,6 +462,16 @@ const MisReservas = () => {
       <h2 style={{ marginBottom: '20px', fontSize: '2rem' }}>Historial de Reservas</h2>
       {reservas.map(res => {
         const canRate = new Date(res.fechaFin) < new Date() && !res.calificacion;
+        
+        // Regla: Cancelación hasta 24h antes del check-in. Si ya pasaron o faltan menos, no se puede cancelar.
+        const checkInDate = new Date(res.fechaInicio).getTime();
+        const now = new Date().getTime();
+        const hoursUntilCheckIn = (checkInDate - now) / (1000 * 60 * 60);
+        const canCancel = hoursUntilCheckIn > 24 && res.estado !== 'Cancelada';
+        
+        // Mostrar factura siempre que esté Confirmada (independientemente del tiempo de cancelación)
+        const showInvoice = res.estado === 'Confirmada';
+
         return (
           <div key={res.id} style={{ padding: '24px', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', marginBottom: '20px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
@@ -438,17 +541,25 @@ const MisReservas = () => {
               )}
             </div>
 
-            {/* Acciones de Cancelación */}
-            {res.estado !== 'Cancelada' && (
-              <div style={{ marginTop: '20px', textAlign: 'right' }}>
+            {/* Acciones de Cancelación y Factura */}
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '15px' }}>
+              {showInvoice && (
+                <button 
+                  onClick={() => setVerFactura(res)}
+                  style={{ background: '#D4AF37', border: 'none', color: 'white', padding: '8px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 'bold' }}
+                >
+                  📄 Ver Factura
+                </button>
+              )}
+              {canCancel && (
                 <button 
                   onClick={() => cancelarReserva(res.id)} 
                   style={{ background: 'transparent', border: '1px solid #EF4444', color: '#EF4444', padding: '8px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem' }}
                 >
                   Cancelar Reserva
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         );
       })}
@@ -536,6 +647,8 @@ const MisReservas = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {verFactura && <FacturaModal reserva={verFactura} onClose={() => setVerFactura(null)} />}
     </div>
   );
 };
