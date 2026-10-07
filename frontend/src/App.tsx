@@ -411,7 +411,7 @@ const MisReservas = () => {
     fetch(`${API_URL}/api/v1/reservas/usuario/${user.correo}`)
       .then(r => r.json())
       .then(data => {
-        setReservas(data);
+        setReservas(Array.isArray(data) ? data : []);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -1594,7 +1594,7 @@ const AdminDashboard = () => {
       .then(data => {
         setToast({ message: data.message, type: 'success' });
         // Recargar datos
-        fetch(`${API_URL}/api/v1/reservas/admin/todas`).then(r => r.json()).then(setTodasReservas);
+        fetch(`${API_URL}/api/v1/reservas/admin/todas`).then(r => r.json()).then(d => setTodasReservas(Array.isArray(d) ? d : []));
         refreshStats();
         addLog('Reserva Aprobada', `Se aprobó la reserva ${id}`);
       });
