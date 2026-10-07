@@ -42,7 +42,7 @@ export class ReservasService {
         UPDATE espacios_rentables 
         SET 
           "cantidadDisponible" = GREATEST("cantidadDisponible" - 1, 0),
-          estado = CASE WHEN "cantidadDisponible" - 1 <= 0 THEN 'Reservado' ELSE estado END
+          estado = 'Reservado'
         WHERE id = $1
       `, [espacioId]);
     }
