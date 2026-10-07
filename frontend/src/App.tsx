@@ -337,6 +337,9 @@ const FacturaModal = ({ reserva, onClose }: { reserva: any, onClose: () => void 
               <td style={{ padding: '15px 12px' }}>
                 <p style={{ margin: 0, fontWeight: 'bold' }}>Servicio de alojamiento</p>
                 <p style={{ margin: '5px 0 0 0', fontSize: '0.85rem', color: '#6B7280' }}>{reserva.alojamiento?.nombre || 'Alojamiento'}</p>
+                {reserva.alojamiento?.destino && (
+                  <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: '#9CA3AF' }}><MapPin size={12} style={{ display: 'inline', marginRight: '4px' }}/>{reserva.alojamiento.destino}</p>
+                )}
               </td>
               <td style={{ padding: '15px 12px', textAlign: 'center' }}>
                 {reserva.fechaInicio}<br/>al<br/>{reserva.fechaFin}
