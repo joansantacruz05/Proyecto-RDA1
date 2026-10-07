@@ -23,9 +23,25 @@ export class AlojamientosService {
 
   async createAdmin(dto: any): Promise<any> {
     const id = `ALO-${Math.floor(Math.random() * 900) + 100}`;
+    let ubicacionId = dto.ubicacionId || 'UBI-001';
+
+    if (!ubicacionId.startsWith('UBI-')) {
+      const ciudadId = `CIU-${Math.floor(Math.random() * 900) + 100}`;
+      await this.alojamientoRepository.query(
+        'INSERT INTO ciudades (id, "paisId", nombre) VALUES ($1, $2, $3)',
+        [ciudadId, 'PAI-001', dto.destino || ubicacionId]
+      );
+      const newUbiId = `UBI-${Math.floor(Math.random() * 900) + 100}`;
+      await this.alojamientoRepository.query(
+        'INSERT INTO ubicaciones (id, "ciudadId", direccion_detallada, latitud, longitud) VALUES ($1, $2, $3, $4, $5)',
+        [newUbiId, ciudadId, dto.destino || ubicacionId, 0, 0]
+      );
+      ubicacionId = newUbiId;
+    }
+
     await this.alojamientoRepository.query(
       'INSERT INTO alojamientos (id, nombre, descripcion, "imagenUrl", "ubicacionId") VALUES ($1, $2, $3, $4, $5)',
-      [id, dto.nombre || 'Nuevo Alojamiento', dto.descripcion || '', dto.imagenUrl || '/villa.jpg', dto.ubicacionId || 'UBI-001']
+      [id, dto.nombre || 'Nuevo Alojamiento', dto.descripcion || '', dto.imagenUrl || '/villa.jpg', ubicacionId]
     );
 
     const habId = `HAB-${Math.floor(Math.random() * 900) + 100}`;
@@ -71,9 +87,25 @@ export class AlojamientosService {
   }
 
   async updateAdmin(id: string, dto: any): Promise<any> {
+    let ubicacionId = dto.ubicacionId;
+
+    if (ubicacionId && !ubicacionId.startsWith('UBI-')) {
+      const ciudadId = `CIU-${Math.floor(Math.random() * 900) + 100}`;
+      await this.alojamientoRepository.query(
+        'INSERT INTO ciudades (id, "paisId", nombre) VALUES ($1, $2, $3)',
+        [ciudadId, 'PAI-001', dto.destino || ubicacionId]
+      );
+      const newUbiId = `UBI-${Math.floor(Math.random() * 900) + 100}`;
+      await this.alojamientoRepository.query(
+        'INSERT INTO ubicaciones (id, "ciudadId", direccion_detallada, latitud, longitud) VALUES ($1, $2, $3, $4, $5)',
+        [newUbiId, ciudadId, dto.destino || ubicacionId, 0, 0]
+      );
+      ubicacionId = newUbiId;
+    }
+
     await this.alojamientoRepository.query(
       'UPDATE alojamientos SET nombre = COALESCE($1, nombre), descripcion = COALESCE($2, descripcion), "imagenUrl" = COALESCE($3, "imagenUrl"), "ubicacionId" = COALESCE($4, "ubicacionId"), estado = COALESCE($5, estado) WHERE id = $6',
-      [dto.nombre, dto.descripcion, dto.imagenUrl, dto.ubicacionId, dto.estado, id]
+      [dto.nombre, dto.descripcion, dto.imagenUrl, ubicacionId, dto.estado, id]
     );
 
     if (dto.estado === 'Inactivo') {

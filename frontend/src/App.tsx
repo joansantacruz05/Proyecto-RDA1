@@ -1560,7 +1560,7 @@ const AdminDashboard = () => {
   const [editingItem, setEditingItem] = useState<any>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [editForm, setEditForm] = useState({
-    nombre: '', descripcion: '', imagenUrl: '', ubicacionId: 'UBI-001',
+    nombre: '', descripcion: '', imagenUrl: '', ubicacionId: '',
     precioPorNoche: 0, capacidadAdultos: 0, capacidadNinos: 0, habitaciones: 0
   });
   const [saving, setSaving] = useState(false);
@@ -1742,7 +1742,7 @@ const AdminDashboard = () => {
     setIsCreating(true);
     setEditingItem({ id: 'Nuevo' });
     setEditForm({
-      nombre: '', descripcion: '', imagenUrl: '', ubicacionId: 'UBI-001',
+      nombre: '', descripcion: '', imagenUrl: '', ubicacionId: '',
       precioPorNoche: 0, capacidadAdultos: 1, capacidadNinos: 0, habitaciones: 1
     });
   };
@@ -1769,9 +1769,10 @@ const AdminDashboard = () => {
     setSaving(true);
     try {
       const cityMap: any = { 'UBI-001': 'Quito', 'UBI-002': 'Guayaquil', 'UBI-003': 'Cuenca', 'UBI-004': 'Manta', 'UBI-005': 'Baños' };
+      const typedDestino = cityMap[editForm.ubicacionId] || editForm.ubicacionId || 'Desconocido';
       const requestBody = {
         ...editForm,
-        destino: cityMap[editForm.ubicacionId] || 'Quito',
+        destino: typedDestino,
         tienePiscina: false
       };
 
@@ -1783,7 +1784,7 @@ const AdminDashboard = () => {
         });
         if (response.ok) {
           const newItem = await response.json();
-          setAlojamientos([...alojamientos, { ...newItem, ...editForm, destino: cityMap[editForm.ubicacionId] || 'Quito', propietario: user.nombre }]);
+          setAlojamientos([...alojamientos, { ...newItem, ...editForm, destino: typedDestino, propietario: user.nombre }]);
           setEditingItem(null);
           addLog('Creación', `Se creó el nuevo alojamiento: ${editForm.nombre}`);
           setToast({ message: '✨ Alojamiento y Habitaciones creados exitosamente.', type: 'success' });
@@ -1798,7 +1799,7 @@ const AdminDashboard = () => {
           body: JSON.stringify(requestBody)
         });
         if (response.ok) {
-          setAlojamientos(alojamientos.map(al => al.id === editingItem.id ? { ...al, ...editForm, destino: cityMap[editForm.ubicacionId] || al.destino } : al));
+          setAlojamientos(alojamientos.map(al => al.id === editingItem.id ? { ...al, ...editForm, destino: typedDestino } : al));
           setEditingItem(null);
           addLog('Modificación', `Se actualizaron los datos del alojamiento ID: ${editingItem.id}`);
           setToast({ message: '✏️ Datos actualizados en todas las tablas correctamente.', type: 'success' });
@@ -2231,13 +2232,7 @@ const AdminDashboard = () => {
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Ubicación (Destino)</label>
-                  <select value={editForm.ubicacionId} onChange={(e) => setEditForm({...editForm, ubicacionId: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', outline: 'none', backgroundColor: 'transparent' }}>
-                    <option value="UBI-001">Quito</option>
-                    <option value="UBI-002">Guayaquil</option>
-                    <option value="UBI-003">Cuenca</option>
-                    <option value="UBI-004">Manta</option>
-                    <option value="UBI-005">Baños</option>
-                  </select>
+                  <input type="text" value={editForm.ubicacionId} onChange={(e) => setEditForm({...editForm, ubicacionId: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', outline: 'none', backgroundColor: 'transparent' }} placeholder="Escribe cualquier ciudad..." />
                 </div>
               </div>
 
