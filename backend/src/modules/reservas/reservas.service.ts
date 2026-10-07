@@ -40,7 +40,9 @@ export class ReservasService {
     if (espacioId) {
       await this.reservaRepository.query(`
         UPDATE espacios_rentables 
-        SET "cantidadDisponible" = GREATEST("cantidadDisponible" - 1, 0) 
+        SET 
+          "cantidadDisponible" = GREATEST("cantidadDisponible" - 1, 0),
+          estado = CASE WHEN "cantidadDisponible" - 1 <= 0 THEN 'Reservado' ELSE estado END
         WHERE id = $1
       `, [espacioId]);
     }
@@ -138,7 +140,9 @@ export class ReservasService {
       // Devolver stock
       await this.reservaRepository.query(`
         UPDATE espacios_rentables 
-        SET "cantidadDisponible" = "cantidadDisponible" + 1 
+        SET 
+          "cantidadDisponible" = "cantidadDisponible" + 1,
+          estado = CASE WHEN "cantidadDisponible" + 1 > 0 AND estado = 'Reservado' THEN 'Activo' ELSE estado END
         WHERE id = $1
       `, [espacioId]);
     }
