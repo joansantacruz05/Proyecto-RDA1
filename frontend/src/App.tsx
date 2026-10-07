@@ -1535,7 +1535,7 @@ const AdminDashboard = () => {
   };
 
   const handleAprobarReserva = (id: string) => {
-    fetch(`/api/v1/reservas/${id}/aprobar`, { method: 'POST' })
+    fetch(`${API_URL}/api/v1/reservas/${id}/aprobar`, { method: 'POST' })
       .then(res => res.json())
       .then(data => {
         setToast({ message: data.message, type: 'success' });
@@ -1879,7 +1879,7 @@ const AdminDashboard = () => {
                         value={al.estado || 'Activo'}
                         onChange={(e) => {
                           const newEstado = e.target.value;
-                          fetch(`/api/v1/admin/alojamientos/${al.id}`, {
+                          fetch(`${API_URL}/api/v1/admin/alojamientos/${al.id}`, {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ estado: newEstado })
@@ -2263,7 +2263,7 @@ const AdminDashboard = () => {
                                 value={room.estado || 'Activo'}
                                 onChange={(e) => {
                                   const newEstado = e.target.value;
-                                  fetch(`/api/v1/admin/habitaciones/${room.id}`, {
+                                  fetch(`${API_URL}/api/v1/admin/habitaciones/${room.id}`, {
                                     method: 'PATCH',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ estado: newEstado })
