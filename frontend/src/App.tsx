@@ -277,15 +277,21 @@ const FacturaModal = ({ reserva, onClose }: { reserva: any, onClose: () => void 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: '#4b5563' }}>Nombre / Razón Social</label>
-              <input type="text" value={datosFactura.nombre} onChange={(e) => setDatosFactura({...datosFactura, nombre: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db' }} />
+              <input type="text" value={datosFactura.nombre} onChange={(e) => setDatosFactura({...datosFactura, nombre: e.target.value.replace(/[0-9]/g, '')})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db' }} placeholder="Ej. Juan Pérez" />
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: '#4b5563' }}>Cédula / RUC</label>
-              <input type="text" value={datosFactura.identificacion} onChange={(e) => setDatosFactura({...datosFactura, identificacion: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db' }} />
+              <input type="text" maxLength={13} value={datosFactura.identificacion} onChange={(e) => setDatosFactura({...datosFactura, identificacion: e.target.value.replace(/[^0-9]/g, '').slice(0, 13)})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db' }} placeholder="10 o 13 dígitos numéricos" />
+              {datosFactura.identificacion && datosFactura.identificacion.length !== 10 && datosFactura.identificacion.length !== 13 && (
+                <span style={{ color: 'red', fontSize: '0.75rem', display: 'block', marginTop: '4px' }}>Debe tener exactamente 10 o 13 dígitos numéricos</span>
+              )}
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: '#4b5563' }}>Dirección</label>
-              <input type="text" value={datosFactura.direccion} onChange={(e) => setDatosFactura({...datosFactura, direccion: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db' }} />
+              <input type="text" value={datosFactura.direccion} onChange={(e) => setDatosFactura({...datosFactura, direccion: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db' }} placeholder="Ej. Av. Principal 123" />
+              {datosFactura.direccion && datosFactura.direccion.trim().length < 5 && (
+                <span style={{ color: 'red', fontSize: '0.75rem', display: 'block', marginTop: '4px' }}>Ingrese una dirección válida (mín. 5 caracteres)</span>
+              )}
             </div>
           </div>
         </div>
