@@ -707,7 +707,7 @@ const LandingPage = () => {
 
   // Estados para Modal de Reserva
   const [bookingItem, setBookingItem] = useState<any>(null);
-  const [bookingForm, setBookingForm] = useState<{ nombreCliente: string, emailCliente: string, fechaInicio: string, fechaFin: string, numeroPersonas: number | string }>({ nombreCliente: '', emailCliente: '', fechaInicio: '', fechaFin: '', numeroPersonas: 1 });
+  const [bookingForm, setBookingForm] = useState<{ nombreCliente: string, emailCliente: string, fechaInicio: string, fechaFin: string, numeroPersonas: number | string }>({ nombreCliente: '', emailCliente: '', fechaInicio: '', fechaFin: '', numeroPersonas: '' });
   const [bookingLoading, setBookingLoading] = useState(false);
   const [toast, setToast] = useState<{message: string, type: string} | null>(null);
 
@@ -1144,7 +1144,7 @@ const LandingPage = () => {
                   if (res.ok) {
                     setToast({ message: '¡Reserva confirmada con éxito! Te contactaremos pronto.', type: 'success' });
                     setBookingItem(null);
-                    setBookingForm({ nombreCliente: '', emailCliente: '', fechaInicio: '', fechaFin: '', numeroPersonas: 1 });
+                    setBookingForm({ nombreCliente: '', emailCliente: '', fechaInicio: '', fechaFin: '', numeroPersonas: '' });
                   } else {
                     const errorData = await res.json();
                     setToast({ message: `Error: ${errorData.message || 'No se pudo realizar la reserva'}`, type: 'error' });
@@ -1584,7 +1584,10 @@ const AdminDashboard = () => {
     
     fetch(`${API_URL}/api/v1/admin/alojamientos`)
       .then(res => res.json())
-      .then(data => setAlojamientos(data))
+      .then(data => {
+         const cleanData = data.map((item: any) => ({...item, nombre: item.nombre?.replace(/ RDA \d+ - /gi, ' - ')}));
+         setAlojamientos(cleanData);
+      })
       .catch(err => console.error(err));
 
     refreshStats();
@@ -1620,7 +1623,11 @@ const AdminDashboard = () => {
     fetch(`${API_URL}/api/v1/reservas/admin/todas`)
       .then(res => res.json())
       .then(data => {
-        if(Array.isArray(data)) setTodasReservas(data);
+         const cleanData = Array.isArray(data) ? data.map((reserva: any) => {
+            if(reserva.alojamiento) reserva.alojamiento.nombre = reserva.alojamiento.nombre.replace(/ RDA \d+ - /gi, ' - ');
+            return reserva;
+         }) : [];
+         setTodasReservas(cleanData);
       })
       .catch(err => console.error(err));
   }, []);
@@ -1845,6 +1852,7 @@ const AdminDashboard = () => {
         </div>
 
         {/* Tarjetas de Estadísticas (Rediseñadas) */}
+        {activeAdminTab === 'alojamientos' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '30px', marginBottom: '50px' }}>
            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }} whileHover={{ y: -8, boxShadow: '0 20px 25px -5px rgba(212,175,55,0.1)' }} className="card" style={{ padding: '30px', background: 'linear-gradient(145deg, var(--card-bg) 0%, rgba(212,175,55,0.05) 100%)', border: '1px solid var(--border-color)', borderRadius: '24px', position: 'relative', overflow: 'hidden' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -1882,6 +1890,7 @@ const AdminDashboard = () => {
               </div>
            </motion.div>
         </div>
+        )}
 
         {/* CONTENIDO PRINCIPAL SEGUN TAB */}
         <AnimatePresence mode="wait">
@@ -1894,8 +1903,8 @@ const AdminDashboard = () => {
           </button>
         </div>
         
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', whiteSpace: 'nowrap' }}>
+        <div style={{ overflowX: 'visible' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)' }}>
                 <th style={{ padding: '15px 10px' }}>ID</th>
@@ -1968,8 +1977,8 @@ const AdminDashboard = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
           <h2 style={{ fontSize: '1.5rem', color: '#EF4444' }}>Reporte de Cancelaciones</h2>
         </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', whiteSpace: 'nowrap' }}>
+        <div style={{ overflowX: 'visible' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)' }}>
                 <th style={{ padding: '15px 10px' }}>Reserva ID</th>
@@ -2013,8 +2022,8 @@ const AdminDashboard = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
           <h2 style={{ fontSize: '1.5rem', color: '#10B981' }}>Facturación y Pagos</h2>
         </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', whiteSpace: 'nowrap' }}>
+        <div style={{ overflowX: 'visible' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)' }}>
                 <th style={{ padding: '15px 10px' }}>Factura Nº</th>
@@ -2056,8 +2065,8 @@ const AdminDashboard = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
           <h2 style={{ fontSize: '1.5rem', color: 'var(--accent-color)' }}>Gestión de Reservas</h2>
         </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', whiteSpace: 'nowrap' }}>
+        <div style={{ overflowX: 'visible' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)' }}>
                 <th style={{ padding: '15px 10px' }}>ID Reserva</th>
