@@ -259,6 +259,14 @@ const FacturaModal = ({ reserva, onClose }: { reserva: any, onClose: () => void 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
       <div className="printable-invoice" style={{ background: 'white', color: 'black', width: '100%', maxWidth: '700px', borderRadius: '8px', padding: '40px', maxHeight: '90vh', overflowY: 'auto', position: 'relative', border: '1px solid #e5e7eb' }}>
+        <style>{`
+          @media print {
+            body * { visibility: hidden; }
+            .printable-invoice, .printable-invoice * { visibility: visible; }
+            .printable-invoice { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; border: none; padding: 0; max-height: none; overflow: visible; }
+            .no-print { display: none !important; }
+          }
+        `}</style>
         
         {/* Formulario previo (no se imprime) */}
         <div className="no-print" style={{ background: '#f3f4f6', padding: '20px', borderRadius: '8px', marginBottom: '30px', border: '1px solid #d1d5db' }}>
@@ -376,7 +384,12 @@ const MisReservas = () => {
   useEffect(() => {
     fetch(`${API_URL}/api/v1/pagos/metodos`)
       .then(r => r.json())
-      .then(data => setMetodosPago(data))
+      .then(data => {
+        let methods = Array.isArray(data) ? data : [];
+        if (!methods.find(m => m.nombre === 'Transferencia Bancaria')) methods.push({id: 'MET-003', nombre: 'Transferencia Bancaria', estado: 'Activo'});
+        if (!methods.find(m => m.nombre === 'Efectivo')) methods.push({id: 'MET-004', nombre: 'Efectivo', estado: 'Activo'});
+        setMetodosPago(methods);
+      })
       .catch(console.error);
     const user = getTokenData();
     if (!user) {
@@ -627,7 +640,7 @@ const MisReservas = () => {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
                     <div style={{ gridColumn: '1 / -1' }}>
                       <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Número de Tarjeta</label>
-                      <input type="text" placeholder="0000 0000 0000 0000" maxLength={19} required style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
+                      <input type="text" placeholder="0000 0000 0000 0000" maxLength={19} required onInput={(e: any) => { e.target.value = e.target.value.replace(/\D/g, '').replace(/(\d{4})(?=\d)/g, '$1 '); }} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
                     </div>
                     <div>
                       <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem' }}>Expiración</label>
@@ -640,16 +653,11 @@ const MisReservas = () => {
                   </div>
                 )}
 
-                <div style={{ marginBottom: '20px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={pagoForm.requiereFactura} onChange={e => setPagoForm({...pagoForm, requiereFactura: e.target.checked})} style={{ width: '18px', height: '18px', accentColor: 'var(--accent-color)' }} />
-                    <span>Requiero Factura Electrónica con Datos Personales</span>
-                  </label>
-                </div>
+                {/* Detalles de Facturación SIEMPRE visibles */}
+                <div style={{ marginTop: '30px', borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
+                  <h4 style={{ marginBottom: '15px' }}>Datos para Facturación Electrónica</h4>
 
-                <AnimatePresence>
-                  {pagoForm.requiereFactura && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden' }}>
+                <div>
                       <div className="form-group">
                         <label>RUC / Cédula de Identidad</label>
                         <input type="text" value={pagoForm.identificacion} onChange={e => setPagoForm({...pagoForm, identificacion: e.target.value})} required style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
@@ -662,9 +670,7 @@ const MisReservas = () => {
                         <label>Dirección (Opcional)</label>
                         <input type="text" value={pagoForm.direccion} onChange={e => setPagoForm({...pagoForm, direccion: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
                       </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                </div>
 
                 <button type="submit" disabled={procesandoPago} className="btn-primary" style={{ width: '100%', padding: '15px', fontSize: '1.1rem', marginTop: '10px' }}>
                   {procesandoPago ? 'Procesando pago seguro...' : 'Pagar Ahora'}
@@ -1162,26 +1168,46 @@ const LandingPage = () => {
                   </div>
                 </div>
                 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--accent-color)' }}>
-                    {(() => {
-                      if (!bookingForm.fechaInicio || !bookingForm.fechaFin) return `Total aprox: $${bookingItem.price}`;
-                      const s = new Date(bookingForm.fechaInicio);
-                      const e = new Date(bookingForm.fechaFin);
-                      if (e <= s) return `Total aprox: $${bookingItem.price}`;
-                      const d = Math.ceil(Math.abs(e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
-                      let t = 0;
-                      for(let i=0; i<d; i++){
-                        const cur = new Date(s.getTime() + i*86400000);
-                        let p = bookingItem.price;
-                        if((cur.getMonth()===0&&cur.getDate()===1)||(cur.getMonth()===4&&cur.getDate()===1)||(cur.getMonth()===11&&cur.getDate()===25)) p*=1.5;
-                        else if(cur.getMonth()===6||cur.getMonth()===7||cur.getMonth()===11) p*=1.3;
-                        t+=p;
-                      }
-                      return `Total aprox: $${Math.round(t*100)/100} (incluye IVA)`;
-                    })()}
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px' }}>
+                <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '15px', marginBottom: '20px', border: '1px solid #e5e7eb', color: '#374151' }}>
+                  {(() => {
+                    const s = new Date(bookingForm.fechaInicio);
+                    const e = new Date(bookingForm.fechaFin);
+                    if (!bookingForm.fechaInicio || !bookingForm.fechaFin || e <= s) {
+                      return <div style={{ fontWeight: 'bold' }}>Total aprox: ${bookingItem.price} / noche</div>;
+                    }
+                    const d = Math.ceil(Math.abs(e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
+                    let t = 0;
+                    for(let i=0; i<d; i++){
+                      const cur = new Date(s.getTime() + i*86400000);
+                      let p = bookingItem.price;
+                      if((cur.getMonth()===0&&cur.getDate()===1)||(cur.getMonth()===4&&cur.getDate()===1)||(cur.getMonth()===11&&cur.getDate()===25)) p*=1.5;
+                      else if(cur.getMonth()===6||cur.getMonth()===7||cur.getMonth()===11) p*=1.3;
+                      t+=p;
+                    }
+                    const total = Math.round(t*100)/100;
+                    const subtotal = Math.round((total / 1.15)*100)/100;
+                    const iva = Math.round((total - subtotal)*100)/100;
+                    return (
+                      <>
+                        <h4 style={{ marginBottom: '10px', color: '#111827' }}>Desglose de la reserva</h4>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.95rem' }}>
+                          <span>${bookingItem.price} x {d} {d===1?'noche':'noches'} {total !== bookingItem.price*d ? '(Precios Dinámicos)' : ''}</span>
+                          <span>${subtotal}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', borderBottom: '1px solid #d1d5db', paddingBottom: '10px', fontSize: '0.95rem' }}>
+                          <span>IVA (15%)</span>
+                          <span>${iva}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '1.2rem', color: '#111827' }}>
+                          <span>Total</span>
+                          <span>${total}</span>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                     <button type="button" className="btn-outline" onClick={() => setBookingItem(null)} style={{ padding: '10px 20px', borderRadius: '8px' }}>Cancelar</button>
                     <button type="submit" className="btn-primary" disabled={bookingLoading} style={{ padding: '10px 20px', borderRadius: '8px' }}>
                       {bookingLoading ? 'Procesando...' : 'Confirmar'}
@@ -1412,9 +1438,11 @@ const LoginPage = () => {
               <div style={{ display: 'flex', gap: '15px' }}>
                 <input
                   type="tel"
-                  placeholder="Teléfono (Opcional)"
+                  placeholder="Teléfono (10 dígitos)"
                   className="login-input"
                   style={{...inputStyle, flex: 2}}
+                  maxLength={10}
+                  onInput={(e: any) => { e.target.value = e.target.value.replace(/\D/g, ''); }}
                   value={formData.telefono}
                   onChange={(e) => setFormData({...formData, telefono: e.target.value})}
                 />
@@ -1559,17 +1587,31 @@ const AdminDashboard = () => {
 
     refreshStats();
 
-    fetch(`${API_URL}/api/v1/reservas/admin/cancelaciones`)
+    fetch(`${API_URL}/api/v1/reservas/admin/todas`)
       .then(res => res.json())
       .then(data => {
-        if(Array.isArray(data)) setCancelaciones(data);
-      })
-      .catch(err => console.error(err));
+        if(Array.isArray(data)) {
+          const canceladas = data.filter(r => r.estado === 'Cancelada');
+          setCancelaciones(canceladas.map(c => ({
+            reservaId: c.id,
+            cliente: c.cliente,
+            alojamiento: c.alojamiento,
+            fechaCancelacion: c.fechaInicio,
+            montoPerdido: c.totalPagar,
+            politicaCancelacion: 'Flexible (Reembolso Completo)'
+          })));
 
-    fetch(`${API_URL}/api/v1/admin/facturas`)
-      .then(res => res.json())
-      .then(data => {
-        if(Array.isArray(data)) setFacturas(data);
+          const pagadas = data.filter(r => r.pagoCompletado || r.estado === 'Confirmada');
+          setFacturas(pagadas.map(p => ({
+            id: 'FAC-' + p.id.slice(-6).toUpperCase(),
+            fechaEmision: p.fechaInicio,
+            nombreRazonSocial: p.cliente,
+            identificacionCliente: 'N/A',
+            reservaId: p.id,
+            metodoPago: 'N/A',
+            total: p.totalPagar
+          })));
+        }
       })
       .catch(err => console.error(err));
 
