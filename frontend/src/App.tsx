@@ -1648,7 +1648,11 @@ const AdminDashboard = () => {
       .then(res => res.json())
       .then(data => {
          const cleanData = Array.isArray(data) ? data.map((reserva: any) => {
-            if(reserva.alojamiento) reserva.alojamiento.nombre = reserva.alojamiento.nombre.replace(/ RDA \d+ - /gi, ' - ');
+            if(typeof reserva.alojamiento === 'string') {
+                reserva.alojamiento = reserva.alojamiento.replace(/ RDA \d+ - /gi, ' - ');
+            } else if(reserva.alojamiento && reserva.alojamiento.nombre) {
+                reserva.alojamiento.nombre = reserva.alojamiento.nombre.replace(/ RDA \d+ - /gi, ' - ');
+            }
             return reserva;
          }) : [];
          setTodasReservas(cleanData);
