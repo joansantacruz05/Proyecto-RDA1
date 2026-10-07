@@ -37,6 +37,14 @@ export class ReservasService {
       VALUES ($1, $2, $3, false)
     `, [contratoId, newId, terminos]);
 
+    if (espacioId) {
+      await this.reservaRepository.query(`
+        UPDATE espacios_rentables 
+        SET "cantidadDisponible" = GREATEST("cantidadDisponible" - 1, 0) 
+        WHERE id = $1
+      `, [espacioId]);
+    }
+
     return { id: newId, status: 'success' };
   }
 
@@ -117,10 +125,24 @@ export class ReservasService {
   }
 
   async cancelarReserva(id: string) {
+    // Buscar el espacioId de la reserva
+    const reserva = await this.reservaRepository.query(`SELECT "espacioId" FROM reservas WHERE id = $1`, [id]);
+    const espacioId = reserva[0]?.espacioId;
+
     // Cambiar estado a 'EST-003' (Cancelada)
     await this.reservaRepository.query(`
       UPDATE reservas SET "estadoId" = 'EST-003' WHERE id = $1
     `, [id]);
+
+    if (espacioId) {
+      // Devolver stock
+      await this.reservaRepository.query(`
+        UPDATE espacios_rentables 
+        SET "cantidadDisponible" = "cantidadDisponible" + 1 
+        WHERE id = $1
+      `, [espacioId]);
+    }
+
     return { status: 'success', message: 'Reserva cancelada exitosamente' };
   }
 

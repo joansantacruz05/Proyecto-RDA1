@@ -261,10 +261,11 @@ const FacturaModal = ({ reserva, onClose }: { reserva: any, onClose: () => void 
       <div className="printable-invoice" style={{ background: 'white', color: 'black', width: '100%', maxWidth: '700px', borderRadius: '8px', padding: '40px', maxHeight: '90vh', overflowY: 'auto', position: 'relative', border: '1px solid #e5e7eb' }}>
         <style>{`
           @media print {
-            html, body { height: 100%; overflow: hidden; }
+            html, body { height: auto !important; overflow: visible !important; }
             body * { visibility: hidden; }
+            .print-modal-overlay { position: absolute !important; left: 0 !important; top: 0 !important; margin: 0 !important; padding: 0 !important; display: block !important; background: none !important; align-items: flex-start !important; }
             .print-modal-overlay, .print-modal-overlay * { visibility: visible; }
-            .printable-invoice { position: absolute; left: 0; top: 0; width: 100%; border: none; padding: 0; margin: 0; max-height: none; overflow: visible; box-shadow: none; }
+            .printable-invoice { position: relative !important; left: 0 !important; top: 0 !important; width: 100% !important; max-width: 100% !important; border: none !important; padding: 0 !important; margin: 0 !important; max-height: none !important; overflow: visible !important; box-shadow: none !important; transform: none !important; }
             .no-print { display: none !important; }
             @page { margin: 1cm; }
           }
@@ -740,7 +741,7 @@ const LandingPage = () => {
       .then(data => {
         const alojamientos = Array.isArray(data) ? data.map((item: any, index: number) => ({
           id: item.id || index + 1,
-          title: item.nombre,
+          title: item.nombre ? item.nombre.replace(/ RDA \d+ - /gi, ' - ') : '',
           location: item.destino,
           rating: 4.8, // Valor por defecto
           img: item.imagenUrl || (item.tienePiscina ? '/pool.jpg' : '/villa.jpg'),
@@ -761,7 +762,7 @@ const LandingPage = () => {
               img: item.imagenUrl || '/room.jpg',
               images: getBeautifulImages(item.id + '-hab'),
               type: 'habitacion',
-              hotelName: item.nombre,
+              hotelName: item.nombre ? item.nombre.replace(/ RDA \d+ - /gi, ' - ') : '',
               estado: item.estado || 'Activo'
             }
           ]
@@ -1093,9 +1094,17 @@ const LandingPage = () => {
               exit={{ opacity: 0, scale: 0.9 }}
               style={{ background: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '500px', color: 'black', textAlign: 'left' }}
             >
-              <h2 style={{ marginBottom: '15px', fontSize: '1.5rem', fontWeight: 'bold' }}>Reservar {bookingItem.title}</h2>
-              <p style={{ color: 'var(--text-secondary)', marginBottom: '5px' }}>{bookingItem.hotelName} - Tarifa base: ${bookingItem.price} por noche</p>
-              <p style={{ color: '#10B981', fontSize: '0.85rem', marginBottom: '20px' }}>* Precios dinámicos: +30% en temporada alta (Jul, Ago, Dic) y +50% en festivos.</p>
+              <h2 style={{ marginBottom: '10px', fontSize: '1.5rem', fontWeight: 'bold' }}>Reservar {bookingItem.title}</h2>
+              <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', alignItems: 'center' }}>
+                <img src={bookingItem.img} alt={bookingItem.title} style={{ width: '80px', height: '60px', objectFit: 'cover', borderRadius: '8px' }} />
+                <div>
+                  <p style={{ color: 'var(--text-secondary)', margin: '0 0 5px 0', fontSize: '0.95rem' }}>
+                    <strong>{bookingItem.hotelName || bookingItem.subtype || 'Alojamiento'}</strong> en {bookingItem.location || 'Destino'}
+                  </p>
+                  <p style={{ color: 'var(--text-primary)', fontWeight: 'bold', margin: 0 }}>Tarifa base: ${bookingItem.price} / noche</p>
+                </div>
+              </div>
+              <p style={{ color: '#10B981', fontSize: '0.85rem', marginBottom: '20px', background: 'rgba(16,185,129,0.1)', padding: '8px', borderRadius: '4px' }}>* Precios dinámicos: +30% en temporada alta (Jul, Ago, Dic) y +50% en festivos.</p>
               <form onSubmit={async (e) => {
                 e.preventDefault();
                 setBookingLoading(true);
@@ -1829,7 +1838,7 @@ const AdminDashboard = () => {
       </aside>
 
       {/* Main Content */}
-      <div style={{ flex: 1, padding: '40px 60px', overflowX: 'hidden' }}>
+      <div style={{ flex: 1, padding: '30px 20px', overflowX: 'hidden' }}>
         {/* Header Dashboard */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '50px', flexWrap: 'wrap', gap: '20px' }}>
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
