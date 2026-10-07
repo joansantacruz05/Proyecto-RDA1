@@ -1609,7 +1609,7 @@ const AdminDashboard = () => {
     fetch(`${API_URL}/api/v1/admin/alojamientos`)
       .then(res => res.json())
       .then(data => {
-         const cleanData = data.map((item: any) => ({...item, nombre: item.nombre?.replace(/ RDA \d+ - /gi, ' - ')}));
+         const cleanData = Array.isArray(data) ? data.map((item: any) => ({...item, nombre: item.nombre?.replace(/ RDA \d+ - /gi, ' - ')})) : [];
          setAlojamientos(cleanData);
       })
       .catch(err => console.error(err));
