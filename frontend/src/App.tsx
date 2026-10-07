@@ -1154,6 +1154,7 @@ const LandingPage = () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       ...bookingForm,
+                      numeroPersonas: Number(bookingForm.numeroPersonas),
                       totalPagar,
                       alojamientoId: bookingItem.alojamientoId || bookingItem.id
                     })
@@ -1304,6 +1305,11 @@ const Footer = () => (
         Ya sea que busques el lujo de un resort 5 estrellas, la comodidad de un hotel boutique 
         o la privacidad absoluta de un Airbnb entero, LuxeStays te conecta con tu destino soñado.
       </p>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <a href="#" onClick={(e) => e.preventDefault()} style={{ color: '#9CA3AF', textDecoration: 'none', fontSize: '0.95rem' }}>Términos y Condiciones</a>
+        <a href="#" onClick={(e) => e.preventDefault()} style={{ color: '#9CA3AF', textDecoration: 'none', fontSize: '0.95rem' }}>Política de Privacidad</a>
+        <a href="#" onClick={(e) => e.preventDefault()} style={{ color: '#9CA3AF', textDecoration: 'none', fontSize: '0.95rem' }}>Política de Cookies</a>
+      </div>
       <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.1)', margin: '30px 0' }}></div>
       <div style={{ color: '#6B7280', fontSize: '0.9rem' }}>
         &copy; {new Date().getFullYear()} LuxeStays Inc. Todos los derechos reservados.
@@ -2463,6 +2469,17 @@ const AdminDashboard = () => {
   );
 };
 
+const CookieBanner = () => {
+  const [accepted, setAccepted] = useState(localStorage.getItem('cookiesAccepted') === 'true');
+  if (accepted) return null;
+  return (
+    <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#111827', color: 'white', padding: '15px 20px', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', boxShadow: '0 -4px 10px rgba(0,0,0,0.2)', flexWrap: 'wrap', textAlign: 'center' }}>
+      <p style={{ margin: 0, fontSize: '0.95rem' }}>Utilizamos cookies para mejorar tu experiencia y analizar el tráfico de nuestro sitio. Al continuar navegando, aceptas nuestra <a href="#" onClick={(e) => e.preventDefault()} style={{ color: 'var(--accent-color)' }}>Política de Cookies</a> y <a href="#" onClick={(e) => e.preventDefault()} style={{ color: 'var(--accent-color)' }}>Términos y Condiciones</a>.</p>
+      <button onClick={() => { localStorage.setItem('cookiesAccepted', 'true'); setAccepted(true); }} style={{ padding: '8px 25px', background: 'var(--accent-color)', color: '#111827', border: 'none', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap' }}>Entendido</button>
+    </div>
+  );
+};
+
 function App() {
   return (
     <BrowserRouter>
@@ -2478,6 +2495,7 @@ function App() {
           </Routes>
         </main>
         <Footer />
+        <CookieBanner />
       </div>
     </BrowserRouter>
   );
