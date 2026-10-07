@@ -94,7 +94,7 @@ export class ReservasService {
         c.firmado as "contratoFirmado",
         c.terminos as "contratoTerminos",
         a."politicaCancelacion",
-        json_build_object('nombre', a.nombre, 'destino', a.destino) as alojamiento
+        json_build_object('nombre', a.nombre) as alojamiento
       FROM reservas r
       LEFT JOIN usuarios u ON r."usuarioId" = u.id
       LEFT JOIN espacios_rentables esp ON r."espacioId" = esp.id
