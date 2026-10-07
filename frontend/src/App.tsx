@@ -257,14 +257,16 @@ const FacturaModal = ({ reserva, onClose }: { reserva: any, onClose: () => void 
   };
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+    <div className="print-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
       <div className="printable-invoice" style={{ background: 'white', color: 'black', width: '100%', maxWidth: '700px', borderRadius: '8px', padding: '40px', maxHeight: '90vh', overflowY: 'auto', position: 'relative', border: '1px solid #e5e7eb' }}>
         <style>{`
           @media print {
+            html, body { height: 100%; overflow: hidden; }
             body * { visibility: hidden; }
-            .printable-invoice, .printable-invoice * { visibility: visible; }
-            .printable-invoice { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; border: none; padding: 0; max-height: none; overflow: visible; }
+            .print-modal-overlay, .print-modal-overlay * { visibility: visible; }
+            .printable-invoice { position: absolute; left: 0; top: 0; width: 100%; border: none; padding: 0; margin: 0; max-height: none; overflow: visible; box-shadow: none; }
             .no-print { display: none !important; }
+            @page { margin: 1cm; }
           }
         `}</style>
         
@@ -438,7 +440,7 @@ const MisReservas = () => {
         method: 'POST',
       });
       if (res.ok) {
-        setToast({ message: '¡Contrato firmado exitosamente!', type: 'error' });
+        setToast({ message: '¡Contrato firmado exitosamente!', type: 'success' });
         setReservas(prev => prev.map(r => r.id === id ? {...r, contratoFirmado: true} : r));
       } else {
         setToast({ message: 'Error al firmar el contrato', type: 'error' });
@@ -558,7 +560,7 @@ const MisReservas = () => {
                   </p>
                   {res.contratoFirmado ? (
                     <p style={{ color: '#10B981', fontWeight: 'bold', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                      <CheckCircle2 size={18} />
                       Contrato firmado digitalmente
                     </p>
                   ) : (
@@ -1180,7 +1182,7 @@ const LandingPage = () => {
                     let t = 0;
                     for(let i=0; i<d; i++){
                       const cur = new Date(s.getTime() + i*86400000);
-                      let p = bookingItem.price;
+                      let p = Number(bookingItem.price) || 0;
                       if((cur.getMonth()===0&&cur.getDate()===1)||(cur.getMonth()===4&&cur.getDate()===1)||(cur.getMonth()===11&&cur.getDate()===25)) p*=1.5;
                       else if(cur.getMonth()===6||cur.getMonth()===7||cur.getMonth()===11) p*=1.3;
                       t+=p;
