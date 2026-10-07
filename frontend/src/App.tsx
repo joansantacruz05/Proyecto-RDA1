@@ -671,6 +671,7 @@ const MisReservas = () => {
                         <input type="text" value={pagoForm.direccion} onChange={e => setPagoForm({...pagoForm, direccion: e.target.value})} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)' }} />
                       </div>
                 </div>
+                </div>
 
                 <button type="submit" disabled={procesandoPago} className="btn-primary" style={{ width: '100%', padding: '15px', fontSize: '1.1rem', marginTop: '10px' }}>
                   {procesandoPago ? 'Procesando pago seguro...' : 'Pagar Ahora'}
@@ -1213,7 +1214,6 @@ const LandingPage = () => {
                       {bookingLoading ? 'Procesando...' : 'Confirmar'}
                     </button>
                   </div>
-                </div>
               </form>
             </motion.div>
           </div>
