@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Home, User, MapPin, Star, ArrowLeft, Search, Users, DollarSign, Building, BedDouble, LayoutGrid, Info, CheckCircle2, Heart, Plus, Edit2, Trash2, Settings, CreditCard, X, Calendar, XCircle, Clock, Terminal, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Home, User, MapPin, Star, ArrowLeft, Search, Users, DollarSign, Building, BedDouble, LayoutGrid, Info, CheckCircle2, Heart, Plus, Edit2, Trash2, Settings, CreditCard, X, Calendar, XCircle, Clock, Terminal } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -2094,6 +2094,7 @@ const AdminDashboard = () => {
         )}
       </motion.div>
       )}
+      </AnimatePresence>
 
       {/* MODAL DE EDICIÓN COMPLETO (Glassmorphism) */}
       <AnimatePresence>
