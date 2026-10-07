@@ -830,8 +830,8 @@ const LandingPage = () => {
         <div className="card-img-container" style={{ position: 'relative' }}>
           <ImageCarousel images={item.images || [item.img]} title={item.title} />
           
-          {(isAlojamiento ? (item.habitaciones_disponibles === 0 || item.estado !== 'Activo') : item.estado !== 'Activo') && (
-            <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10 }}>
+          {(isAlojamiento ? (item.habitaciones_disponibles === 0 || item.estado !== 'Activo') : (item.cantidadDisponible <= 0 || item.estado !== 'Activo')) && (
+            <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10, cursor: 'not-allowed' }}>
               <span style={{ background: '#EF4444', color: 'white', padding: '8px 24px', borderRadius: '4px', fontSize: '1.5rem', fontWeight: 'bold', letterSpacing: '2px', transform: 'rotate(-15deg)', border: '2px solid white' }}>
                 {item.estado === 'Inactivo' ? 'INACTIVO' : 'LLENO'}
               </span>
@@ -874,11 +874,11 @@ const LandingPage = () => {
                  </div>
                   <button 
                     className="btn-primary" 
-                    style={{ padding: '8px 20px', fontSize: '0.9rem', opacity: item.estado !== 'Activo' ? 0.5 : 1, cursor: item.estado !== 'Activo' ? 'not-allowed' : 'pointer' }} 
-                    disabled={item.estado !== 'Activo'}
+                    style={{ padding: '8px 20px', fontSize: '0.9rem', opacity: (item.estado !== 'Activo' || (item.type === 'alojamiento' ? item.habitaciones_disponibles === 0 : item.cantidadDisponible <= 0)) ? 0.5 : 1, cursor: (item.estado !== 'Activo' || (item.type === 'alojamiento' ? item.habitaciones_disponibles === 0 : item.cantidadDisponible <= 0)) ? 'not-allowed' : 'pointer' }} 
+                    disabled={item.estado !== 'Activo' || (item.type === 'alojamiento' ? item.habitaciones_disponibles === 0 : item.cantidadDisponible <= 0)}
                     onClick={(e) => { 
                    e.stopPropagation(); 
-                   if (item.estado !== 'Activo') return;
+                   const isLleno = item.type === 'alojamiento' ? item.habitaciones_disponibles === 0 : item.cantidadDisponible <= 0; if (item.estado !== 'Activo' || isLleno) return;
                    const user = getTokenData();
                    if (!user) {
                      setToast({ message: 'Debe iniciar sesión primero para poder reservar.', type: 'error' });
@@ -888,7 +888,7 @@ const LandingPage = () => {
                    setBookingItem(item); 
                    setBookingForm(prev => ({...prev, nombreCliente: user.nombre || '', emailCliente: user.correo || ''}));
                  }}>
-                   {item.estado !== 'Activo' ? 'No Disponible' : 'Reservar'}
+                   {(() => { const isLleno = item.type === 'alojamiento' ? item.habitaciones_disponibles === 0 : item.cantidadDisponible <= 0; const isUnavailable = item.estado !== 'Activo' || isLleno; return isUnavailable ? (isLleno ? 'Lleno' : 'No Disponible') : 'Reservar'; })()}
                  </button>
                </>
             )}
