@@ -1134,7 +1134,7 @@ const LandingPage = () => {
                   const currentDate = new Date(start.getTime() + i * (1000 * 60 * 60 * 24));
                   const month = currentDate.getMonth();
                   const date = currentDate.getDate();
-                  let dailyPrice = bookingItem.price;
+                  let dailyPrice = Number(bookingItem.price);
                   
                   // Festivos: 1 Ene, 1 May, 25 Dic (+50%)
                   if ((month === 0 && date === 1) || (month === 4 && date === 1) || (month === 11 && date === 25)) {
@@ -1768,32 +1768,43 @@ const AdminDashboard = () => {
   const handleSaveEdit = async () => {
     setSaving(true);
     try {
+      const cityMap: any = { 'UBI-001': 'Quito', 'UBI-002': 'Guayaquil', 'UBI-003': 'Cuenca', 'UBI-004': 'Manta', 'UBI-005': 'Baños' };
+      const requestBody = {
+        ...editForm,
+        destino: cityMap[editForm.ubicacionId] || 'Quito',
+        tienePiscina: false
+      };
+
       if (isCreating) {
         const response = await fetch(`${API_URL}/api/v1/admin/alojamientos`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(editForm)
+          body: JSON.stringify(requestBody)
         });
         if (response.ok) {
           const newItem = await response.json();
-          const cityMap: any = { 'UBI-001': 'Quito', 'UBI-002': 'Guayaquil', 'UBI-003': 'Cuenca', 'UBI-004': 'Manta', 'UBI-005': 'Baños' };
           setAlojamientos([...alojamientos, { ...newItem, ...editForm, destino: cityMap[editForm.ubicacionId] || 'Quito', propietario: user.nombre }]);
           setEditingItem(null);
           addLog('Creación', `Se creó el nuevo alojamiento: ${editForm.nombre}`);
-          setToast({ message: '✨ Alojamiento y Habitaciones creados exitosamente.', type: 'error' });
+          setToast({ message: '✨ Alojamiento y Habitaciones creados exitosamente.', type: 'success' });
+        } else {
+          const err = await response.json();
+          setToast({ message: `Error al crear: ${err.message || 'Datos inválidos'}`, type: 'error' });
         }
       } else {
         const response = await fetch(`${API_URL}/api/v1/admin/alojamientos/${editingItem.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(editForm)
+          body: JSON.stringify(requestBody)
         });
         if (response.ok) {
-          const cityMap: any = { 'UBI-001': 'Quito', 'UBI-002': 'Guayaquil', 'UBI-003': 'Cuenca', 'UBI-004': 'Manta', 'UBI-005': 'Baños' };
           setAlojamientos(alojamientos.map(al => al.id === editingItem.id ? { ...al, ...editForm, destino: cityMap[editForm.ubicacionId] || al.destino } : al));
           setEditingItem(null);
           addLog('Modificación', `Se actualizaron los datos del alojamiento ID: ${editingItem.id}`);
           setToast({ message: '✏️ Datos actualizados en todas las tablas correctamente.', type: 'success' });
+        } else {
+          const err = await response.json();
+          setToast({ message: `Error al actualizar: ${err.message || 'Datos inválidos'}`, type: 'error' });
         }
       }
     } catch {
