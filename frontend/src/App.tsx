@@ -246,6 +246,12 @@ const MiPerfil = () => {
 
 const FacturaModal = ({ reserva, onClose }: { reserva: any, onClose: () => void }) => {
   const usuario = getTokenData();
+  const [datosFactura, setDatosFactura] = useState({
+    nombre: usuario?.nombre || 'Consumidor Final',
+    identificacion: '9999999999',
+    direccion: usuario?.direccion || 'S/N'
+  });
+
   const handlePrint = () => {
     window.print();
   };
@@ -254,6 +260,25 @@ const FacturaModal = ({ reserva, onClose }: { reserva: any, onClose: () => void 
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 10000, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
       <div className="printable-invoice" style={{ background: 'white', color: 'black', width: '100%', maxWidth: '700px', borderRadius: '8px', padding: '40px', maxHeight: '90vh', overflowY: 'auto', position: 'relative', border: '1px solid #e5e7eb' }}>
         
+        {/* Formulario previo (no se imprime) */}
+        <div className="no-print" style={{ background: '#f3f4f6', padding: '20px', borderRadius: '8px', marginBottom: '30px', border: '1px solid #d1d5db' }}>
+          <h3 style={{ margin: '0 0 15px 0', fontSize: '1.1rem', color: '#111827' }}>⚙️ Personalizar datos para la factura</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: '#4b5563' }}>Nombre / Razón Social</label>
+              <input type="text" value={datosFactura.nombre} onChange={(e) => setDatosFactura({...datosFactura, nombre: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: '#4b5563' }}>Cédula / RUC</label>
+              <input type="text" value={datosFactura.identificacion} onChange={(e) => setDatosFactura({...datosFactura, identificacion: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db' }} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '5px', color: '#4b5563' }}>Dirección</label>
+              <input type="text" value={datosFactura.direccion} onChange={(e) => setDatosFactura({...datosFactura, direccion: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db' }} />
+            </div>
+          </div>
+        </div>
+
         {/* Cabecera de la factura */}
         <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #D4AF37', paddingBottom: '20px', marginBottom: '20px' }}>
           <div>
@@ -274,7 +299,9 @@ const FacturaModal = ({ reserva, onClose }: { reserva: any, onClose: () => void 
         <div style={{ background: '#f9fafb', padding: '20px', borderRadius: '8px', marginBottom: '30px' }}>
           <h3 style={{ margin: '0 0 10px 0', fontSize: '1.1rem', color: '#111827' }}>Datos del Cliente</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.95rem' }}>
-            <p style={{ margin: 0 }}><strong>Nombre:</strong> {usuario?.nombre || 'Cliente Final'}</p>
+            <p style={{ margin: 0 }}><strong>Nombre:</strong> {datosFactura.nombre}</p>
+            <p style={{ margin: 0 }}><strong>Cédula/RUC:</strong> {datosFactura.identificacion}</p>
+            <p style={{ margin: 0 }}><strong>Dirección:</strong> {datosFactura.direccion}</p>
             <p style={{ margin: 0 }}><strong>Email:</strong> {usuario?.correo || 'correo@ejemplo.com'}</p>
           </div>
         </div>
@@ -1058,7 +1085,8 @@ const LandingPage = () => {
               style={{ background: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '500px', color: 'black', textAlign: 'left' }}
             >
               <h2 style={{ marginBottom: '15px', fontSize: '1.5rem', fontWeight: 'bold' }}>Reservar {bookingItem.title}</h2>
-              <p style={{ color: 'var(--text-secondary)', marginBottom: '20px' }}>{bookingItem.hotelName} - ${bookingItem.price} por noche</p>
+              <p style={{ color: 'var(--text-secondary)', marginBottom: '5px' }}>{bookingItem.hotelName} - Tarifa base: ${bookingItem.price} por noche</p>
+              <p style={{ color: '#10B981', fontSize: '0.85rem', marginBottom: '20px' }}>* Precios dinámicos: +30% en temporada alta (Jul, Ago, Dic) y +50% en festivos.</p>
               <form onSubmit={async (e) => {
                 e.preventDefault();
                 setBookingLoading(true);
@@ -1073,7 +1101,25 @@ const LandingPage = () => {
 
                 const diffTime = Math.abs(end.getTime() - start.getTime());
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-                const totalPagar = diffDays * bookingItem.price;
+                
+                let calculatedTotal = 0;
+                for (let i = 0; i < diffDays; i++) {
+                  const currentDate = new Date(start.getTime() + i * (1000 * 60 * 60 * 24));
+                  const month = currentDate.getMonth();
+                  const date = currentDate.getDate();
+                  let dailyPrice = bookingItem.price;
+                  
+                  // Festivos: 1 Ene, 1 May, 25 Dic (+50%)
+                  if ((month === 0 && date === 1) || (month === 4 && date === 1) || (month === 11 && date === 25)) {
+                    dailyPrice *= 1.5;
+                  } 
+                  // Temporada alta: Jul, Ago, Dic (+30%)
+                  else if (month === 6 || month === 7 || month === 11) {
+                    dailyPrice *= 1.3;
+                  }
+                  calculatedTotal += dailyPrice;
+                }
+                const totalPagar = Math.round(calculatedTotal * 100) / 100;
 
                 try {
                   const res = await fetch(`${API_URL}/api/v1/reservas`, {
@@ -1118,7 +1164,22 @@ const LandingPage = () => {
                 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--accent-color)' }}>
-                    Total aprox: ${bookingForm.fechaInicio && bookingForm.fechaFin && new Date(bookingForm.fechaFin) > new Date(bookingForm.fechaInicio) ? Math.ceil(Math.abs(new Date(bookingForm.fechaFin).getTime() - new Date(bookingForm.fechaInicio).getTime()) / (1000 * 60 * 60 * 24)) * bookingItem.price : bookingItem.price}
+                    {(() => {
+                      if (!bookingForm.fechaInicio || !bookingForm.fechaFin) return `Total aprox: $${bookingItem.price}`;
+                      const s = new Date(bookingForm.fechaInicio);
+                      const e = new Date(bookingForm.fechaFin);
+                      if (e <= s) return `Total aprox: $${bookingItem.price}`;
+                      const d = Math.ceil(Math.abs(e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
+                      let t = 0;
+                      for(let i=0; i<d; i++){
+                        const cur = new Date(s.getTime() + i*86400000);
+                        let p = bookingItem.price;
+                        if((cur.getMonth()===0&&cur.getDate()===1)||(cur.getMonth()===4&&cur.getDate()===1)||(cur.getMonth()===11&&cur.getDate()===25)) p*=1.5;
+                        else if(cur.getMonth()===6||cur.getMonth()===7||cur.getMonth()===11) p*=1.3;
+                        t+=p;
+                      }
+                      return `Total aprox: $${Math.round(t*100)/100} (incluye IVA)`;
+                    })()}
                   </div>
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <button type="button" className="btn-outline" onClick={() => setBookingItem(null)} style={{ padding: '10px 20px', borderRadius: '8px' }}>Cancelar</button>
@@ -1211,8 +1272,18 @@ const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{message: string, type: string} | null>(null);
 
+  const pwd = formData.contrasena;
+  const hasUpperCase = /[A-Z]/.test(pwd);
+  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(pwd);
+  const hasValidLength = pwd.length >= 8 && pwd.length <= 16;
+  const isPasswordValid = hasUpperCase && hasSpecialChar && hasValidLength;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isLogin && !isPasswordValid) {
+      setToast({ message: 'La contraseña no cumple con los requisitos de seguridad.', type: 'error' });
+      return;
+    }
     setLoading(true);
 
     const endpoint = isLogin ? '/api/v1/auth/login' : '/api/v1/auth/register';
@@ -1330,7 +1401,13 @@ const LoginPage = () => {
                 className="login-input"
                 style={inputStyle}
                 value={formData.nombre}
-                onChange={(e) => setFormData({...formData, nombre: e.target.value})}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  // Permitir solo letras y espacios
+                  if (/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]*$/.test(val)) {
+                    setFormData({...formData, nombre: val});
+                  }
+                }}
               />
               <div style={{ display: 'flex', gap: '15px' }}>
                 <input
@@ -1367,10 +1444,28 @@ const LoginPage = () => {
             placeholder="Contraseña"
             required
             className="login-input"
-            style={inputStyle}
+            style={{...inputStyle, marginBottom: !isLogin ? '10px' : '20px'}}
             value={formData.contrasena}
             onChange={(e) => setFormData({...formData, contrasena: e.target.value})}
+            maxLength={16}
           />
+
+          {!isLogin && (
+            <div style={{ background: 'rgba(0,0,0,0.3)', padding: '15px', borderRadius: '12px', marginBottom: '20px', fontSize: '0.85rem' }}>
+              <p style={{ margin: '0 0 8px 0', fontWeight: 'bold' }}>Requisitos de la contraseña:</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <span style={{ color: hasUpperCase ? '#10B981' : '#EF4444', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  {hasUpperCase ? <CheckCircle2 size={14} /> : <XCircle size={14} />} Al menos 1 mayúscula
+                </span>
+                <span style={{ color: hasSpecialChar ? '#10B981' : '#EF4444', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  {hasSpecialChar ? <CheckCircle2 size={14} /> : <XCircle size={14} />} Al menos 1 carácter especial
+                </span>
+                <span style={{ color: hasValidLength ? '#10B981' : '#EF4444', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  {hasValidLength ? <CheckCircle2 size={14} /> : <XCircle size={14} />} De 8 a 16 caracteres
+                </span>
+              </div>
+            </div>
+          )}
           
           <button type="submit" className="btn-primary login-btn" style={{ 
             width: '100%', 
