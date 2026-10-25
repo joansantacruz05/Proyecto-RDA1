@@ -42,8 +42,6 @@ export class AuthService {
       correo: usuario.correo,
       rol: usuario.rol,
       scope: scopes,
-      iss: issuer,
-      aud: audience,
     };
 
     return {
