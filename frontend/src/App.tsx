@@ -460,15 +460,30 @@ const MisReservas = () => {
     }
   };
 
-  const cancelarReserva = async (id: string) => {
+  const cancelarReserva = async (id: string, ordenId?: string) => {
     if(!confirm('¿Estás seguro que deseas cancelar esta reserva? Esta acción no se puede deshacer.')) return;
     try {
-      const res = await fetch(`${API_URL}/api/v1/reservas/${id}/cancelar`, { method: 'POST' });
+      const token = localStorage.getItem('token');
+      let res;
+      if (ordenId) {
+        // Cancelación formal vía GDS Core Hub API
+        res = await fetch(`${API_URL}/api/v1/orders/${ordenId}/cancel`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Idempotency-Key': crypto.randomUUID(),
+          },
+        });
+      } else {
+        res = await fetch(`${API_URL}/api/v1/reservas/${id}/cancelar`, { method: 'POST' });
+      }
+
       if (res.ok) {
         setToast({ message: 'Reserva cancelada correctamente.', type: 'success' });
         setReservas(prev => prev.map(r => r.id === id ? {...r, estado: 'Cancelada'} : r));
       } else {
-        setToast({ message: 'Error al cancelar la reserva', type: 'error' });
+        const err = await res.json().catch(() => ({}));
+        setToast({ message: err.detail || err.title || 'Error al cancelar la reserva', type: 'error' });
       }
     } catch {
       setToast({ message: 'Error de conexión al cancelar', type: 'error' });
@@ -605,7 +620,7 @@ const MisReservas = () => {
               )}
               {canCancel && (
                 <button 
-                  onClick={() => cancelarReserva(res.id)} 
+                  onClick={() => cancelarReserva(res.id, res.ordenId)} 
                   style={{ background: 'transparent', border: '1px solid #EF4444', color: '#EF4444', padding: '8px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem' }}
                 >
                   Cancelar Reserva
@@ -1149,24 +1164,81 @@ const LandingPage = () => {
                 const totalPagar = Math.round(calculatedTotal * 100) / 100;
 
                 try {
-                  const res = await fetch(`${API_URL}/api/v1/reservas`, {
+                  const token = localStorage.getItem('token');
+                  if (!token) {
+                    setToast({ message: 'Debes iniciar sesión para realizar una reserva según las políticas de seguridad OAuth2.', type: 'error' });
+                    setBookingLoading(false);
+                    return;
+                  }
+
+                  // Paso 1: POST /orders/preview (GDS Core Hub)
+                  const previewRes = await fetch(`${API_URL}/api/v1/orders/preview`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${token}`,
+                    },
                     body: JSON.stringify({
-                      ...bookingForm,
-                      numeroPersonas: Number(bookingForm.numeroPersonas),
-                      totalPagar,
-                      alojamientoId: bookingItem.alojamientoId || bookingItem.id
-                    })
+                      accommodation_id: bookingItem.alojamientoId || bookingItem.id,
+                      product_id: bookingItem.id,
+                      guests: {
+                        number_of_adults: Number(bookingForm.numeroPersonas) || 1,
+                        number_of_rooms: 1,
+                      },
+                      checkin: bookingForm.fechaInicio,
+                      checkout: bookingForm.fechaFin,
+                    }),
+                  });
+
+                  let orderPreviewId = null;
+                  if (previewRes.ok) {
+                    const prevJson = await previewRes.json();
+                    orderPreviewId = prevJson.data?.order_preview_id;
+                  }
+
+                  // Paso 2: POST /orders/create con Idempotency-Key obligatoria
+                  const names = bookingForm.nombreCliente.trim().split(' ');
+                  const firstName = names[0] || 'Cliente';
+                  const lastName = names.slice(1).join(' ') || 'General';
+                  const idempotencyKey = crypto.randomUUID();
+
+                  const res = await fetch(`${API_URL}/api/v1/orders/create`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${token}`,
+                      'Idempotency-Key': idempotencyKey,
+                    },
+                    body: JSON.stringify({
+                      order_preview_id: orderPreviewId || `PREV-${crypto.randomUUID()}`,
+                      payment_reference: `PAY-STORE-${Date.now()}`,
+                      customer_details: {
+                        first_name: firstName,
+                        last_name: lastName,
+                        email: bookingForm.emailCliente,
+                      },
+                      accommodation_id: bookingItem.alojamientoId || bookingItem.id,
+                      product_id: bookingItem.id,
+                      checkin: bookingForm.fechaInicio,
+                      checkout: bookingForm.fechaFin,
+                      totalPrice: totalPagar,
+                    }),
                   });
                   
                   if (res.ok) {
-                    setToast({ message: '¡Reserva confirmada con éxito! Te contactaremos pronto.', type: 'success' });
+                    const orderData = await res.json();
+                    setToast({
+                      message: `¡Orden confirmada con éxito! Localizador: ${orderData.locator || orderData.order_id}`,
+                      type: 'success',
+                    });
                     setBookingItem(null);
                     setBookingForm({ nombreCliente: '', emailCliente: '', fechaInicio: '', fechaFin: '', numeroPersonas: '' });
                   } else {
-                    const errorData = await res.json();
-                    setToast({ message: `Error: ${errorData.message || 'No se pudo realizar la reserva'}`, type: 'error' });
+                    const errorData = await res.json().catch(() => ({}));
+                    setToast({
+                      message: errorData.detail || errorData.title || `Error: ${errorData.code || 'No se pudo realizar la orden'}`,
+                      type: 'error',
+                    });
                   }
                 } catch {
                   setToast({ message: 'Error de conexión al servidor.', type: 'error' });

@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Delete, Body, Param, Headers, Put, Patch,
-  UseGuards, HttpCode, HttpStatus, Header, ParseUUIDPipe
+  UseGuards, UseInterceptors, HttpCode, HttpStatus, Header, ParseUUIDPipe, Req
 } from '@nestjs/common';
 import {
   ApiTags, ApiOperation, ApiResponse, ApiParam,
@@ -8,6 +8,10 @@ import {
 } from '@nestjs/swagger';
 import { AlojamientosService } from './alojamientos.service';
 import { IdempotencyKeyGuard } from '../../common/guards/idempotency-key.guard';
+import { IdempotencyInterceptor } from '../../common/interceptors/idempotency.interceptor';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ScopesGuard } from '../../common/guards/scopes.guard';
+import { Scopes } from '../../common/decorators/scopes.decorator';
 import { CrearAlojamientoDto } from './dto/crear-alojamiento.dto';
 import { ActualizarAlojamientoDto } from './dto/actualizar-alojamiento.dto';
 
@@ -141,6 +145,7 @@ export class AlojamientosController {
   @ApiOperation({ summary: 'Consultar disponibilidad y precio de un alojamiento' })
   @ApiResponse({ status: 200, description: 'Disponibilidad y detalles del precio' })
   @ApiResponse({ status: 400, description: 'Petición inválida' })
+  @HttpCode(HttpStatus.OK)
   availability(@Body() availabilityRequest: any) {
     return this.alojamientosService.checkAvailability(availabilityRequest);
   }
@@ -167,6 +172,8 @@ export class AlojamientosController {
   @ApiSecurity('OAuth2Security', ['alojamientos:read'])
   @ApiOperation({ summary: 'Obtener alojamientos que han cambiado desde una fecha' })
   @ApiResponse({ status: 200, description: 'Lista de alojamientos modificados' })
+  @UseGuards(JwtAuthGuard, ScopesGuard)
+  @Scopes('alojamientos:read')
   getDetailsChanges(@Body() changesRequest: any) {
     return this.alojamientosService.getDetailsChanges(changesRequest);
   }
@@ -208,7 +215,7 @@ export class AlojamientosController {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  //  Gestión de Órdenes (Reservas)
+  //  Gestión de Órdenes (Reservas) — Contrato GDS Alojamientos Hub
   // ══════════════════════════════════════════════════════════════════════════
 
   @Post('orders/preview')
@@ -216,6 +223,9 @@ export class AlojamientosController {
   @ApiSecurity('OAuth2Security', ['alojamientos:read'])
   @ApiOperation({ summary: 'Previsualizar orden antes de confirmar' })
   @ApiResponse({ status: 200, description: 'Detalles de la orden previsualizada y precios finales' })
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, ScopesGuard)
+  @Scopes('alojamientos:read')
   previewOrder(@Body() previewRequest: any) {
     return this.alojamientosService.previewOrder(previewRequest);
   }
@@ -229,12 +239,17 @@ export class AlojamientosController {
   @ApiResponse({ status: 400, description: 'Petición inválida' })
   @ApiResponse({ status: 409, description: 'Conflicto (habitación no disponible, cambio de precio)' })
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(IdempotencyKeyGuard)
+  @UseGuards(JwtAuthGuard, ScopesGuard, IdempotencyKeyGuard)
+  @UseInterceptors(IdempotencyInterceptor)
+  @Scopes('alojamientos:book')
   createOrder(
     @Headers('Idempotency-Key') idempotencyKey: string,
     @Body() createRequest: any,
+    @Req() req: any,
   ) {
-    return this.alojamientosService.createOrder(createRequest);
+    // El dueño de la orden se infiere siempre del sub del JWT
+    const userId = req.user?.sub || req.user?.id;
+    return this.alojamientosService.createOrder(createRequest, userId);
   }
 
   @Get('orders/:orderId')
@@ -244,6 +259,8 @@ export class AlojamientosController {
   @ApiParam({ name: 'orderId', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Detalles completos de la orden' })
   @ApiResponse({ status: 404, description: 'Orden no encontrada' })
+  @UseGuards(JwtAuthGuard, ScopesGuard)
+  @Scopes('alojamientos:read')
   getOrder(@Param('orderId', ParseUUIDPipe) orderId: string) {
     return this.alojamientosService.getOrder(orderId);
   }
@@ -256,7 +273,10 @@ export class AlojamientosController {
   @ApiHeader({ name: 'Idempotency-Key', required: true, description: 'UUID v4 para evitar modificaciones duplicadas' })
   @ApiResponse({ status: 200, description: 'Orden modificada' })
   @ApiResponse({ status: 409, description: 'Conflicto' })
-  @UseGuards(IdempotencyKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, ScopesGuard, IdempotencyKeyGuard)
+  @UseInterceptors(IdempotencyInterceptor)
+  @Scopes('alojamientos:book')
   modifyOrder(
     @Headers('Idempotency-Key') idempotencyKey: string,
     @Param('orderId', ParseUUIDPipe) orderId: string,
@@ -273,7 +293,10 @@ export class AlojamientosController {
   @ApiHeader({ name: 'Idempotency-Key', required: true, description: 'UUID v4 para evitar cancelaciones duplicadas' })
   @ApiResponse({ status: 200, description: 'Cancelación procesada' })
   @ApiResponse({ status: 409, description: 'Conflicto' })
-  @UseGuards(IdempotencyKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, ScopesGuard, IdempotencyKeyGuard)
+  @UseInterceptors(IdempotencyInterceptor)
+  @Scopes('alojamientos:cancel')
   cancelOrder(
     @Headers('Idempotency-Key') idempotencyKey: string,
     @Param('orderId', ParseUUIDPipe) orderId: string,
@@ -290,6 +313,8 @@ export class AlojamientosController {
   @ApiSecurity('OAuth2Security', ['alojamientos:webhooks'])
   @ApiOperation({ summary: 'Listar suscripciones' })
   @ApiResponse({ status: 200, description: 'Suscripciones activas' })
+  @UseGuards(JwtAuthGuard, ScopesGuard)
+  @Scopes('alojamientos:webhooks')
   listWebhooks() {
     return this.alojamientosService.listWebhooks();
   }
@@ -300,6 +325,8 @@ export class AlojamientosController {
   @ApiOperation({ summary: 'Registrar webhook' })
   @ApiResponse({ status: 201, description: 'Webhook registrado' })
   @HttpCode(HttpStatus.CREATED)
+  @UseGuards(JwtAuthGuard, ScopesGuard)
+  @Scopes('alojamientos:webhooks')
   createWebhook(@Body() webhookSubscription: any) {
     return this.alojamientosService.createWebhook(webhookSubscription);
   }
@@ -311,6 +338,8 @@ export class AlojamientosController {
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 204, description: 'Eliminado' })
   @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard, ScopesGuard)
+  @Scopes('alojamientos:webhooks')
   deleteWebhook(@Param('id', ParseUUIDPipe) id: string) {
     return this.alojamientosService.deleteWebhook(id);
   }

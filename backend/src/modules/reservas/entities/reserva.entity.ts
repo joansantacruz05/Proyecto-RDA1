@@ -38,6 +38,9 @@ export class Reserva {
   @Column({ type: 'text', nullable: true })
   comentario: string;
 
+  @Column({ type: 'uuid', unique: true, nullable: true })
+  ordenId: string;
+
   // Relación Muchos a Uno con Alojamiento
   @ManyToOne(() => Alojamiento)
   @JoinColumn({ name: 'alojamiento_id' })

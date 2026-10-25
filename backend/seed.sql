@@ -128,7 +128,8 @@ CREATE TABLE RESERVAS (
     "precioTotal" DECIMAL(10, 2) NOT NULL,
     "numeroPersonas" INT DEFAULT 1,
     calificacion INT,
-    comentario TEXT
+    comentario TEXT,
+    "ordenId" UUID UNIQUE DEFAULT gen_random_uuid()
 );
 
 -- 13.1 CONTRATOS
