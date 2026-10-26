@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package alojamientos;
+
+// ============================================================================
+// Contrato gRPC para el Dominio de Alojamientos (Reto 2 - Integración de Sistemas)
+// ============================================================================
+// Define la interfaz de comunicación binaria sobre HTTP/2 para servicios de alto
+// rendimiento entre el Booking Hub, API Gateway y microservicios colaboradores.
+
+service AlojamientosService {
+  // 1. Unary RPC: Obtener información detallada de un alojamiento por su ID
+  rpc GetAlojamiento (GetAlojamientoRequest) returns (AlojamientoResponse);
+
+  // 2. Unary RPC: Consultar disponibilidad y cotización en tiempo real
+  rpc CheckAvailability (CheckAvailabilityRequest) returns (CheckAvailabilityResponse);
+
+  // 3. Server Streaming RPC: Búsqueda reactiva con transmisión continua de resultados
+  rpc SearchAlojamientosStream (SearchAlojamientosRequest) returns (stream AlojamientoSummaryResponse);
+
+  // 4. Unary RPC: Consultar el estado y detalles de una orden/reserva interna
+  rpc GetOrder (GetOrderRequest) returns (OrderResponse);
+}
+
+// ----------------------------------------------------------------------------
+// Mensajes para GetAlojamiento
+// ----------------------------------------------------------------------------
+message GetAlojamientoRequest {
+  string id = 1; // ID del alojamiento (ej: ALO-001 o UUID)
+}
+
+message AlojamientoResponse {
+  string id = 1;
+  string nombre = 2;
+  string descripcion = 3;
+  string destino = 4;
+  string direccion = 5;
+  double precioBasePorNoche = 6;
+  int32 capacidadAdultos = 7;
+  int32 capacidadNinos = 8;
+  int32 habitacionesDisponibles = 9;
+  string estado = 10;
+  string imagenUrl = 11;
+  bool tienePiscina = 12;
+}
+
+// ----------------------------------------------------------------------------
+// Mensajes para CheckAvailability
+// ----------------------------------------------------------------------------
+message CheckAvailabilityRequest {
+  string alojamientoId = 1;
+  string checkin = 2;         // Fecha inicio YYYY-MM-DD
+  string checkout = 3;        // Fecha fin YYYY-MM-DD
+  int32 numberOfAdults = 4;   // Cantidad requerida de adultos
+  int32 numberOfRooms = 5;    // Cantidad requerida de habitaciones
+}
+
+message RoomOption {
+  string roomId = 1;
+  string roomName = 2;
+  double pricePerNight = 3;
+  int32 availableQuantity = 4;
+}
+
+message CheckAvailabilityResponse {
+  string alojamientoId = 1;
+  bool isAvailable = 2;
+  int32 totalAvailableRooms = 3;
+  double totalPrice = 4;
+  string currency = 5;
+  repeated RoomOption availableRooms = 6;
+}
+
+// ----------------------------------------------------------------------------
+// Mensajes para SearchAlojamientosStream
+// ----------------------------------------------------------------------------
+message SearchAlojamientosRequest {
+  string country = 1;
+  string city = 2;
+  int32 adults = 3;
+  int32 limit = 4;
+}
+
+message AlojamientoSummaryResponse {
+  string id = 1;
+  string nombre = 2;
+  string destino = 3;
+  string pais = 4;
+  double precioPorNoche = 5;
+  string imagenUrl = 6;
+  bool isAvailable = 7;
+}
+
+// ----------------------------------------------------------------------------
+// Mensajes para GetOrder
+// ----------------------------------------------------------------------------
+message GetOrderRequest {
+  string orderId = 1; // UUID de la orden
+}
+
+message OrderResponse {
+  string orderId = 1;
+  string alojamientoId = 2;
+  string userId = 3;
+  string checkin = 4;
+  string checkout = 5;
+  double totalAmount = 6;
+  string status = 7;
+  string createdAt = 8;
+}
