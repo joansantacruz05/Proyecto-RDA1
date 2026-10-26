@@ -507,24 +507,31 @@ DO $$ BEGIN
 EXCEPTION WHEN OTHERS THEN null;
 END $$;
 
--- Eliminar tablas/vistas viejas de 'public' para dar paso a las vistas transparentes:
-DROP VIEW IF EXISTS public.alojamientos_servicios CASCADE;
-DROP TABLE IF EXISTS public.alojamientos_servicios CASCADE;
-
-DROP VIEW IF EXISTS public.espacios_rentables CASCADE;
-DROP TABLE IF EXISTS public.espacios_rentables CASCADE;
-
-DROP VIEW IF EXISTS public.reservas CASCADE;
-DROP TABLE IF EXISTS public.reservas CASCADE;
-
-DROP VIEW IF EXISTS public.alojamientos CASCADE;
-DROP TABLE IF EXISTS public.alojamientos CASCADE;
-
-DROP VIEW IF EXISTS public.idempotency_keys CASCADE;
-DROP TABLE IF EXISTS public.idempotency_keys CASCADE;
-
-DROP VIEW IF EXISTS public.webhook_subscriptions CASCADE;
-DROP TABLE IF EXISTS public.webhook_subscriptions CASCADE;
+-- Eliminar de forma segura cualquier tabla o vista previa en 'public':
+DO $$ 
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN (
+    SELECT table_name, table_type 
+    FROM information_schema.tables 
+    WHERE table_schema = 'public' 
+      AND table_name IN (
+        'alojamientos_servicios', 
+        'espacios_rentables', 
+        'reservas', 
+        'alojamientos', 
+        'idempotency_keys', 
+        'webhook_subscriptions'
+      )
+  ) LOOP
+    IF r.table_type = 'VIEW' THEN
+      EXECUTE format('DROP VIEW IF EXISTS public.%I CASCADE', r.table_name);
+    ELSE
+      EXECUTE format('DROP TABLE IF EXISTS public.%I CASCADE', r.table_name);
+    END IF;
+  END LOOP;
+END $$;
 
 CREATE VIEW public.alojamientos AS
 SELECT 
