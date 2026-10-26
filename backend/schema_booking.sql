@@ -485,10 +485,48 @@ ON CONFLICT (id) DO NOTHING;
 -- ============================================================================
 -- 7. VISTAS DE COMPATIBILIDAD HACIA ATRÁS (BACKWARD COMPATIBILITY VIEWS)
 -- ============================================================================
--- Garantizan que el backend existente que consulta 'public.alojamientos' o
--- 'public.espacios_rentables' siga funcionando de forma transparente.
+-- Si existían tablas físicas previas en 'public', se migran sus datos a 'booking'
+-- y luego se reemplazan por vistas para no romper el backend ni el frontend.
 
-CREATE OR REPLACE VIEW public.alojamientos AS
+DO $$ BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'alojamientos') THEN
+    INSERT INTO booking.alojamiento (
+      id, anfitrion_id, tipo_id, ciudad_id, politica_id, nombre, descripcion, direccion, latitud, longitud
+    )
+    SELECT 
+      gen_random_uuid(),
+      'a0000000-0000-0000-0000-000000000001'::uuid,
+      1, 1, 1,
+      a.nombre,
+      COALESCE(a.descripcion, 'Alojamiento importado'),
+      'Dirección importada',
+      -0.1807, -78.4678
+    FROM public.alojamientos a
+    WHERE NOT EXISTS (SELECT 1 FROM booking.alojamiento b WHERE b.nombre = a.nombre);
+  END IF;
+EXCEPTION WHEN OTHERS THEN null;
+END $$;
+
+-- Eliminar tablas/vistas viejas de 'public' para dar paso a las vistas transparentes:
+DROP VIEW IF EXISTS public.alojamientos_servicios CASCADE;
+DROP TABLE IF EXISTS public.alojamientos_servicios CASCADE;
+
+DROP VIEW IF EXISTS public.espacios_rentables CASCADE;
+DROP TABLE IF EXISTS public.espacios_rentables CASCADE;
+
+DROP VIEW IF EXISTS public.reservas CASCADE;
+DROP TABLE IF EXISTS public.reservas CASCADE;
+
+DROP VIEW IF EXISTS public.alojamientos CASCADE;
+DROP TABLE IF EXISTS public.alojamientos CASCADE;
+
+DROP VIEW IF EXISTS public.idempotency_keys CASCADE;
+DROP TABLE IF EXISTS public.idempotency_keys CASCADE;
+
+DROP VIEW IF EXISTS public.webhook_subscriptions CASCADE;
+DROP TABLE IF EXISTS public.webhook_subscriptions CASCADE;
+
+CREATE VIEW public.alojamientos AS
 SELECT 
   a.id::text AS id,
   a.anfitrion_id::text AS "anfitrionId",
