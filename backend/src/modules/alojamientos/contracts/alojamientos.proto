@@ -3,30 +3,156 @@ syntax = "proto3";
 package alojamientos;
 
 // ============================================================================
-// Contrato gRPC para el Dominio de Alojamientos (Reto 2 - Integración de Sistemas)
+// CONTRATO gRPC ENTERPRISE: DOMINIO ALOJAMIENTOS
+// Proyecto RDA1 - Arquitectura de Integración de Sistemas
 // ============================================================================
-// Define la interfaz de comunicación binaria sobre HTTP/2 para servicios de alto
-// rendimiento entre el Booking Hub, API Gateway y microservicios colaboradores.
+// Este contrato especifica de manera formal y sin ambigüedades:
+// 1. Comunicación RPC binaria sobre HTTP/2 de alta velocidad.
+// 2. Metadatos de seguridad OAuth2 (Bearer JWT inyectado en grpc-metadata).
+// 3. Flujo transaccional en 2 pasos (Preview con Soft-Hold -> Create con Idempotencia).
+// 4. Políticas explícitas de cancelación, desglose de impuestos y comisiones.
+// 5. Streaming reactivo de búsqueda y de eventos EDA con soporte de reconexión.
 
 service AlojamientosService {
-  // 1. Unary RPC: Obtener información detallada de un alojamiento por su ID
+  // ── 1. Catálogo y Búsqueda (Scope: alojamientos:read) ─────────────────────
+  // Consulta la ficha completa, amenidades y habitaciones de una propiedad.
   rpc GetAlojamiento (GetAlojamientoRequest) returns (AlojamientoResponse);
 
-  // 2. Unary RPC: Consultar disponibilidad y cotización en tiempo real
-  rpc CheckAvailability (CheckAvailabilityRequest) returns (CheckAvailabilityResponse);
-
-  // 3. Server Streaming RPC: Búsqueda reactiva con transmisión continua de resultados
+  // Búsqueda reactiva con transmisión en streaming de alojamientos disponibles.
   rpc SearchAlojamientosStream (SearchAlojamientosRequest) returns (stream AlojamientoSummaryResponse);
 
-  // 4. Unary RPC: Consultar el estado y detalles de una orden/reserva interna
+  // ── 2. Disponibilidad y Cotización (Scope: alojamientos:read) ─────────────
+  // Consulta cupos y cotización en tiempo real sin bloquear inventario.
+  rpc CheckAvailability (CheckAvailabilityRequest) returns (CheckAvailabilityResponse);
+
+  // ── 3. Flujo Transaccional de Órdenes (Scopes: alojamientos:book / cancel) 
+  // Paso 1: Bloquea temporalmente inventario (Soft-Hold 15 min) y congela tarifa.
+  rpc PreviewOrder (PreviewOrderRequest) returns (PreviewOrderResponse);
+
+  // Paso 2: Confirma la reserva con idempotencia estricta y emite localizador.
+  // Requiere metadata: "authorization: Bearer <JWT>" (el owner_id se extrae del sub).
+  rpc CreateOrder (CreateOrderRequest) returns (OrderResponse);
+
+  // Consulta el estado de una orden por su UUID o localizador.
   rpc GetOrder (GetOrderRequest) returns (OrderResponse);
+
+  // Modifica fechas o huéspedes de forma idempotente.
+  rpc ModifyOrder (ModifyOrderRequest) returns (OrderResponse);
+
+  // Cancela la orden aplicando la política de penalización y calcula reembolso.
+  rpc CancelOrder (CancelOrderRequest) returns (CancelOrderResponse);
+
+  // ── 4. Arquitectura Orientada a Eventos / EDA (Scope: alojamientos:webhooks)
+  // Canal pub/sub con Server Streaming y soporte de reanudación (last_event_id).
+  rpc SubscribeOrderEvents (SubscribeEventsRequest) returns (stream OrderEventMessage);
 }
 
-// ----------------------------------------------------------------------------
-// Mensajes para GetAlojamiento
-// ----------------------------------------------------------------------------
+// ============================================================================
+// Enumeraciones del Dominio
+// ============================================================================
+
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  PENDING = 1;      // Orden creada pendiente de verificación de fondos
+  CONFIRMED = 2;    // Confirmada con localizador activo y stock descontado
+  MODIFIED = 3;     // Modificada posteriormente en fechas/huéspedes
+  CANCELLED = 4;    // Cancelada (con o sin reembolso según política)
+}
+
+enum AlojamientoEstado {
+  ALOJAMIENTO_ESTADO_UNSPECIFIED = 0;
+  ACTIVO = 1;
+  INACTIVO = 2;
+  EN_MANTENIMIENTO = 3;
+}
+
+enum CancellationPolicyType {
+  POLICY_UNSPECIFIED = 0;
+  FLEXIBLE = 1;        // Reembolso 100% hasta 24h antes del checkin
+  MODERADA = 2;        // Reembolso 100% hasta 5 días antes, 50% después
+  ESTRICTA = 3;        // Reembolso 50% hasta 7 días antes, 0% después
+  NO_REEMBOLSABLE = 4; // 0% de reembolso ante cancelación
+}
+
+enum InventoryHoldStatus {
+  HOLD_UNSPECIFIED = 0;
+  HOLD_ACTIVE = 1;     // Bloqueo temporal activo (dentro de los 15 min)
+  HOLD_EXPIRED = 2;    // Tiempo expirado, inventario liberado al público
+  HOLD_CONFIRMED = 3;  // Bloqueo convertido en orden confirmada definitiva
+}
+
+enum HubErrorCode {
+  ERROR_NONE = 0;
+  VALIDATION_FAILED = 1;          // Parámetros inválidos o faltantes
+  NOT_FOUND = 2;                  // Alojamiento u orden no existe
+  UNAUTHENTICATED = 3;            // Token JWT no provisto o inválido
+  INSUFFICIENT_SCOPE = 4;         // El token no tiene el scope requerido
+  IDEMPOTENCY_CONFLICT = 5;       // Misma llave enviada con diferente payload
+  PREVIEW_EXPIRED = 6;            // El preview expiró (>15 min), debe regenerarse
+  ROOM_UNAVAILABLE = 7;           // Sin stock o habitación ocupada en esas fechas
+  CANCELLATION_NOT_ALLOWED = 8;   // La orden ya fue cancelada o checkin ya pasó
+  RATE_LIMIT_EXCEEDED = 9;        // Exceso de peticiones por fingerprint/IP
+}
+
+// ============================================================================
+// Tipos de Valor y Componentes Reutilizables (DDD)
+// ============================================================================
+
+message Money {
+  double amount = 1;          // Valor numérico (ej: 150.00)
+  string currency = 2;        // ISO 4217 (ej: "USD", "EUR")
+}
+
+message PriceBreakdown {
+  Money subtotal = 1;         // Tarifa base neta
+  Money taxes = 2;            // Impuestos gubernamentales (ej: IVA 15%)
+  Money service_fee = 3;      // Tarifa por servicio de la plataforma (ej: 5%)
+  Money total = 4;            // Monto final facturado (subtotal + taxes + fee)
+}
+
+message DateRange {
+  string checkin = 1;         // Formato ISO: YYYY-MM-DD
+  string checkout = 2;        // Formato ISO: YYYY-MM-DD
+  int32 total_nights = 3;     // Total de noches calculadas
+}
+
+message GuestDetails {
+  int32 number_of_adults = 1;
+  int32 number_of_children = 2;
+  int32 number_of_rooms = 3;
+}
+
+message CustomerDetails {
+  string first_name = 1;
+  string last_name = 2;
+  string email = 3;
+  string phone = 4;
+  string document_id = 5;     // DNI, Cédula o Pasaporte
+}
+
+message RoomProduct {
+  string product_id = 1;      // Ej: HAB-001
+  string name = 2;            // Ej: Suite Presidencial Vista al Mar
+  Money price_per_night = 3;
+  int32 available_quantity = 4;
+  int32 max_adults = 5;
+  int32 max_children = 6;
+  repeated string amenities = 7;
+}
+
+message CancellationPolicy {
+  CancellationPolicyType type = 1;
+  string description = 2;
+  string free_cancellation_until = 3; // ISO 8601 UTC
+  double penalty_percentage = 4;      // 0.0 a 100.0
+}
+
+// ============================================================================
+// Mensajes de Catálogo y Búsqueda
+// ============================================================================
+
 message GetAlojamientoRequest {
-  string id = 1; // ID del alojamiento (ej: ALO-001 o UUID)
+  string id = 1; // Ej: ALO-001 o UUID
 }
 
 message AlojamientoResponse {
@@ -34,51 +160,21 @@ message AlojamientoResponse {
   string nombre = 2;
   string descripcion = 3;
   string destino = 4;
-  string direccion = 5;
-  double precioBasePorNoche = 6;
-  int32 capacidadAdultos = 7;
-  int32 capacidadNinos = 8;
-  int32 habitacionesDisponibles = 9;
-  string estado = 10;
-  string imagenUrl = 11;
-  bool tienePiscina = 12;
+  string pais = 5;
+  string direccion = 6;
+  AlojamientoEstado estado = 7;
+  string imagen_url = 8;
+  bool tiene_piscina = 9;
+  CancellationPolicy cancellation_policy = 10;
+  repeated RoomProduct products = 11;
 }
 
-// ----------------------------------------------------------------------------
-// Mensajes para CheckAvailability
-// ----------------------------------------------------------------------------
-message CheckAvailabilityRequest {
-  string alojamientoId = 1;
-  string checkin = 2;         // Fecha inicio YYYY-MM-DD
-  string checkout = 3;        // Fecha fin YYYY-MM-DD
-  int32 numberOfAdults = 4;   // Cantidad requerida de adultos
-  int32 numberOfRooms = 5;    // Cantidad requerida de habitaciones
-}
-
-message RoomOption {
-  string roomId = 1;
-  string roomName = 2;
-  double pricePerNight = 3;
-  int32 availableQuantity = 4;
-}
-
-message CheckAvailabilityResponse {
-  string alojamientoId = 1;
-  bool isAvailable = 2;
-  int32 totalAvailableRooms = 3;
-  double totalPrice = 4;
-  string currency = 5;
-  repeated RoomOption availableRooms = 6;
-}
-
-// ----------------------------------------------------------------------------
-// Mensajes para SearchAlojamientosStream
-// ----------------------------------------------------------------------------
 message SearchAlojamientosRequest {
   string country = 1;
   string city = 2;
-  int32 adults = 3;
-  int32 limit = 4;
+  GuestDetails guests = 3;
+  int32 rows = 4;
+  string device_fingerprint = 5; // Para telemetría y protección anti-scraping
 }
 
 message AlojamientoSummaryResponse {
@@ -86,25 +182,149 @@ message AlojamientoSummaryResponse {
   string nombre = 2;
   string destino = 3;
   string pais = 4;
-  double precioPorNoche = 5;
-  string imagenUrl = 6;
-  bool isAvailable = 7;
+  Money base_price_per_night = 5;
+  string imagen_url = 6;
+  bool is_available = 7;
 }
 
-// ----------------------------------------------------------------------------
-// Mensajes para GetOrder
-// ----------------------------------------------------------------------------
-message GetOrderRequest {
-  string orderId = 1; // UUID de la orden
+// ============================================================================
+// Mensajes de Disponibilidad
+// ============================================================================
+
+message CheckAvailabilityRequest {
+  string accommodation_id = 1;
+  DateRange dates = 2;
+  GuestDetails guests = 3;
+}
+
+message CheckAvailabilityResponse {
+  string accommodation_id = 1;
+  bool is_available = 2;
+  int32 total_available_rooms = 3;
+  PriceBreakdown price_breakdown = 4;
+  repeated RoomProduct available_products = 5;
+}
+
+// ============================================================================
+// Mensajes del Flujo de Órdenes (Preview -> Create -> Modify -> Cancel)
+// ============================================================================
+
+message PreviewOrderRequest {
+  string accommodation_id = 1;
+  string product_id = 2;
+  DateRange dates = 3;
+  GuestDetails guests = 4;
+}
+
+message PreviewOrderResponse {
+  string order_preview_id = 1;          // Ej: PREV-1729940123-ABCD
+  string accommodation_id = 2;
+  string product_id = 3;
+  InventoryHoldStatus hold_status = 4;  // HOLD_ACTIVE
+  int32 hold_duration_seconds = 5;      // 900 (15 minutos garantizados)
+  string expires_at = 6;                // ISO 8601 UTC
+  PriceBreakdown price_breakdown = 7;
+  CancellationPolicy cancellation_policy = 8;
+}
+
+message CreateOrderRequest {
+  string idempotency_key = 1;           // UUID v4 obligatorio (evita duplicados)
+  string order_preview_id = 2;          // Token emitido en PreviewOrder
+  string payment_reference = 3;         // Referencia de la pasarela (PAY-...)
+  CustomerDetails customer = 4;         // Datos del titular
 }
 
 message OrderResponse {
-  string orderId = 1;
-  string alojamientoId = 2;
-  string userId = 3;
-  string checkin = 4;
-  string checkout = 5;
-  double totalAmount = 6;
-  string status = 7;
-  string createdAt = 8;
+  string order_id = 1;                  // UUID único de la reserva
+  string locator = 2;                   // Localizador alfanumérico (ej: RES-9821A)
+  string accommodation_id = 3;
+  string product_id = 4;
+  string owner_id = 5;                  // Inferido del sub del JWT
+  OrderStatus status = 6;
+  DateRange dates = 7;
+  GuestDetails guests = 8;
+  CustomerDetails customer = 9;
+  PriceBreakdown price_breakdown = 10;
+  CancellationPolicy cancellation_policy = 11;
+  string created_at = 12;               // ISO 8601 UTC
+  string updated_at = 13;               // ISO 8601 UTC
+}
+
+message GetOrderRequest {
+  string order_id = 1;                  // UUID de la orden o Localizador
+}
+
+message ModifyOrderRequest {
+  string idempotency_key = 1;           // UUID v4
+  string order_id = 2;                  // UUID de la orden
+  DateRange new_dates = 3;
+  GuestDetails new_guests = 4;
+}
+
+message CancelOrderRequest {
+  string idempotency_key = 1;           // UUID v4
+  string order_id = 2;                  // UUID de la orden
+  string reason = 3;                    // Motivo de la cancelación
+}
+
+message CancelOrderResponse {
+  string order_id = 1;
+  string locator = 2;
+  OrderStatus status = 3;               // ORDER_STATUS_CANCELLED
+  Money refund_amount = 4;              // Monto calculado a reembolsar
+  Money penalty_fee = 5;                // Penalización retenida según política
+  string cancelled_at = 6;              // ISO 8601 UTC
+}
+
+// ============================================================================
+// Mensajes de Arquitectura Orientada a Eventos (EDA)
+// ============================================================================
+
+message SubscribeEventsRequest {
+  string subscriber_id = 1;             // Identificador del microservicio suscriptor
+  string last_event_id = 2;             // Para reanudar eventos tras desconexión
+  repeated string event_filter = 3;     // Ej: ["RESERVA_CREADA", "INVENTARIO_AGOTADO"]
+}
+
+message OrderEventMessage {
+  string event_id = 1;                  // UUID único del evento
+  string event_type = 2;                // RESERVA_CREADA, PAGO_CONFIRMADO, etc.
+  string order_id = 3;
+  string locator = 4;
+  string accommodation_id = 5;
+  string timestamp = 6;                 // ISO 8601 UTC
+  
+  oneof payload {
+    ReservaCreadaPayload reserva_creada = 7;
+    PagoConfirmadoPayload pago_confirmado = 8;
+    ReservaCanceladaPayload reserva_cancelada = 9;
+    InventarioAgotadoPayload inventario_agotado = 10;
+  }
+}
+
+message ReservaCreadaPayload {
+  string order_id = 1;
+  string accommodation_id = 2;
+  string checkin = 3;
+  string checkout = 4;
+  double total_amount = 5;
+  string customer_email = 6;
+}
+
+message PagoConfirmadoPayload {
+  string order_id = 1;
+  string payment_reference = 2;
+  double amount_paid = 3;
+}
+
+message ReservaCanceladaPayload {
+  string order_id = 1;
+  string cancellation_reason = 2;
+  double refund_amount = 3;
+}
+
+message InventarioAgotadoPayload {
+  string accommodation_id = 1;
+  string product_id = 2;
+  int32 remaining_stock = 3;
 }

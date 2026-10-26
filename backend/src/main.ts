@@ -3,6 +3,8 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ProblemDetailsFilter } from './common/filters/problem-details.filter';
+import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { join } from 'path';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -25,6 +27,19 @@ async function bootstrap() {
       forbidNonWhitelisted: false,
     }),
   );
+
+  // Microservicio gRPC Híbrido (Escucha en puerto 50051 o GRPC_PORT)
+  const grpcPort = process.env.GRPC_PORT || 50051;
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.GRPC,
+    options: {
+      package: 'alojamientos',
+      protoPath: join(__dirname, 'modules/alojamientos/contracts/alojamientos.proto'),
+      url: `0.0.0.0:${grpcPort}`,
+    },
+  });
+
+  await app.startAllMicroservices();
 
   const config = new DocumentBuilder()
     .setTitle('GDS Alojamientos Core API')
