@@ -252,7 +252,7 @@ CREATE TABLE IF NOT EXISTS booking.reserva (
   politica_id smallint NOT NULL,
   fecha_entrada date NOT NULL,
   fecha_salida date NOT NULL,
-  noches integer DEFAULT (fecha_salida - fecha_entrada),
+  noches integer GENERATED ALWAYS AS (fecha_salida - fecha_entrada) STORED,
   num_huespedes smallint NOT NULL CHECK (num_huespedes >= 1),
   modo booking.modo_reserva NOT NULL DEFAULT 'INSTANTANEA'::booking.modo_reserva,
   expira_en timestamp with time zone,
