@@ -1,8 +1,9 @@
 import { Column, Entity, PrimaryColumn } from 'typeorm';
 
 export enum Role {
-  USER = 'USER',
-  ADMIN = 'ADMIN',
+  ADMIN = 'Admin',
+  CLIENTE = 'Cliente',
+  ANFITRION = 'Anfitrión',
 }
 
 @Entity('usuarios')
@@ -24,4 +25,10 @@ export class Usuario {
 
   @Column({ type: 'int', nullable: true })
   edad: number;
+
+  @Column({ type: 'text', nullable: true })
+  direccion: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  pais: string;
 }

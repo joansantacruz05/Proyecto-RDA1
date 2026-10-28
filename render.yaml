@@ -1,22 +1,31 @@
 services:
   - type: web
-    name: booking-backend
+    name: luxestays-backend
     env: node
     rootDir: backend
     buildCommand: npm install && npm run build
     startCommand: npm run start:prod
+    healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 10000
+      - key: API_PREFIX
+        value: api/v1
       - key: DATABASE_URL
         sync: false
-
-  - type: web
-    name: booking-frontend
-    env: static
-    rootDir: frontend
-    buildCommand: npm install && npm run build
-    staticPublishPath: dist
-    envVars:
-      - key: NODE_ENV
-        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: FRONTEND_URL
+        sync: false
+      - key: IVA_RATE
+        value: "0.15"
+      - key: TASA_MUNICIPAL
+        value: "2.00"
+      - key: GRPC_ENABLED
+        value: "false"

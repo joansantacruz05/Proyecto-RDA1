@@ -221,8 +221,8 @@ INSERT INTO ROLES (id, nombre) VALUES
 -- 5. USUARIOS (Anfitriones y Admin)
 -- La contraseña por defecto para estos usuarios es "123456" (hasheada con bcrypt)
 INSERT INTO USUARIOS (id, "nombreCompleto", email, telefono, contrasena) VALUES 
-('USU-001', 'Sebastian Admin', 'admin@rda.com', '0999999999', '$2a$10$xWw7T5HqjZ7Q7kX2v1V4.ejhO5K/Xq7M/r2L/9Q1V5V0m/m5.n2K'), 
-('USU-002', 'Host Ecuador', 'host@ecuador.com', '0988888888', '$2a$10$xWw7T5HqjZ7Q7kX2v1V4.ejhO5K/Xq7M/r2L/9Q1V5V0m/m5.n2K');
+('USU-001', 'Sebastian Admin', 'admin@rda.com', '0999999999', '$2b$10$Gm4mz5CcgWqPY8Gl.278Xu3frjo6T9WBvsVWbvdh/EptQlzdDEue6'), 
+('USU-002', 'Host Ecuador', 'host@ecuador.com', '0988888888', '$2b$10$Gm4mz5CcgWqPY8Gl.278Xu3frjo6T9WBvsVWbvdh/EptQlzdDEue6');
 
 -- Asignar Roles
 INSERT INTO USUARIOS_ROLES ("usuarioId", "rolId") VALUES 

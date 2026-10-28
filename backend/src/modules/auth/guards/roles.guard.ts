@@ -12,10 +12,21 @@ export class RolesGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    if (!requiredRoles) {
-      return true; // Si no hay decorador @Roles, dejamos pasar
+    if (!requiredRoles || requiredRoles.length === 0) {
+      return true;
     }
     const { user } = context.switchToHttp().getRequest();
-    return requiredRoles.some((role) => user?.rol === role);
+    if (!user || !user.rol) {
+      return false;
+    }
+
+    const userRoleStr = String(user.rol).toLowerCase();
+    return requiredRoles.some((role) => {
+      const requiredStr = String(role).toLowerCase();
+      return (
+        userRoleStr === requiredStr ||
+        (userRoleStr.includes('admin') && requiredStr.includes('admin'))
+      );
+    });
   }
 }

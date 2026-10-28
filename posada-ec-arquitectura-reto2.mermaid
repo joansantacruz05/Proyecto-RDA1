@@ -1,0 +1,86 @@
+graph TB
+    %% =========================================================================
+    %% POSADA EC - NODO DE ALOJAMIENTOS (RETO 2) - ARQUITECTURA DE MICROSERVICIOS
+    %% Solo el enfoque de alojamiento. Booking Prototipo aparece como sistema externo.
+    %% Lectura: de arriba (usuarios) hacia abajo (datos). Booking a la derecha.
+    %% =========================================================================
+
+    subgraph CAPA7 ["CAPA 7: PRESENTACION - ANGULAR 19 (VERCEL)"]
+        direction LR
+        UI_MKT["Marketplace: buscar, reservar, pagar, resenar"]
+        UI_RES["Mis Reservas: cancelar, check-in, check-out"]
+        UI_ADM["Panel Admin: catalogo, tarifas, restricciones, promociones, kill-switch, observabilidad"]
+    end
+
+    subgraph CAPA6 ["CAPA 6: API GATEWAY - UNICA ENTRADA /api/v2"]
+        GW["MS Gateway NestJS - Proxy y BFF"]
+        GW_FN["Borde: JWT y scopes, rate limit, X-Correlation-ID, kill-switch 503, health semaforo"]
+    end
+
+    subgraph CAPA5 ["CAPA 5: MICROSERVICIOS DE ALOJAMIENTOS - NESTJS"]
+        direction LR
+        MS_IDE["MS Identidad - registro, login, emite JWT y token OAuth2"]
+        MS_CAT["MS Catalogo - alojamientos, tipos de habitacion, planes de tarifa, resenas, busqueda"]
+        MS_RES["MS Reservas e Inventario - cotizacion, orden, cancelacion, check-in/out, stock, pago, factura, idempotencia"]
+    end
+
+    subgraph CAPA4 ["CAPA 4: EVENTOS Y STOCK"]
+        direction LR
+        OUTBOX["Outbox transaccional - sequence entero sin saltos"]
+        FEED["Feed CloudEvents - GET /alojamientos/eventos, sin PII"]
+        BUS["Bus interno - auditoria idempotente"]
+        GRPC_CLI["Cliente gRPC de Stock - una actualizacion por noche"]
+    end
+
+    subgraph CAPA1 ["CAPA 1: PERSISTENCIA - UNA BD SUPABASE POSTGRESQL, UN ESQUEMA POR MICROSERVICIO"]
+        direction LR
+        SCH_IDE[("schema_identidad: usuario, token_usuario")]
+        SCH_CAT[("schema_catalogo: alojamiento, unidad_alojamiento, plan_tarifa NUEVO, amenidades, imagenes, ciudad, tipo, politica_cancelacion, resena")]
+        SCH_RES[("schema_reservas: calendario con restricciones NUEVO, cotizacion, reserva, pago, factura, impuestos y tasa municipal, idempotencia, promociones NUEVO, evento_outbox")]
+        SCH_GW[("schema_gateway: config_nodo kill-switch, auditoria_operaciones")]
+    end
+
+    subgraph TRANSV ["TRANSVERSAL: SEGURIDAD (SEM. 11) Y OBSERVABILIDAD (SEM. 10)"]
+        direction LR
+        SEC["Seguridad: roles CLIENTE, ADMIN, SERVICE - scopes alojamientos:book, cancel, read, checkin, inventory, admin - LOPDP sin PII en logs"]
+        OBS["Observabilidad: logs JSON con correlation-id, metricas /metrics, trazas OpenTelemetry"]
+    end
+
+    subgraph BOOKING ["SISTEMA EXTERNO: BOOKING PROTOTIPO"]
+        BK_ESB["ESB Booking - ACL, Circuit Breaker, Saga"]
+        BK_STK["MS Ingesta Stock - gRPC puerto 50051"]
+    end
+
+    %% Usuarios -> Gateway
+    UI_MKT -->|REST + JWT| GW
+    UI_RES -->|REST + JWT| GW
+    UI_ADM -->|REST + JWT ADMIN| GW
+    GW --- GW_FN
+
+    %% Booking -> Gateway
+    BK_ESB ==>|"REST + OAuth2 client credentials: availability, orders/create, cancel, check-in, checkout"| GW
+
+    %% Gateway -> microservicios
+    GW -->|/auth| MS_IDE
+    GW -->|"/alojamientos, /search, /habitaciones"| MS_CAT
+    GW -->|"/availability, /orders, /inventario, /eventos"| MS_RES
+    MS_RES -->|"REST interno con cache: unidad, plan, politica"| MS_CAT
+
+    %% Microservicios -> datos
+    MS_IDE -.-> SCH_IDE
+    MS_CAT -.-> SCH_CAT
+    MS_RES -.-> SCH_RES
+    GW -.-> SCH_GW
+
+    %% Eventos y stock
+    MS_RES -->|"misma transaccion"| OUTBOX
+    OUTBOX --> FEED
+    OUTBOX --> BUS
+    BUS -.-> SCH_GW
+    FEED ==>|"Booking lee con after=sequence"| BK_ESB
+    MS_RES --> GRPC_CLI
+    GRPC_CLI ==>|"gRPC 50051: reservar, cancelar, bloquear, cargar"| BK_STK
+
+    %% Transversal (una sola flecha por bloque, para no ensuciar)
+    GW -.-> SEC
+    GW -.-> OBS

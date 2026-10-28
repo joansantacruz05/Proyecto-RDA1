@@ -1,16 +1,16 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 import { CommonModule } from './common/common.module';
 import { AlojamientosModule } from './modules/alojamientos/alojamientos.module';
 import { ReservasModule } from './modules/reservas/reservas.module';
 import { UsuariosModule } from './modules/usuarios/usuarios.module';
 import { AuthModule } from './modules/auth/auth.module';
-// import { AutosModule } from './modules/autos/autos.module';
-// import { AtraccionesModule } from './modules/atracciones/atracciones.module';
-// import { VuelosModule } from './modules/vuelos/vuelos.module';
 import { PagosModule } from './modules/pagos/pagos.module';
+import { InventarioModule } from './modules/inventario/inventario.module';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -20,36 +20,47 @@ import { PagosModule } from './modules/pagos/pagos.module';
       envFilePath: '.env',
     }),
 
+    // Throttler para control de tasa general (100 reqs/min por defecto)
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: 60000,
+        limit: 100,
+      },
+    ]),
+
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
-        url: configService.get('DATABASE_URL'),
+        url: configService.getOrThrow<string>('DATABASE_URL'),
         autoLoadEntities: true,
-        synchronize: false, // Desactivado porque ya creamos las tablas en Supabase manualmente
+        synchronize: false,
         ssl: {
           rejectUnauthorized: false,
         },
+        extra: {
+          max: 10,
+          connectionTimeoutMillis: 10000,
+        },
+        retryAttempts: 3,
+        retryDelay: 3000,
       }),
     }),
 
     // Módulos Compartidos
     CommonModule,
 
-    // =========================================================================
-    // ATENCIÓN ALUMNO: Descomenta solo el módulo que corresponde a tu grupo
-    // =========================================================================
+    // Módulos del Dominio Alojamientos
     AlojamientosModule,
     ReservasModule,
     UsuariosModule,
     AuthModule,
     PagosModule,
-    // AutosModule,
-    // AtraccionesModule,
-    // VuelosModule,
+    InventarioModule,
   ],
-  controllers: [],
+  controllers: [HealthController],
   providers: [],
 })
 export class AppModule {}

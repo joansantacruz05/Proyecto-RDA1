@@ -100,15 +100,39 @@ export class ProblemDetailsFilter implements ExceptionFilter {
         if (invalidParams) payload.invalidParams = invalidParams;
       }
     } else {
-      // Unknown runtime error
-      status = HttpStatus.INTERNAL_SERVER_ERROR;
-      payload = {
-        type: 'https://api.booking-hub.com/errors/internal-server-error',
-        title: 'Internal Server Error',
-        status: HttpStatus.INTERNAL_SERVER_ERROR,
-        code: 'VALIDATION_FAILED',
-        detail: exception instanceof Error ? exception.message : 'Unexpected internal error',
-      };
+      // Check for Postgres database errors (TypeORM QueryFailedError)
+      const dbError = exception as any;
+      if (dbError && dbError.code === '23505') {
+        // Unique constraint violation
+        status = HttpStatus.CONFLICT;
+        payload = {
+          type: 'https://api.booking-hub.com/errors/conflict',
+          title: 'Conflicto de registro duplicado',
+          status: HttpStatus.CONFLICT,
+          code: 'IDEMPOTENCY_KEY_REUSE_WITH_DIFFERENT_PAYLOAD' as ProblemErrorCode,
+          detail: 'El registro ya existe o se produjo un conflicto de duplicidad de clave única en la base de datos.',
+        };
+      } else if (dbError && dbError.code === '23503') {
+        // Foreign key violation
+        status = HttpStatus.CONFLICT;
+        payload = {
+          type: 'https://api.booking-hub.com/errors/conflict',
+          title: 'Violación de integridad referencial',
+          status: HttpStatus.CONFLICT,
+          code: 'VALIDATION_FAILED' as ProblemErrorCode,
+          detail: 'No se puede procesar la acción debido a que existen registros dependientes o la entidad referenciada no existe.',
+        };
+      } else {
+        // Unknown runtime error
+        status = HttpStatus.INTERNAL_SERVER_ERROR;
+        payload = {
+          type: 'https://api.booking-hub.com/errors/internal-server-error',
+          title: 'Error Interno del Servidor',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          code: 'VALIDATION_FAILED' as ProblemErrorCode,
+          detail: exception instanceof Error ? exception.message : 'Error interno inesperado en el servidor.',
+        };
+      }
     }
 
     // Set application/problem+json content-type

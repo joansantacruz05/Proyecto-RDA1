@@ -1,0 +1,272 @@
+{
+  "info": {
+    "name": "LuxeStays - Nodo Alojamientos API (Proyecto RDA1)",
+    "_postman_id": "luxestays-rda1-collection-v1",
+    "description": "Colección completa de endpoints para LuxeStays: Monitoreo, Autenticación, Catálogo, Cotización Decimal, Órdenes Idempotentes RFC 7807, Pagos, Facturas SRI, Postventa y Sincronización gRPC.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "adminToken", "value": "", "type": "string" },
+    { "key": "reservaId", "value": "1", "type": "string" },
+    { "key": "habitacionId", "value": "1", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "1. Health & Monitoreo",
+      "item": [
+        {
+          "name": "Healthcheck Root (/health)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health"
+          }
+        },
+        {
+          "name": "Healthcheck API v1 (/api/v1/health)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/health"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Autenticación y Perfil",
+      "item": [
+        {
+          "name": "Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.access_token) { pm.collectionVariables.set('adminToken', json.access_token); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"admin@luxestays.com\",\n  \"contrasena\": \"Admin2026*\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login Cliente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.access_token) { pm.collectionVariables.set('token', json.access_token); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"cliente@luxestays.com\",\n  \"contrasena\": \"Cliente2026*\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Obtener Perfil Actual (/auth/me)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/auth/me",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Catálogo y Cotización",
+      "item": [
+        {
+          "name": "Listar Alojamientos",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/alojamientos"
+          }
+        },
+        {
+          "name": "Búsqueda con Filtros",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/alojamientos/search",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ciudad\": \"Manta\",\n  \"precioMax\": 300\n}"
+            }
+          }
+        },
+        {
+          "name": "Cotización Exacta (2 decimales)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/orders/preview",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"habitacionId\": 1,\n  \"fechaEntrada\": \"2026-11-10\",\n  \"fechaSalida\": \"2026-11-13\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Creación de Órdenes e Idempotencia",
+      "item": [
+        {
+          "name": "Crear Orden (con Idempotency-Key)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) { pm.collectionVariables.set('reservaId', String(json.id)); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/orders/create",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "c88f73e4-802d-45df-bb82-6f296317bc21" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"habitacionId\": 1,\n  \"fechaEntrada\": \"2026-11-10\",\n  \"fechaSalida\": \"2026-11-13\",\n  \"nombreHuesped\": \"Carlos Benalcázar\",\n  \"correoHuesped\": \"carlos@luxestays.com\",\n  \"telefonoHuesped\": \"+593998877665\",\n  \"identificacionHuesped\": \"1710034065\",\n  \"tipoDocumento\": \"CEDULA\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Pagar Orden & Emitir Factura SRI",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/orders/{{reservaId}}/pay",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metodoPago\": \"Tarjeta de Crédito\",\n  \"datosFactura\": {\n    \"razonSocial\": \"Carlos Benalcázar\",\n    \"tipoIdentificacion\": \"CEDULA\",\n    \"identificacion\": \"1710034065\",\n    \"direccion\": \"Quito, Ecuador\"\n  }\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Postventa y Reglas Legales",
+      "item": [
+        {
+          "name": "Firmar Contrato Digital",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/reservas/{{reservaId}}/firmar-contrato",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombreFirmante\": \"Carlos Alberto Benalcázar\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Cancelar Reserva (Regla 24h)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/orders/{{reservaId}}/cancel",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motivo\": \"Reprogramación de viaje\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Calificar Estancia (Post Check-out)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/reservas/{{reservaId}}/calificar",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"calificacion\": 5,\n  \"comentario\": \"Servicio impecable y vista inigualable.\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Sincronización gRPC e Inventario",
+      "item": [
+        {
+          "name": "Sincronizar Inventario 90 Días con Booking Hub",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/admin/inventario/sincronizar",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }]
+          }
+        },
+        {
+          "name": "Consultar Cola Outbox",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/admin/inventario/outbox",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }]
+          }
+        },
+        {
+          "name": "Procesar Cola Outbox",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/admin/inventario/procesar-outbox",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }]
+          }
+        },
+        {
+          "name": "Verificar Disponibilidad Slot Remoto (gRPC)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/admin/inventario/verificar",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"habitacionId\": 1,\n  \"fecha\": \"2026-11-10\"\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

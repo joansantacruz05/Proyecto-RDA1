@@ -43,16 +43,16 @@ export class AlojamientosController {
     return this.alojamientosService.createAdmin(dto);
   }
 
-  @Get('admin/alojamientos')
-  @ApiTags('Administración')
+  @Get(['alojamientos', 'admin/alojamientos'])
+  @ApiTags('Catálogo y Administración')
   @ApiOperation({ summary: 'Listar todos los alojamientos' })
   @ApiResponse({ status: 200, description: 'Lista de alojamientos.' })
   findAllAdmin() {
     return this.alojamientosService.findAllAdmin();
   }
 
-  @Get('admin/alojamientos/:id')
-  @ApiTags('Administración')
+  @Get(['alojamientos/:id', 'admin/alojamientos/:id'])
+  @ApiTags('Catálogo y Administración')
   @ApiOperation({ summary: 'Obtener un alojamiento por ID' })
   @ApiResponse({ status: 200, description: 'Alojamiento encontrado.' })
   @ApiResponse({ status: 404, description: 'Alojamiento no encontrado.' })
@@ -132,6 +132,7 @@ export class AlojamientosController {
   @ApiResponse({ status: 200, description: 'Alojamientos encontrados' })
   @ApiResponse({ status: 400, description: 'Petición inválida' })
   @ApiResponse({ status: 429, description: 'Demasiadas peticiones' })
+  @HttpCode(HttpStatus.OK)
   @Header('Cache-Control', 'public, max-age=300')
   search(
     @Headers('X-Device-Fingerprint') deviceFingerprint: string,

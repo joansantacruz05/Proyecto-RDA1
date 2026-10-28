@@ -25,8 +25,16 @@ export class IdempotencyInterceptor implements NestInterceptor {
       return next.handle();
     }
 
+    const userId = (req as any).user?.sub || 'ANONYMOUS';
+    const endpoint = req.originalUrl || req.url || 'DEFAULT';
+
     // Check if key is already stored and validate body hash
-    const check = await this.idempotencyService.validateAndGetCached(idempotencyKey, req.body);
+    const check = await this.idempotencyService.validateAndGetCached(
+      idempotencyKey,
+      req.body,
+      userId,
+      endpoint,
+    );
 
     if (check.isCached) {
       // Replay stored response
@@ -45,6 +53,8 @@ export class IdempotencyInterceptor implements NestInterceptor {
           check.hash || this.idempotencyService.computeHash(req.body),
           statusCode,
           responseBody,
+          userId,
+          endpoint,
         );
       }),
     );

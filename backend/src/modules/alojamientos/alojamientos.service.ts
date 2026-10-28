@@ -87,7 +87,9 @@ export class AlojamientosService {
   async findOneAdmin(id: string): Promise<any> {
     const result = await this.alojamientoRepository.query('SELECT * FROM alojamientos WHERE id = $1', [id]);
     if (!result.length) throw new NotFoundException(`Alojamiento ${id} no encontrado`);
-    return result[0];
+    const item = result[0];
+    item.habitaciones = await this.getRoomsAdmin(id);
+    return item;
   }
 
   async updateAdmin(id: string, dto: any): Promise<any> {

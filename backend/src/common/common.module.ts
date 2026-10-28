@@ -4,6 +4,7 @@ import { IdempotencyInterceptor } from './interceptors/idempotency.interceptor';
 import { IdempotencyKeyGuard } from './guards/idempotency-key.guard';
 import { ScopesGuard } from './guards/scopes.guard';
 import { ProblemDetailsFilter } from './filters/problem-details.filter';
+import { PricingService } from './services/pricing.service';
 import { JwtModule } from '@nestjs/jwt';
 
 @Global()
@@ -17,6 +18,7 @@ import { JwtModule } from '@nestjs/jwt';
     IdempotencyKeyGuard,
     ScopesGuard,
     ProblemDetailsFilter,
+    PricingService,
   ],
   exports: [
     IdempotencyService,
@@ -24,6 +26,7 @@ import { JwtModule } from '@nestjs/jwt';
     IdempotencyKeyGuard,
     ScopesGuard,
     ProblemDetailsFilter,
+    PricingService,
     JwtModule,
   ],
 })

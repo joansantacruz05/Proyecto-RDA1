@@ -1,28 +1,29 @@
-import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, MinLength, IsNumber, IsPositive, Matches, Min, Max } from 'class-validator';
+import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, Matches, Min, Max } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { Role } from '../entities/usuario.entity';
+import { PASSWORD_REGEX, PASSWORD_RULES_MESSAGE } from '../../../common/utils/password-rules';
 
 export class CrearUsuarioDto {
-  @ApiProperty({ example: 'Admin User' })
+  @ApiProperty({ example: 'Sebastián Vallejo' })
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'El nombre completo es obligatorio.' })
   nombre: string;
 
-  @ApiProperty({ example: 'admin@admin.com' })
-  @IsEmail()
+  @ApiProperty({ example: 'usuario@ejemplo.com' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value))
+  @IsEmail({}, { message: 'El correo electrónico no es válido.' })
   correo: string;
 
-  @ApiProperty({ example: 'Password123!' })
+  @ApiProperty({ example: 'PassSecure123!*' })
   @IsString()
-  @Matches(/^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+])[A-Za-z\d!@#$%^&*()_+]{8,16}$/, {
-    message: 'La contraseña debe tener entre 8 y 16 caracteres, e incluir al menos una letra mayúscula, un número y un carácter especial.'
-  })
+  @Matches(PASSWORD_REGEX, { message: PASSWORD_RULES_MESSAGE })
   contrasena: string;
 
-  @ApiProperty({ example: 'ADMIN', enum: Role, required: false })
+  @ApiProperty({ example: 'Cliente', enum: Role, required: false })
   @IsOptional()
   @IsEnum(Role)
-  rol?: string;
+  rol?: Role;
 
   @ApiProperty({ example: '+593999999999', required: false })
   @IsOptional()
@@ -31,8 +32,7 @@ export class CrearUsuarioDto {
 
   @ApiProperty({ example: 25, required: false })
   @IsOptional()
-  @IsNumber()
-  @Min(18, { message: 'Debe ser mayor de edad (18+)' })
-  @Max(120)
+  @Min(18, { message: 'Debe ser mayor de edad (18 años en adelante).' })
+  @Max(120, { message: 'La edad ingresada no es válida.' })
   edad?: number;
 }

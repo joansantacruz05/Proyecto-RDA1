@@ -25,9 +25,9 @@ INSERT INTO ROLES (id, nombre) VALUES
 ('4444-4444-4444-4444-444444440002', 'Cliente');
 
 -- 5. USUARIOS (Anfitriones)
-INSERT INTO USUARIOS (id, "nombreCompleto", email, telefono) VALUES 
-('5555-5555-5555-5555-555555550001', 'Sebastian Admin', 'admin@rda.com', '0999999999'),
-('5555-5555-5555-5555-555555550002', 'Host Ecuador', 'host@ecuador.com', '0988888888');
+INSERT INTO USUARIOS (id, "nombreCompleto", email, telefono, contrasena) VALUES 
+('5555-5555-5555-5555-555555550001', 'Sebastian Admin', 'admin@rda.com', '0999999999', '$2b$10$Gm4mz5CcgWqPY8Gl.278Xu3frjo6T9WBvsVWbvdh/EptQlzdDEue6'),
+('5555-5555-5555-5555-555555550002', 'Host Ecuador', 'host@ecuador.com', '0988888888', '$2b$10$Gm4mz5CcgWqPY8Gl.278Xu3frjo6T9WBvsVWbvdh/EptQlzdDEue6');
 
 -- Asignar Roles
 INSERT INTO USUARIOS_ROLES ("usuarioId", "rolId") VALUES 

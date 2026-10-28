@@ -5,6 +5,8 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: true, // Permite acceso desde red local / Tailscale
+    port: 5173,
     proxy: {
       '/api/v1': {
         target: 'http://localhost:3000',
