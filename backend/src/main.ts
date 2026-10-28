@@ -56,11 +56,34 @@ async function bootstrap() {
     next();
   });
 
+  // ── Enrutamiento y Normalización de Versiones (v1, v2 y rutas directas /alojamientos) ──
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    // Si la petición viene con prefijo /api/v2/, normalizar internamente a /api/v1/
+    if (req.url.startsWith('/api/v2/')) {
+      req.url = req.url.replace(/^\/api\/v2\//, '/api/v1/');
+    }
+    // Si viene directamente con /alojamientos/ (excepto health que está en exclude), normalizar a /api/v1/alojamientos/
+    if (req.url.startsWith('/alojamientos/') && !req.url.startsWith('/alojamientos/health')) {
+      req.url = '/api/v1' + req.url;
+    }
+    next();
+  });
+
   // ── Prefijo Global con Exclusión de Health y Raíz ────────────────────────
   const apiPrefix = process.env.API_PREFIX !== undefined ? process.env.API_PREFIX : 'api/v1';
   if (apiPrefix && apiPrefix.trim() !== '') {
     app.setGlobalPrefix(apiPrefix, {
-      exclude: ['/', 'health', 'api/v1', 'api/v1/health'],
+      exclude: [
+        '/',
+        'health',
+        'api/v1',
+        'api/v1/health',
+        'api/v2',
+        'api/v2/health',
+        'alojamientos/health',
+        'api/v1/alojamientos/health',
+        'api/v2/alojamientos/health',
+      ],
     });
   }
 

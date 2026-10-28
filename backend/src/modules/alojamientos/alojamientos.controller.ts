@@ -1,6 +1,6 @@
 import {
-  Controller, Get, Post, Delete, Body, Param, Headers, Put, Patch,
-  UseGuards, UseInterceptors, HttpCode, HttpStatus, Header, ParseUUIDPipe, Req
+  Controller, Get, Post, Delete, Body, Param, Headers, Put, Patch, Query,
+  UseGuards, UseInterceptors, HttpCode, HttpStatus, Header, Req
 } from '@nestjs/common';
 import {
   ApiTags, ApiOperation, ApiResponse, ApiParam,
@@ -51,14 +51,6 @@ export class AlojamientosController {
     return this.alojamientosService.findAllAdmin();
   }
 
-  @Get(['alojamientos/:id', 'admin/alojamientos/:id'])
-  @ApiTags('Catálogo y Administración')
-  @ApiOperation({ summary: 'Obtener un alojamiento por ID' })
-  @ApiResponse({ status: 200, description: 'Alojamiento encontrado.' })
-  @ApiResponse({ status: 404, description: 'Alojamiento no encontrado.' })
-  findOneAdmin(@Param('id') id: string) {
-    return this.alojamientosService.findOneAdmin(id);
-  }
 
   @Put('admin/alojamientos/:id')
   @ApiTags('Administración')
@@ -125,10 +117,10 @@ export class AlojamientosController {
   // ══════════════════════════════════════════════════════════════════════════
   //  Búsqueda y Catálogo
   // ══════════════════════════════════════════════════════════════════════════
-  @Post('search')
+  @Post(['search', 'alojamientos/search'])
+  @Get(['search', 'alojamientos/search'])
   @ApiTags('Búsqueda y Catálogo')
   @ApiOperation({ summary: 'Búsqueda de alojamientos' })
-  @ApiHeader({ name: 'X-Device-Fingerprint', required: true })
   @ApiResponse({ status: 200, description: 'Alojamientos encontrados' })
   @ApiResponse({ status: 400, description: 'Petición inválida' })
   @ApiResponse({ status: 429, description: 'Demasiadas peticiones' })
@@ -138,10 +130,10 @@ export class AlojamientosController {
     @Headers('X-Device-Fingerprint') deviceFingerprint: string,
     @Body() searchRequest: any,
   ) {
-    return this.alojamientosService.search(searchRequest);
+    return this.alojamientosService.search(searchRequest || {});
   }
 
-  @Post('availability')
+  @Post(['availability', 'alojamientos/availability'])
   @ApiTags('Disponibilidad y Precios')
   @ApiOperation({ summary: 'Consultar disponibilidad y precio de un alojamiento' })
   @ApiResponse({ status: 200, description: 'Disponibilidad y detalles del precio' })
@@ -151,7 +143,7 @@ export class AlojamientosController {
     return this.alojamientosService.checkAvailability(availabilityRequest);
   }
 
-  @Post('bulk-availability')
+  @Post(['bulk-availability', 'alojamientos/bulk-availability'])
   @ApiTags('Disponibilidad y Precios')
   @ApiOperation({ summary: 'Consultar disponibilidad múltiple de alojamientos' })
   @ApiResponse({ status: 200, description: 'Disponibilidad para múltiples alojamientos' })
@@ -188,10 +180,91 @@ export class AlojamientosController {
     return this.alojamientosService.getChains();
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  //  Taxonomía, Promociones y Eventos Outbox (OpenAPI v2.2.0)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  @Get(['alojamientos/categorias', 'alojamientos/tipos', 'categorias', 'tipos'])
+  @ApiTags('Taxonomía y Catálogo v2')
+  @ApiOperation({ summary: 'Obtener categorías y tipos de alojamientos' })
+  getCategoriasYTipos() {
+    return this.alojamientosService.getConstants({});
+  }
+
+  @Get(['alojamientos/promociones/contrato', 'promociones/contrato'])
+  @ApiTags('Promociones B2B y Combos v2')
+  @ApiOperation({ summary: 'Consultar acuerdo de promociones y combos B2B' })
+  getPromocionesContrato() {
+    return {
+      partner_id: 'MS_ALO_LUXESTAYS',
+      permite_promociones: true,
+      porcentaje_descuento_maximo: 20,
+      destinos_habilitados: ['Quito', 'Guayaquil', 'Cuenca', 'Manta', 'Galápagos'],
+      vigente_desde: '2026-01-01',
+      vigente_hasta: '2026-12-31',
+      politica: 'Descuento B2B aplicable a paquetes combinados de viaje.',
+    };
+  }
+
+  @Put(['alojamientos/promociones/contrato', 'promociones/contrato'])
+  @ApiTags('Promociones B2B y Combos v2')
+  @ApiOperation({ summary: 'Actualizar acuerdo de promociones y combos B2B' })
+  updatePromocionesContrato(@Body() body: any) {
+    return {
+      partner_id: 'MS_ALO_LUXESTAYS',
+      permite_promociones: body?.permite_promociones ?? true,
+      porcentaje_descuento_maximo: body?.permite_promociones ? (body?.porcentaje_descuento_maximo ?? 20) : 0,
+      destinos_habilitados: body?.destinos_habilitados || ['Quito', 'Guayaquil', 'Cuenca', 'Manta', 'Galápagos'],
+      vigente_desde: body?.vigente_desde || '2026-01-01',
+      vigente_hasta: body?.vigente_hasta || '2026-12-31',
+      actualizado_en: new Date().toISOString(),
+    };
+  }
+
+  @Get(['alojamientos/eventos', 'eventos'])
+  @ApiTags('Telemetría y Salud de Nodo v2')
+  @ApiOperation({ summary: 'Feed de eventos outbox CloudEvents 1.0 para conciliación' })
+  getEventosOutbox(@Query('after') after?: string) {
+    const afterSeq = after ? parseInt(after, 10) : 0;
+    return this.alojamientosService.getEventosOutbox(isNaN(afterSeq) ? 0 : afterSeq);
+  }
+
+  @Get(['alojamientos/:id/habitaciones', 'admin/alojamientos/:id/habitaciones', ':id/habitaciones'])
+  @ApiTags('Propiedades y Habitaciones v2')
+  @ApiOperation({ summary: 'Listar habitaciones y planes de tarifa de un alojamiento' })
+  getRoomsByProperty(@Param('id') id: string) {
+    return this.alojamientosService.getRoomsAdmin(id);
+  }
+
+  @Get(['alojamientos/:id/inventario', ':id/inventario'])
+  @ApiTags('Disponibilidad y Cotización v2')
+  @ApiOperation({ summary: 'Snapshot de inventario y stock por noche' })
+  getInventorySnapshot(
+    @Param('id') id: string,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+  ) {
+    return this.alojamientosService.getInventorySnapshot(id, desde, hasta);
+  }
+
+  @Post(['alojamientos/:id/availability', 'alojamientos/:id/disponibilidad'])
+  @ApiTags('Disponibilidad y Cotización v2')
+  @ApiOperation({ summary: 'Consultar disponibilidad para un alojamiento específico' })
+  checkPropertyAvailability(@Param('id') id: string, @Body() body: any) {
+    return this.alojamientosService.checkAvailability({ ...body, accommodation: id });
+  }
+
+  @Get(['alojamientos/:id/resenas', 'alojamientos/:id/reviews'])
+  @ApiTags('Reseñas y Calificaciones v2')
+  @ApiOperation({ summary: 'Obtener reseñas verificadas de un alojamiento' })
+  getPropertyReviews(@Param('id') id: string) {
+    return this.alojamientosService.getReviews({ id });
+  }
+
+
   @Post('constants')
   @ApiTags('Componentes Comunes')
-  @ApiOperation({ summary: 'Consultar constantes del sistema (facilidades, tipos de cuartos, etc.)' })
-  @ApiResponse({ status: 200, description: 'Constantes del sistema' })
+  @ApiOperation({ summary: 'Consultar constantes del sistema' })
   @Header('Cache-Control', 'public, max-age=86400')
   getConstants(@Body() constantsRequest: any) {
     return this.alojamientosService.getConstants(constantsRequest);
@@ -200,7 +273,6 @@ export class AlojamientosController {
   @Post('reviews')
   @ApiTags('Búsqueda y Catálogo')
   @ApiOperation({ summary: 'Obtener reseñas de alojamientos' })
-  @ApiResponse({ status: 200, description: 'Reseñas de los alojamientos' })
   @Header('Cache-Control', 'public, max-age=600')
   getReviews(@Body() reviewsRequest: any) {
     return this.alojamientosService.getReviews(reviewsRequest);
@@ -209,21 +281,19 @@ export class AlojamientosController {
   @Post('reviews/scores')
   @ApiTags('Búsqueda y Catálogo')
   @ApiOperation({ summary: 'Obtener puntuaciones de reseñas' })
-  @ApiResponse({ status: 200, description: 'Puntuaciones desglosadas' })
   @Header('Cache-Control', 'public, max-age=600')
   getReviewsScores(@Body() scoresRequest: any) {
     return this.alojamientosService.getReviewsScores(scoresRequest);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  //  Gestión de Órdenes (Reservas) — Contrato GDS Alojamientos Hub
+  //  Gestión de Órdenes (Reservas) — Contrato GDS Alojamientos Hub v2
   // ══════════════════════════════════════════════════════════════════════════
 
-  @Post('orders/preview')
-  @ApiTags('Gestión de Órdenes (Reservas)')
+  @Post(['orders/preview', 'alojamientos/orders/preview'])
+  @ApiTags('Reservas y Órdenes Saga v2')
   @ApiSecurity('OAuth2Security', ['alojamientos:read'])
-  @ApiOperation({ summary: 'Previsualizar orden antes de confirmar' })
-  @ApiResponse({ status: 200, description: 'Detalles de la orden previsualizada y precios finales' })
+  @ApiOperation({ summary: 'Previsualizar cotización y desglose de orden' })
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard, ScopesGuard)
   @Scopes('alojamientos:read')
@@ -231,14 +301,11 @@ export class AlojamientosController {
     return this.alojamientosService.previewOrder(previewRequest);
   }
 
-  @Post('orders/create')
-  @ApiTags('Gestión de Órdenes (Reservas)')
+  @Post(['orders/create', 'alojamientos/orders/create', 'alojamientos/reservas', 'alojamientos/reservations'])
+  @ApiTags('Reservas y Órdenes Saga v2')
   @ApiSecurity('OAuth2Security', ['alojamientos:book'])
-  @ApiOperation({ summary: 'Crear reserva de alojamiento' })
-  @ApiHeader({ name: 'Idempotency-Key', required: true, description: 'UUID v4 para evitar cobros duplicados' })
-  @ApiResponse({ status: 201, description: 'Orden creada exitosamente' })
-  @ApiResponse({ status: 400, description: 'Petición inválida' })
-  @ApiResponse({ status: 409, description: 'Conflicto (habitación no disponible, cambio de precio)' })
+  @ApiOperation({ summary: 'Crear reserva u orden de compra síncrona Saga' })
+  @ApiHeader({ name: 'Idempotency-Key', required: true, description: 'UUID v4 para garantizar idempotencia' })
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(JwtAuthGuard, ScopesGuard, IdempotencyKeyGuard)
   @UseInterceptors(IdempotencyInterceptor)
@@ -248,61 +315,106 @@ export class AlojamientosController {
     @Body() createRequest: any,
     @Req() req: any,
   ) {
-    // El dueño de la orden se infiere siempre del sub del JWT
     const userId = req.user?.sub || req.user?.id;
     return this.alojamientosService.createOrder(createRequest, userId);
   }
 
-  @Get('orders/:orderId')
-  @ApiTags('Gestión de Órdenes (Reservas)')
-  @ApiSecurity('OAuth2Security', ['alojamientos:read'])
-  @ApiOperation({ summary: 'Obtener detalles de la orden' })
-  @ApiParam({ name: 'orderId', type: 'string', format: 'uuid' })
-  @ApiResponse({ status: 200, description: 'Detalles completos de la orden' })
-  @ApiResponse({ status: 404, description: 'Orden no encontrada' })
-  @UseGuards(JwtAuthGuard, ScopesGuard)
-  @Scopes('alojamientos:read')
-  getOrder(@Param('orderId', ParseUUIDPipe) orderId: string) {
+  @Get(['orders', 'alojamientos/orders', 'alojamientos/reservas', 'alojamientos/reservations'])
+  @ApiTags('Reservas y Órdenes Saga v2')
+  @ApiOperation({ summary: 'Listar órdenes por saga_id o identificador' })
+  listOrders(
+    @Query('saga_id') sagaId?: string,
+    @Query('idempotency_key') idempotencyKey?: string,
+  ) {
+    return this.alojamientosService.listOrders(sagaId, idempotencyKey);
+  }
+
+  @Get(['orders/:orderId', 'alojamientos/orders/:orderId', 'alojamientos/reservas/:orderId', 'alojamientos/reservations/:orderId'])
+  @ApiTags('Reservas y Órdenes Saga v2')
+  @ApiOperation({ summary: 'Consultar orden por UUID, external_order_id o localizador' })
+  @ApiParam({ name: 'orderId', type: 'string', description: 'UUID v4, ORD-HTL-XXX o BK-HOTEL-XXX' })
+  getOrder(@Param('orderId') orderId: string) {
     return this.alojamientosService.getOrder(orderId);
   }
 
-  @Post('orders/:orderId/modify')
-  @ApiTags('Gestión de Órdenes (Reservas)')
-  @ApiSecurity('OAuth2Security', ['alojamientos:book'])
+  @Post(['orders/:orderId/modify', 'alojamientos/orders/:orderId/modify'])
+  @ApiTags('Reservas y Órdenes Saga v2')
   @ApiOperation({ summary: 'Modificar una orden existente' })
-  @ApiParam({ name: 'orderId', type: 'string', format: 'uuid' })
-  @ApiHeader({ name: 'Idempotency-Key', required: true, description: 'UUID v4 para evitar modificaciones duplicadas' })
-  @ApiResponse({ status: 200, description: 'Orden modificada' })
-  @ApiResponse({ status: 409, description: 'Conflicto' })
+  @ApiParam({ name: 'orderId', type: 'string' })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard, ScopesGuard, IdempotencyKeyGuard)
   @UseInterceptors(IdempotencyInterceptor)
   @Scopes('alojamientos:book')
   modifyOrder(
     @Headers('Idempotency-Key') idempotencyKey: string,
-    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Param('orderId') orderId: string,
     @Body() modifyRequest: any,
   ) {
     return this.alojamientosService.modifyOrder(orderId, modifyRequest);
   }
 
-  @Post('orders/:orderId/cancel')
-  @ApiTags('Gestión de Órdenes (Reservas)')
-  @ApiSecurity('OAuth2Security', ['alojamientos:cancel'])
-  @ApiOperation({ summary: 'Cancelar una orden' })
-  @ApiParam({ name: 'orderId', type: 'string', format: 'uuid' })
-  @ApiHeader({ name: 'Idempotency-Key', required: true, description: 'UUID v4 para evitar cancelaciones duplicadas' })
-  @ApiResponse({ status: 200, description: 'Cancelación procesada' })
-  @ApiResponse({ status: 409, description: 'Conflicto' })
+  @Post(['orders/:orderId/cancel', 'alojamientos/orders/:orderId/cancel', 'alojamientos/reservas/:orderId/cancel', 'alojamientos/reservations/:orderId/cancel'])
+  @ApiTags('Reservas y Órdenes Saga v2')
+  @ApiOperation({ summary: 'Cancelar orden compensatoria (idempotente)' })
+  @ApiParam({ name: 'orderId', type: 'string' })
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard, ScopesGuard, IdempotencyKeyGuard)
   @UseInterceptors(IdempotencyInterceptor)
   @Scopes('alojamientos:cancel')
   cancelOrder(
     @Headers('Idempotency-Key') idempotencyKey: string,
-    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Param('orderId') orderId: string,
   ) {
     return this.alojamientosService.cancelOrder(orderId);
+  }
+
+  @Post([
+    'orders/:orderId/check-in',
+    'orders/:orderId/checkin',
+    'alojamientos/orders/:orderId/check-in',
+    'alojamientos/orders/:orderId/checkin',
+    'alojamientos/reservas/:orderId/checkin',
+    'alojamientos/reservations/:orderId/checkin',
+  ])
+  @ApiTags('Check-in y Check-out Digital v2')
+  @ApiOperation({ summary: 'Check-in digital con entrega de llave digital' })
+  @ApiParam({ name: 'orderId', type: 'string' })
+  @HttpCode(HttpStatus.OK)
+  checkInOrder(@Param('orderId') orderId: string, @Body() body?: any) {
+    return this.alojamientosService.checkInOrder(orderId, body);
+  }
+
+  @Post([
+    'orders/:orderId/checkout',
+    'alojamientos/orders/:orderId/checkout',
+    'alojamientos/reservas/:orderId/checkout',
+    'alojamientos/reservations/:orderId/checkout',
+  ])
+  @ApiTags('Check-in y Check-out Digital v2')
+  @ApiOperation({ summary: 'Check-out digital y liberación de habitación' })
+  @ApiParam({ name: 'orderId', type: 'string' })
+  @HttpCode(HttpStatus.OK)
+  checkOutOrder(@Param('orderId') orderId: string, @Body() body?: any) {
+    return this.alojamientosService.checkOutOrder(orderId, body);
+  }
+
+  @Put(['orders/:orderId/early-checkin', 'alojamientos/orders/:orderId/early-checkin'])
+  @ApiTags('Check-in y Check-out Digital v2')
+  @ApiOperation({ summary: 'Autorizar early check-in para una orden' })
+  @ApiParam({ name: 'orderId', type: 'string' })
+  earlyCheckInOrder(@Param('orderId') orderId: string, @Body() body?: any) {
+    return this.alojamientosService.setEarlyCheckin(orderId, body);
+  }
+
+  @Get(['alojamientos/:id', 'admin/alojamientos/:id'])
+  @ApiTags('Catálogo y Administración')
+  @ApiOperation({ summary: 'Obtener un alojamiento por ID' })
+  @ApiResponse({ status: 200, description: 'Alojamiento encontrado.' })
+  @ApiResponse({ status: 404, description: 'Alojamiento no encontrado.' })
+  findOneAdmin(@Param('id') id: string) {
+    return this.alojamientosService.findOneAdmin(id);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -336,12 +448,12 @@ export class AlojamientosController {
   @ApiTags('Webhooks')
   @ApiSecurity('OAuth2Security', ['alojamientos:webhooks'])
   @ApiOperation({ summary: 'Eliminar suscripción' })
-  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiParam({ name: 'id', type: 'string' })
   @ApiResponse({ status: 204, description: 'Eliminado' })
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(JwtAuthGuard, ScopesGuard)
   @Scopes('alojamientos:webhooks')
-  deleteWebhook(@Param('id', ParseUUIDPipe) id: string) {
+  deleteWebhook(@Param('id') id: string) {
     return this.alojamientosService.deleteWebhook(id);
   }
 }

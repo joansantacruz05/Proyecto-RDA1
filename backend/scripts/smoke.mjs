@@ -207,6 +207,9 @@ async function runSmokeTests() {
     // 4. Cotización y Previsualización (/orders/preview)
     // ══════════════════════════════════════════════════════════════════════
     console.log('\n[Fase 4 · Cotización con Desglose Decimal Exacto]');
+    const runOffset = Math.floor(Math.random() * 5000) + 1000;
+    const testCheckin = new Date(Date.now() + (200 + runOffset) * 86400000).toISOString().split('T')[0];
+    const testCheckout = new Date(Date.now() + (204 + runOffset) * 86400000).toISOString().split('T')[0];
     let orderPreviewId = null;
     {
       const res = await request(`${API_URL}/orders/preview`, {
@@ -218,8 +221,8 @@ async function runSmokeTests() {
         body: JSON.stringify({
           accommodation_id: selectedAccId,
           product_id: selectedRoomId,
-          checkin: '2026-11-10',
-          checkout: '2026-11-14',
+          checkin: testCheckin,
+          checkout: testCheckout,
           guests: { number_of_adults: 2, number_of_rooms: 1 },
         }),
       });
@@ -248,7 +251,7 @@ async function runSmokeTests() {
       payment_reference: 'EXT-PAY-TEST',
       accommodation_id: selectedAccId,
       product_id: selectedRoomId,
-      dates: { checkin: '2026-11-10', checkout: '2026-11-14' },
+      dates: { checkin: testCheckin, checkout: testCheckout },
       guests: { number_of_adults: 2, number_of_rooms: 1 },
       customer: {
         first_name: 'Cliente',
@@ -442,6 +445,8 @@ async function runSmokeTests() {
     console.log('\n[Fase 10 · Cancelación e Idempotencia]');
     // Crear una orden separada para probar cancelación dentro de la ventana permitida
     let orderToCancel = null;
+    const cancelCheckin = new Date(Date.now() + (600 + runOffset) * 86400000).toISOString().split('T')[0];
+    const cancelCheckout = new Date(Date.now() + (604 + runOffset) * 86400000).toISOString().split('T')[0];
     {
       const key = crypto.randomUUID();
       const res = await request(`${API_URL}/orders/create`, {
@@ -455,7 +460,7 @@ async function runSmokeTests() {
           payment_reference: 'PAY-CANCEL-TEST',
           accommodation_id: selectedAccId,
           product_id: selectedRoomId,
-          dates: { checkin: '2026-11-20', checkout: '2026-11-24' },
+          dates: { checkin: cancelCheckin, checkout: cancelCheckout },
           guests: { number_of_adults: 1, number_of_rooms: 1 },
           customer: { first_name: 'Cliente', last_name: 'Demo', email: 'cliente@rda.com' },
         }),

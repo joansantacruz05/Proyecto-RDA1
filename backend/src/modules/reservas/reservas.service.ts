@@ -558,7 +558,10 @@ export class ReservasService {
        JOIN usuarios u ON r."usuarioId" = u.id
        LEFT JOIN contratos c ON c."reservaId" = r.id
        LEFT JOIN pagos p ON p."reservaId" = r.id
-       WHERE r."ordenId"::text = $1 OR r.id = $1`,
+       WHERE r."ordenId"::text = $1 
+          OR r.id = $1 
+          OR r.id = ('RES-' || $1)
+          OR c.terminos ILIKE '%' || $1 || '%'`,
       [orderIdOrReservaId],
     );
 
@@ -566,7 +569,15 @@ export class ReservasService {
       throw new NotFoundException('Orden o reserva no encontrada.');
     }
 
-    return rows[0];
+    const row = rows[0];
+    return {
+      ...row,
+      orderId: row.ordenId || row.id,
+      reservaId: row.ordenId || row.id,
+      externalOrderId: row.ordenId || row.id,
+      estado: row.estadoId === 'EST-003' ? 'CANCELLED' : (row.estadoId === 'EST-002' ? 'CONFIRMED' : 'PENDING'),
+      totalPagar: String(Number(row.precioTotal || 0).toFixed(2)),
+    };
   }
 
   async findAllAdmin(filters?: { estadoId?: string }) {
