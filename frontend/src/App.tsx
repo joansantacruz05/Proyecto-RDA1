@@ -5,16 +5,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 export const CIUDADES_ECUADOR = [
-  'Quito', 'Guayaquil', 'Cuenca', 'Manta', 'Portoviejo', 'Ambato', 'Baños', 'Machala',
-  'Santo Domingo', 'Durán', 'Loja', 'Esmeraldas', 'Quevedo', 'Riobamba', 'Milagro',
-  'Ibarra', 'La Libertad', 'Babahoyo', 'Sangolquí', 'Daule', 'Latacunga', 'Tulcán',
-  'Chone', 'Pasaje', 'Santa Rosa', 'Nueva Loja (Lago Agrio)', 'Huaquillas', 'El Carmen',
-  'Montecristi', 'Samborondón', 'Puerto Francisco de Orellana (El Coca)', 'Jipijapa',
-  'Santa Elena', 'Otavalo', 'Cayambe', 'Salinas', 'Puerto Ayora (Galápagos)',
-  'Puerto Baquerizo Moreno (Galápagos)', 'Tena', 'Puyo', 'Macas', 'Zamora', 'Guaranda',
-  'Azogues', 'Montañita', 'Atacames', 'Vilcabamba', 'Playas (General Villamil)', 'Cotacachi',
-  'Zaruma', 'Bahía de Caráquez', 'Pedernales', 'Puerto López', 'Pelileo', 'Píllaro',
-  'Gualaceo', 'Chordeleg', 'Alausí', 'Catamayo', 'Salcedo'
+  'Quito', 'Guayaquil', 'Cuenca', 'Manta', 'Baños', 'Ambato', 'Loja', 'Machala',
+  'Portoviejo', 'Santo Domingo', 'Esmeraldas', 'Riobamba', 'Ibarra', 'Latacunga',
+  'Tulcán', 'Salinas', 'Galápagos', 'Montañita', 'Atacames', 'Tena', 'Puyo',
+  'Macas', 'Zamora', 'Guaranda', 'Azogues', 'Babahoyo', 'Quevedo', 'Otavalo',
+  'Vilcabamba', 'Playas'
 ];
 
 
