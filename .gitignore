@@ -2,6 +2,11 @@ node_modules/
 dist/
 *.sqlite
 .env
+.env.*
+!.env.example
 .DS_Store
+*.log
+*.zip
 
 semana*
+

@@ -1,19 +1,138 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { InventoryGrpcClient } from './inventory-grpc.client';
 import { generateEntityId } from '../../common/utils/password-rules';
+import * as amqp from 'amqplib';
 
 @Injectable()
-export class InventorySyncService {
+export class InventorySyncService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(InventorySyncService.name);
   private isProcessing = false;
+  private amqpConn: any = null;
+  private amqpChannel: any = null;
+  private isConnectingAmqp = false;
 
   constructor(
     private readonly dataSource: DataSource,
     private readonly configService: ConfigService,
     private readonly grpcClient: InventoryGrpcClient,
   ) {}
+
+  async onModuleInit() {
+    await this.initAmqp();
+  }
+
+  async onModuleDestroy() {
+    try {
+      if (this.amqpChannel) await this.amqpChannel.close();
+      if (this.amqpConn) await this.amqpConn.close();
+    } catch {
+      // Ignore cleanup error
+    }
+  }
+
+  // ─── AMQP / CloudAMQP (RabbitMQ) ─────────────────────────────────────────
+  private async initAmqp(): Promise<void> {
+    const rabbitmqUrl = this.configService.get<string>('RABBITMQ_URL');
+    if (!rabbitmqUrl) {
+      this.logger.log('[AMQP] RABBITMQ_URL no configurada; omite conexión RabbitMQ.');
+      return;
+    }
+    if (this.isConnectingAmqp || this.amqpChannel) return;
+    this.isConnectingAmqp = true;
+
+    try {
+      this.logger.log(`[AMQP] Conectando a CloudAMQP: ${rabbitmqUrl.replace(/:[^:@]+@/, ':***@')}`);
+      const conn = await amqp.connect(rabbitmqUrl);
+      this.amqpConn = conn;
+
+      conn.on('error', (err) => {
+        this.logger.error(`[AMQP] Error de conexión: ${err.message}`);
+        this.amqpChannel = null;
+        this.amqpConn = null;
+      });
+
+      conn.on('close', () => {
+        this.logger.warn('[AMQP] Conexión cerrada. Se reconectará en la próxima petición.');
+        this.amqpChannel = null;
+        this.amqpConn = null;
+      });
+
+      const ch = await conn.createChannel();
+      await ch.assertExchange('booking.events', 'topic', { durable: true });
+      this.amqpChannel = ch;
+      this.logger.log('[AMQP] Conexión establecida con éxito y exchange "booking.events" asegurado.');
+    } catch (err: any) {
+      this.logger.warn(`[AMQP] No se pudo conectar a CloudAMQP: ${err.message}`);
+      this.amqpChannel = null;
+      this.amqpConn = null;
+    } finally {
+      this.isConnectingAmqp = false;
+    }
+  }
+
+  private async publishAmqp(payload: {
+    service_id: string;
+    item_id: string;
+    available_units: number;
+    date: string;
+  }): Promise<boolean> {
+    if (!this.amqpChannel) {
+      await this.initAmqp();
+    }
+    if (!this.amqpChannel) return false;
+
+    try {
+      const routingKey = 'stock.updated';
+      const msgBuffer = Buffer.from(JSON.stringify(payload));
+      const ok = this.amqpChannel.publish('booking.events', routingKey, msgBuffer, {
+        persistent: true,
+        contentType: 'application/json',
+      });
+      this.logger.log(`[AMQP] Evento stock.updated publicado -> ${payload.item_id} (${payload.date}): ${payload.available_units} unid.`);
+      return ok;
+    } catch (err: any) {
+      this.logger.error(`[AMQP] Error al publicar stock.updated: ${err.message}`);
+      return false;
+    }
+  }
+
+  // ─── REST Push hacia Booking Core API ─────────────────────────────────────
+  private async pushStockRest(payload: {
+    item_id: string;
+    available_units: number;
+    date: string;
+    reason: string;
+  }): Promise<boolean> {
+    const stockUrl =
+      this.configService.get<string>('BOOKING_REST_STOCK_URL') ||
+      'https://booking-core-api.azurewebsites.net/api/v3/inventory/stock';
+    const apiKey = this.configService.get<string>('API_KEY') || '';
+
+    try {
+      const response = await fetch(stockUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        this.logger.log(`[REST] Stock actualizado en Booking: ${payload.item_id} (${payload.date}) [${response.status}]`);
+        return true;
+      } else {
+        const bodyText = await response.text().catch(() => '');
+        this.logger.warn(`[REST] Error al notificar stock a Booking (${response.status}): ${bodyText}`);
+        return false;
+      }
+    } catch (err: any) {
+      this.logger.warn(`[REST] Fallo de conexión hacia Booking stock API: ${err.message}`);
+      return false;
+    }
+  }
 
   /**
    * Calcula las unidades disponibles para un espacio rentable en una fecha específica
@@ -41,13 +160,15 @@ export class InventorySyncService {
   }
 
   /**
-   * Encola eventos en stock_outbox para cada noche comprendida entre fechaInicio y fechaFin
+   * Encola y despacha eventos de actualización de stock para cada noche comprendida entre fechaInicio y fechaFin
+   * Emite una notificación por cada noche de la estancia (check-in ... check-out - 1)
    */
   async enqueueStockUpdate(
     manager: EntityManager,
     espacioId: string,
     fechaInicio: string,
     fechaFin: string,
+    reason: string = 'ORDER_CREATED',
   ): Promise<void> {
     try {
       const roomRows = await manager.query(
@@ -65,6 +186,8 @@ export class InventorySyncService {
 
       const room = roomRows[0];
       const itemId = `${room.alojamientoCodigo || 'ALO'}:${room.espacioCodigo || room.id}`;
+      const nodeId = this.configService.get<string>('NODE_ID') || 'NODE_ALO_LUXE';
+      const eventBusMode = (this.configService.get<string>('EVENT_BUS_MODE') || 'rabbitmq').toLowerCase();
 
       // Iterar sobre cada noche del rango
       const cur = new Date(fechaInicio);
@@ -81,20 +204,53 @@ export class InventorySyncService {
           [outboxId, itemId, dateStr, availableUnits, Date.now()],
         );
 
+        // Notificación en tiempo real (asíncrona post-commit/inmediata)
+        setImmediate(async () => {
+          let notified = false;
+
+          // 1. Canal REST (Recomendado)
+          const restOk = await this.pushStockRest({
+            item_id: itemId,
+            available_units: availableUnits,
+            date: dateStr,
+            reason,
+          });
+          if (restOk) notified = true;
+
+          // 2. Canal CloudAMQP (si está en modo rabbitmq o dual)
+          if (eventBusMode === 'rabbitmq' || eventBusMode === 'both') {
+            const amqpOk = await this.publishAmqp({
+              service_id: nodeId,
+              item_id: itemId,
+              available_units: availableUnits,
+              date: dateStr,
+            });
+            if (amqpOk) notified = true;
+          }
+
+          if (notified) {
+            try {
+              await this.dataSource.query(
+                `UPDATE stock_outbox SET estado = 'Enviado', "ultimoError" = NULL WHERE id = $1`,
+                [outboxId],
+              );
+            } catch {
+              // Ignore db update failure
+            }
+          }
+        });
+
         cur.setDate(cur.getDate() + 1);
       }
 
-      this.logger.log(`Outbox encolado para ${itemId} entre ${fechaInicio} y ${fechaFin}`);
-
-      // Despachar de forma asíncrona post-commit
-      setImmediate(() => this.processOutbox().catch((e) => this.logger.error(`Error procesando outbox: ${e.message}`)));
-    } catch (err) {
+      this.logger.log(`Stock outbox generado para ${itemId} entre ${fechaInicio} y ${fechaFin} [reason: ${reason}]`);
+    } catch (err: any) {
       this.logger.error(`Error al encolar en stock_outbox: ${err.message}`);
     }
   }
 
   /**
-   * Lee la tabla stock_outbox y despacha los eventos pendientes vía gRPC hacia Booking
+   * Lee la tabla stock_outbox y despacha los eventos pendientes
    */
   async processOutbox(): Promise<{ processed: number; sent: number; failed: number }> {
     if (this.isProcessing) return { processed: 0, sent: 0, failed: 0 };
@@ -105,6 +261,8 @@ export class InventorySyncService {
     let failed = 0;
 
     try {
+      const nodeId = this.configService.get<string>('NODE_ID') || 'NODE_ALO_LUXE';
+      const eventBusMode = (this.configService.get<string>('EVENT_BUS_MODE') || 'rabbitmq').toLowerCase();
       const grpcEnabled = this.configService.get<string>('GRPC_ENABLED') === 'true';
       const serviceId = this.configService.get<string>('GRPC_SERVICE_ID') || 'alojamientos';
 
@@ -119,50 +277,69 @@ export class InventorySyncService {
       for (const row of pendingRows) {
         processed++;
         const dateStr = row.fecha instanceof Date ? row.fecha.toISOString().split('T')[0] : String(row.fecha).split('T')[0];
-        const dateCompact = dateStr.replace(/-/g, '');
-        const slotId = `slot-${dateCompact}-1400`;
 
-        if (!grpcEnabled) {
-          // Modo desconectado / desarrollo: marcar como Simulado
+        // 1. Probar REST
+        const restOk = await this.pushStockRest({
+          item_id: row.itemId,
+          available_units: Number(row.unidades),
+          date: dateStr,
+          reason: 'OUTBOX_RETRY',
+        });
+
+        // 2. Probar AMQP
+        let amqpOk = false;
+        if (eventBusMode === 'rabbitmq' || eventBusMode === 'both') {
+          amqpOk = await this.publishAmqp({
+            service_id: nodeId,
+            item_id: row.itemId,
+            available_units: Number(row.unidades),
+            date: dateStr,
+          });
+        }
+
+        if (restOk || amqpOk) {
           await this.dataSource.query(
-            `UPDATE stock_outbox SET estado = 'Simulado', "ultimoError" = 'gRPC no habilitado en entorno local' WHERE id = $1`,
+            `UPDATE stock_outbox SET estado = 'Enviado', "ultimoError" = NULL WHERE id = $1`,
             [row.id],
           );
           sent++;
           continue;
         }
 
-        try {
-          const ack = await this.grpcClient.pushStockUpdate({
-            service_id: serviceId,
-            item_id: row.itemId,
-            date: dateStr,
-            time_slot: '14:00',
-            available_units: Number(row.unidades),
-            timestamp: Number(row.ts) || Date.now(),
-            slot_id: slotId,
-          });
+        // Si gRPC está habilitado, intentar gRPC como fallback adicional
+        if (grpcEnabled) {
+          const dateCompact = dateStr.replace(/-/g, '');
+          const slotId = `slot-${dateCompact}-1400`;
+          try {
+            const ack = await this.grpcClient.pushStockUpdate({
+              service_id: serviceId,
+              item_id: row.itemId,
+              date: dateStr,
+              time_slot: '14:00',
+              available_units: Number(row.unidades),
+              timestamp: Number(row.ts) || Date.now(),
+              slot_id: slotId,
+            });
 
-          if (ack.success) {
-            await this.dataSource.query(
-              `UPDATE stock_outbox SET estado = 'Enviado', "ultimoError" = NULL WHERE id = $1`,
-              [row.id],
-            );
-            sent++;
-          } else {
-            await this.dataSource.query(
-              `UPDATE stock_outbox SET intentos = intentos + 1, "ultimoError" = $2 WHERE id = $1`,
-              [row.id, ack.message || ack.error_code || 'Error desconocido del Booking Hub'],
-            );
-            failed++;
+            if (ack.success) {
+              await this.dataSource.query(
+                `UPDATE stock_outbox SET estado = 'Enviado', "ultimoError" = NULL WHERE id = $1`,
+                [row.id],
+              );
+              sent++;
+              continue;
+            }
+          } catch (callErr: any) {
+            // grpc failed
           }
-        } catch (callErr) {
-          await this.dataSource.query(
-            `UPDATE stock_outbox SET intentos = intentos + 1, "ultimoError" = $2 WHERE id = $1`,
-            [row.id, callErr.message],
-          );
-          failed++;
         }
+
+        // Si no se pudo enviar por ningún canal
+        await this.dataSource.query(
+          `UPDATE stock_outbox SET intentos = intentos + 1, "ultimoError" = 'Error al enviar por REST/AMQP' WHERE id = $1`,
+          [row.id],
+        );
+        failed++;
       }
     } finally {
       this.isProcessing = false;
@@ -175,8 +352,8 @@ export class InventorySyncService {
    * Sincronización masiva de inventario para los próximos 90 días hacia Booking
    */
   async syncNext90Days(): Promise<{ totalRooms: number; totalSlotsGenerated: number; serviceId: string; timestamp: number }> {
-    const serviceId = this.configService.get<string>('GRPC_SERVICE_ID') || 'alojamientos';
-    const grpcEnabled = this.configService.get<string>('GRPC_ENABLED') === 'true';
+    const serviceId = this.configService.get<string>('NODE_ID') || 'NODE_ALO_LUXE';
+    const eventBusMode = (this.configService.get<string>('EVENT_BUS_MODE') || 'rabbitmq').toLowerCase();
 
     const rooms = await this.dataSource.query(
       `SELECT e.id, e.codigo as "espacioCodigo", a.codigo as "alojamientoCodigo"
@@ -195,37 +372,25 @@ export class InventorySyncService {
         const targetDate = new Date();
         targetDate.setDate(targetDate.getDate() + dayOffset);
         const dateStr = targetDate.toISOString().split('T')[0];
-        const dateCompact = dateStr.replace(/-/g, '');
-        const slotId = `slot-${dateCompact}-1400`;
 
         const availableUnits = await this.calculateAvailableUnits(r.id, dateStr);
 
-        if (grpcEnabled) {
-          try {
-            await this.grpcClient.pushStockUpdate({
-              service_id: serviceId,
-              item_id: itemId,
-              date: dateStr,
-              time_slot: '14:00',
-              available_units: availableUnits,
-              timestamp: nowEpoch + dayOffset,
-              slot_id: slotId,
-            });
-          } catch (e) {
-            // Si falla la conexión directa, encolar en outbox
-            await this.dataSource.query(
-              `INSERT INTO stock_outbox (id, "itemId", fecha, unidades, ts, estado, intentos, "ultimoError")
-               VALUES ($1, $2, $3, $4, $5, 'Pendiente', 1, $6)`,
-              [generateEntityId('OUT'), itemId, dateStr, availableUnits, nowEpoch + dayOffset, e.message],
-            );
-          }
-        } else {
-          // Encolar en outbox como Simulado
-          await this.dataSource.query(
-            `INSERT INTO stock_outbox (id, "itemId", fecha, unidades, ts, estado, intentos, "ultimoError")
-             VALUES ($1, $2, $3, $4, $5, 'Simulado', 0, 'Sincronización manual 90 días (Modo gRPC offline)')`,
-            [generateEntityId('OUT'), itemId, dateStr, availableUnits, nowEpoch + dayOffset],
-          );
+        // Despachar REST
+        await this.pushStockRest({
+          item_id: itemId,
+          available_units: availableUnits,
+          date: dateStr,
+          reason: 'BULK_SYNC',
+        });
+
+        // Despachar AMQP si aplica
+        if (eventBusMode === 'rabbitmq' || eventBusMode === 'both') {
+          await this.publishAmqp({
+            service_id: serviceId,
+            item_id: itemId,
+            available_units: availableUnits,
+            date: dateStr,
+          });
         }
 
         totalSlotsGenerated++;
@@ -245,7 +410,7 @@ export class InventorySyncService {
    * Consulta y verifica el inventario en Booking Hub vs Base de Datos local
    */
   async verifyBookingSlot(itemId: string, dateStr: string): Promise<any> {
-    const serviceId = this.configService.get<string>('GRPC_SERVICE_ID') || 'alojamientos';
+    const serviceId = this.configService.get<string>('NODE_ID') || 'NODE_ALO_LUXE';
     const dateCompact = dateStr.replace(/-/g, '');
     const slotId = `slot-${dateCompact}-1400`;
 
@@ -264,19 +429,21 @@ export class InventorySyncService {
       }
     }
 
-    // 2. Consultar gRPC Booking Hub
+    // 2. Consultar gRPC Booking Hub si estuviera habilitado
     let bookingResponse = null;
     let error = null;
-    try {
-      bookingResponse = await this.grpcClient.getSlotAvailability({
-        service_id: serviceId,
-        item_id: itemId,
-        date: dateStr,
-        time_slot: '14:00',
-        slot_id: slotId,
-      });
-    } catch (e) {
-      error = e.message;
+    if (this.configService.get<string>('GRPC_ENABLED') === 'true') {
+      try {
+        bookingResponse = await this.grpcClient.getSlotAvailability({
+          service_id: serviceId,
+          item_id: itemId,
+          date: dateStr,
+          time_slot: '14:00',
+          slot_id: slotId,
+        });
+      } catch (e: any) {
+        error = e.message;
+      }
     }
 
     return {
@@ -308,8 +475,9 @@ export class InventorySyncService {
     return {
       summary: counts,
       recent: latest,
-      grpc_enabled: this.configService.get<string>('GRPC_ENABLED') === 'true',
-      grpc_url: this.configService.get<string>('BOOKING_GRPC_URL') || '127.0.0.1:50051',
+      rabbitmq_connected: this.amqpChannel !== null,
+      rest_stock_url: this.configService.get<string>('BOOKING_REST_STOCK_URL') || 'https://booking-core-api.azurewebsites.net/api/v3/inventory/stock',
+      event_bus_mode: this.configService.get<string>('EVENT_BUS_MODE') || 'rabbitmq',
     };
   }
 }

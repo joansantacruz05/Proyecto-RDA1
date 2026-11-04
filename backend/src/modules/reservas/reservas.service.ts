@@ -325,7 +325,7 @@ export class ReservasService {
       );
 
       // 8. Encolar actualización de stock en tiempo real hacia Booking
-      await this.inventorySyncService.enqueueStockUpdate(manager, espacio.id, fechaInicio, fechaFin);
+      await this.inventorySyncService.enqueueStockUpdate(manager, espacio.id, fechaInicio, fechaFin, 'ORDER_CREATED');
 
       return {
         id: reservaId,
@@ -479,7 +479,7 @@ export class ReservasService {
       );
 
       // Encolar actualización de stock en tiempo real hacia Booking
-      await this.inventorySyncService.enqueueStockUpdate(manager, espacio.id, checkin, checkout);
+      await this.inventorySyncService.enqueueStockUpdate(manager, espacio.id, checkin, checkout, 'ORDER_CREATED');
 
       if (previewId) {
         ReservasService.previewsCache.delete(previewId);
@@ -647,6 +647,7 @@ export class ReservasService {
         status: 'CANCELLED',
         message: 'La reserva ya se encontraba cancelada.',
         id: reserva.id,
+        yaCancelada: true,
       };
     }
 
@@ -699,6 +700,7 @@ export class ReservasService {
       reserva.espacioId,
       fechaEntradaStr,
       fechaSalidaStr,
+      'ORDER_CANCELLED',
     );
 
     return {
