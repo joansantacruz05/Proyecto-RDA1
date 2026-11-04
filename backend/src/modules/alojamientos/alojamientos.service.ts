@@ -25,23 +25,58 @@ export class AlojamientosService {
     return result[0];
   }
 
+  async resolveUbicacion(cityOrUbi?: string, destino?: string): Promise<string> {
+    const rawTarget = (destino || cityOrUbi || '').trim();
+    if (!rawTarget) return 'UBI-001';
+
+    if (rawTarget.startsWith('UBI-')) {
+      const existing = await this.alojamientoRepository.query(
+        'SELECT id FROM ubicaciones WHERE id = $1 LIMIT 1',
+        [rawTarget]
+      );
+      if (existing.length > 0) return rawTarget;
+    }
+
+    const cleanName = rawTarget;
+    const found = await this.alojamientoRepository.query(
+      'SELECT c.id as ciudad_id, u.id as ubi_id FROM ciudades c LEFT JOIN ubicaciones u ON u."ciudadId" = c.id WHERE LOWER(c.nombre) = LOWER($1) LIMIT 1',
+      [cleanName]
+    );
+
+    if (found.length > 0) {
+      if (found[0].ubi_id) {
+        return found[0].ubi_id;
+      }
+      const newUbi = 'UBI-' + found[0].ciudad_id.replace('CIU-', 'C');
+      await this.alojamientoRepository.query(
+        'INSERT INTO ubicaciones (id, "ciudadId", direccion_detallada, latitud, longitud) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING',
+        [newUbi, found[0].ciudad_id, 'Centro de ' + cleanName, 0, 0]
+      );
+      return newUbi;
+    }
+
+    const newCiudadId = 'CIU-EC-' + Date.now().toString().slice(-6);
+    await this.alojamientoRepository.query(
+      'INSERT INTO ciudades (id, "paisId", nombre) VALUES ($1, $2, $3)',
+      [newCiudadId, 'PAI-001', cleanName]
+    );
+    const newUbiId = 'UBI-' + newCiudadId.replace('CIU-', 'C');
+    await this.alojamientoRepository.query(
+      'INSERT INTO ubicaciones (id, "ciudadId", direccion_detallada, latitud, longitud) VALUES ($1, $2, $3, $4, $5)',
+      [newUbiId, newCiudadId, 'Centro de ' + cleanName, 0, 0]
+    );
+    return newUbiId;
+  }
+
+  async getCiudades(): Promise<any[]> {
+    return this.alojamientoRepository.query(
+      'SELECT id, nombre FROM ciudades ORDER BY nombre ASC'
+    );
+  }
+
   async createAdmin(dto: any): Promise<any> {
     const id = `ALO-${Math.floor(Math.random() * 900) + 100}`;
-    let ubicacionId = dto.ubicacionId || 'UBI-001';
-
-    if (!ubicacionId.startsWith('UBI-')) {
-      const ciudadId = `CIU-${Math.floor(Math.random() * 900) + 100}`;
-      await this.alojamientoRepository.query(
-        'INSERT INTO ciudades (id, "paisId", nombre) VALUES ($1, $2, $3)',
-        [ciudadId, 'PAI-001', dto.destino || ubicacionId]
-      );
-      const newUbiId = `UBI-${Math.floor(Math.random() * 900) + 100}`;
-      await this.alojamientoRepository.query(
-        'INSERT INTO ubicaciones (id, "ciudadId", direccion_detallada, latitud, longitud) VALUES ($1, $2, $3, $4, $5)',
-        [newUbiId, ciudadId, dto.destino || ubicacionId, 0, 0]
-      );
-      ubicacionId = newUbiId;
-    }
+    const ubicacionId = await this.resolveUbicacion(dto.ubicacionId, dto.destino);
 
     await this.alojamientoRepository.query(
       'INSERT INTO alojamientos (id, nombre, descripcion, "imagenUrl", "ubicacionId") VALUES ($1, $2, $3, $4, $5)',
@@ -93,20 +128,9 @@ export class AlojamientosService {
   }
 
   async updateAdmin(id: string, dto: any): Promise<any> {
-    let ubicacionId = dto.ubicacionId;
-
-    if (ubicacionId && !ubicacionId.startsWith('UBI-')) {
-      const ciudadId = `CIU-${Math.floor(Math.random() * 900) + 100}`;
-      await this.alojamientoRepository.query(
-        'INSERT INTO ciudades (id, "paisId", nombre) VALUES ($1, $2, $3)',
-        [ciudadId, 'PAI-001', dto.destino || ubicacionId]
-      );
-      const newUbiId = `UBI-${Math.floor(Math.random() * 900) + 100}`;
-      await this.alojamientoRepository.query(
-        'INSERT INTO ubicaciones (id, "ciudadId", direccion_detallada, latitud, longitud) VALUES ($1, $2, $3, $4, $5)',
-        [newUbiId, ciudadId, dto.destino || ubicacionId, 0, 0]
-      );
-      ubicacionId = newUbiId;
+    let ubicacionId: string | undefined = undefined;
+    if (dto.ubicacionId || dto.destino) {
+      ubicacionId = await this.resolveUbicacion(dto.ubicacionId, dto.destino);
     }
 
     await this.alojamientoRepository.query(

@@ -4,6 +4,19 @@ import { Home, User, MapPin, Star, ArrowLeft, Search, Users, DollarSign, Buildin
 import { motion, AnimatePresence } from 'framer-motion';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+export const CIUDADES_ECUADOR = [
+  'Quito', 'Guayaquil', 'Cuenca', 'Manta', 'Portoviejo', 'Ambato', 'Baños', 'Machala',
+  'Santo Domingo', 'Durán', 'Loja', 'Esmeraldas', 'Quevedo', 'Riobamba', 'Milagro',
+  'Ibarra', 'La Libertad', 'Babahoyo', 'Sangolquí', 'Daule', 'Latacunga', 'Tulcán',
+  'Chone', 'Pasaje', 'Santa Rosa', 'Nueva Loja (Lago Agrio)', 'Huaquillas', 'El Carmen',
+  'Montecristi', 'Samborondón', 'Puerto Francisco de Orellana (El Coca)', 'Jipijapa',
+  'Santa Elena', 'Otavalo', 'Cayambe', 'Salinas', 'Puerto Ayora (Galápagos)',
+  'Puerto Baquerizo Moreno (Galápagos)', 'Tena', 'Puyo', 'Macas', 'Zamora', 'Guaranda',
+  'Azogues', 'Montañita', 'Atacames', 'Vilcabamba', 'Playas (General Villamil)', 'Cotacachi',
+  'Zaruma', 'Bahía de Caráquez', 'Pedernales', 'Puerto López', 'Pelileo', 'Píllaro',
+  'Gualaceo', 'Chordeleg', 'Alausí', 'Catamayo', 'Salcedo'
+];
+
 
 const getTokenData = () => {
   const token = localStorage.getItem('token');
@@ -960,7 +973,10 @@ const LandingPage = () => {
                 <form onSubmit={executeSearch} className="search-bar glass-panel" style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', maxWidth: '900px', margin: '0 auto 40px auto', alignItems: 'center', padding: '16px', background: 'white' }}>
                   <div style={{ flex: '1', minWidth: '200px', display: 'flex', alignItems: 'center', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px 16px' }}>
                     <Search size={18} color="var(--text-secondary)" style={{ marginRight: '10px' }}/>
-                    <input type="text" placeholder="Nombre del alojamiento/destino" value={searchDestino} onChange={(e) => setSearchDestino(e.target.value)} style={{ border: 'none', outline: 'none', width: '100%', fontSize: '1rem' }} />
+                    <input type="text" list="ciudades-ecuador-home" placeholder="Nombre del alojamiento/destino (ej. Quito, Cuenca, Manta...)" value={searchDestino} onChange={(e) => setSearchDestino(e.target.value)} style={{ border: 'none', outline: 'none', width: '100%', fontSize: '1rem' }} />
+                    <datalist id="ciudades-ecuador-home">
+                      {CIUDADES_ECUADOR.map(c => <option key={c} value={c} />)}
+                    </datalist>
                   </div>
                   <div style={{ flex: '1', minWidth: '150px', display: 'flex', alignItems: 'center', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px 16px' }}>
                     <Users size={18} color="var(--text-secondary)" style={{ marginRight: '10px' }}/>
@@ -1560,7 +1576,7 @@ const AdminDashboard = () => {
   const [editingItem, setEditingItem] = useState<any>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [editForm, setEditForm] = useState({
-    nombre: '', descripcion: '', imagenUrl: '', ubicacionId: '',
+    nombre: '', descripcion: '', imagenUrl: '', ubicacionId: 'Quito',
     precioPorNoche: 0, capacidadAdultos: 0, capacidadNinos: 0, habitaciones: 0
   });
   const [saving, setSaving] = useState(false);
@@ -1577,9 +1593,11 @@ const AdminDashboard = () => {
   const [newRoomImageUrl, setNewRoomImageUrl] = useState('');
   const [facturas, setFacturas] = useState<any[]>([]);
   const [todasReservas, setTodasReservas] = useState<any[]>([]);
+  const [listaCiudades, setListaCiudades] = useState<string[]>(CIUDADES_ECUADOR);
   const [activeAdminTab, setActiveAdminTab] = useState('alojamientos');
 
   const refreshStats = () => {
+    fetch(`${API_URL}/api/v1/ciudades`).then(r => r.json()).then(d => { if (Array.isArray(d) && d.length > 0) setListaCiudades(d.map((c: any) => c.nombre)); }).catch(() => {});
     fetch(`${API_URL}/api/v1/admin/dashboard-stats`)
       .then(res => res.json())
       .then(data => {
@@ -1730,7 +1748,7 @@ const AdminDashboard = () => {
       nombre: alojamiento.nombre || '',
       descripcion: alojamiento.descripcion || '',
       imagenUrl: alojamiento.imagenUrl || '',
-      ubicacionId: alojamiento.ubicacionId || 'UBI-001',
+      ubicacionId: alojamiento.destino || alojamiento.location || alojamiento.ubicacionId || 'Quito',
       precioPorNoche: alojamiento.precioPorNoche || 0,
       capacidadAdultos: alojamiento.capacidadAdultos || 0,
       capacidadNinos: alojamiento.capacidadNinos || 0,
@@ -2231,8 +2249,11 @@ const AdminDashboard = () => {
                   <input type="text" value={editForm.nombre} onChange={(e) => setEditForm({...editForm, nombre: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', outline: 'none' }} placeholder="Ej. Hotel Paraíso" />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Ubicación (Destino)</label>
-                  <input type="text" value={editForm.ubicacionId} onChange={(e) => setEditForm({...editForm, ubicacionId: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', outline: 'none', backgroundColor: 'transparent' }} placeholder="Escribe cualquier ciudad..." />
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Ubicación / Ciudad</label>
+                  <input type="text" list="ciudades-ecuador-admin" value={editForm.ubicacionId} onChange={(e) => setEditForm({...editForm, ubicacionId: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', outline: 'none', backgroundColor: 'transparent' }} placeholder="Selecciona o escribe cualquier ciudad del país..." />
+                  <datalist id="ciudades-ecuador-admin">
+                    {listaCiudades.map(city => <option key={city} value={city} />)}
+                  </datalist>
                 </div>
               </div>
 

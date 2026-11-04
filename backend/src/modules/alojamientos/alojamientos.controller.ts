@@ -51,6 +51,13 @@ export class AlojamientosController {
     return this.alojamientosService.findAllAdmin();
   }
 
+  @Get(['ciudades', 'admin/ciudades'])
+  @ApiTags('Catálogo y Administración')
+  @ApiOperation({ summary: 'Obtener lista de todas las ciudades de Ecuador' })
+  getCiudades() {
+    return this.alojamientosService.getCiudades();
+  }
+
 
   @Put('admin/alojamientos/:id')
   @ApiTags('Administración')
