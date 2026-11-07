@@ -1,17 +1,21 @@
 import { ProblemDetails, ProblemDetailsException } from './types';
 
+export const AZURE_API_URL = 'https://posada-ec-alojamientos.azurewebsites.net';
+
 export const API_BASE_URL: string = (() => {
   const url = import.meta.env.VITE_API_URL;
   if (!url || typeof url !== 'string' || url.trim() === '') {
-    if (import.meta.env.PROD) {
-      throw new Error(
-        'Configuración faltante: la variable de entorno VITE_API_URL no está definida. Por favor configure VITE_API_URL para conectar el frontend con el backend NestJS.',
-      );
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      return 'http://localhost:3000';
     }
+    return AZURE_API_URL;
+  }
+  // Si en Vercel/Render o en la configuración apunta al host inactivo de Render que retorna 404
+  if (url.includes('proyecto-rda1.onrender.com') || url.includes('onrender.com')) {
     console.warn(
-      '⚠️ VITE_API_URL no está definida en frontend/.env. Usando http://localhost:3000 por defecto en desarrollo local.',
+      '⚠️ VITE_API_URL apunta a Render (inactivo/404). Conectando automáticamente al backend activo de Azure (posada-ec-alojamientos.azurewebsites.net)...'
     );
-    return 'http://localhost:3000';
+    return AZURE_API_URL;
   }
   return url.replace(/\/+$/, '');
 })();

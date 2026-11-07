@@ -132,6 +132,6 @@ Tras aplicar `seed-usuarios.ts`, las credenciales predeterminadas son:
 
 ## 7. Despliegue en la Nube
 
-- **Backend:** Configurado mediante `render.yaml` como Web Service Node.js en Render.
-- **Frontend:** Configurado en Vercel con variable de entorno `VITE_API_URL=https://[TU-BACKEND-RENDER].onrender.com/api/v1`.
+- **Backend Activo en la Nube:** Desplegado en Azure App Service en `https://posada-ec-alojamientos.azurewebsites.net` (Nodo certificado: `NODE_ALO_LUXESTAY_E5K3`). Opcionalmente desplegable en Render mediante `render.yaml`.
+- **Frontend:** Configurado en Vercel con variable de entorno `VITE_API_URL=https://posada-ec-alojamientos.azurewebsites.net` (o `http://localhost:3000` en desarrollo local).
 - **Base de Datos:** PostgreSQL en Supabase con Pooling en puerto 6543 y SSL forzado.
