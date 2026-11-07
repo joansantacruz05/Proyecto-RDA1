@@ -6,6 +6,11 @@ import { CrearAlojamientoDto } from './dto/crear-alojamiento.dto';
 import { ActualizarAlojamientoDto } from './dto/actualizar-alojamiento.dto';
 
 import { ReservasService } from '../reservas/reservas.service';
+import { PricingService } from '../../common/services/pricing.service';
+import { IdempotencyService } from '../../common/services/idempotency.service';
+import { ProblemDetailsException } from '../../common/exceptions/problem-details.exception';
+import { validarIdentificacion } from '../../common/utils/ecuador-validators';
+import { HttpStatus, BadRequestException } from '@nestjs/common';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -14,6 +19,8 @@ export class AlojamientosService {
     @InjectRepository(Alojamiento)
     private readonly alojamientoRepository: Repository<Alojamiento>,
     private readonly reservasService: ReservasService,
+    private readonly pricingService: PricingService,
+    private readonly idempotencyService: IdempotencyService,
   ) {}
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -246,37 +253,190 @@ export class AlojamientosService {
     };
   }
 
-  async checkAvailability(availabilityRequest: any): Promise<any> {
-    const accommodationId = String(availabilityRequest.accommodation || availabilityRequest.accommodation_id || '');
-    const guests = availabilityRequest.guests || { number_of_adults: 1, number_of_rooms: 1 };
-    const checkin = availabilityRequest.checkin || new Date().toISOString().split('T')[0];
-    const checkout = availabilityRequest.checkout;
+  // ═══════════════════════════════════════════════════════════════════════
+  //  Disponibilidad por Fechas (OpenAPI v2.2.0)
+  // ═══════════════════════════════════════════════════════════════════════
 
+  async getPropertyAvailability(
+    alojamientoId: string,
+    checkin?: string,
+    checkout?: string,
+    adults: number = 1,
+    rooms: number = 1,
+    tipoHabitacion?: string,
+  ): Promise<any> {
+    if (!checkin || !checkout) {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/validation-failed',
+          title: 'Validation Failed',
+          status: HttpStatus.BAD_REQUEST,
+          code: 'VALIDATION_FAILED',
+          detail: 'Los parámetros de consulta checkin y checkout son obligatorios (formato AAAA-MM-DD).',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const dIn = new Date(checkin);
+    const dOut = new Date(checkout);
+    if (isNaN(dIn.getTime()) || isNaN(dOut.getTime()) || dOut <= dIn) {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/validation-failed',
+          title: 'Invalid Dates',
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+          code: 'RESTRICTION_VIOLATED',
+          detail: 'La fecha de checkout debe ser posterior a la fecha de checkin.',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    const noches = Math.max(1, Math.round((dOut.getTime() - dIn.getTime()) / (1000 * 60 * 60 * 24)));
+
+    // Verificar si el alojamiento existe
     const alRows = await this.alojamientoRepository.query(
-      `SELECT * FROM alojamientos WHERE id = $1 OR id = $2`,
-      [accommodationId, `ALO-${accommodationId}`],
+      `SELECT * FROM alojamientos WHERE id = $1 OR codigo = $1 OR id = ('ALO-' || $1)`,
+      [alojamientoId],
     );
 
     if (!alRows || alRows.length === 0) {
-      return {
-        request_id: crypto.randomUUID(),
-        data: {
-          id: accommodationId,
-          currency: 'USD',
-          products: [],
-          url: `/availability`,
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/not-found',
+          title: 'Hotel Not Found',
+          status: HttpStatus.NOT_FOUND,
+          code: 'HOTEL_NOT_FOUND',
+          detail: `Alojamiento "${alojamientoId}" no encontrado en el catálogo.`,
         },
-      };
+        HttpStatus.NOT_FOUND,
+      );
     }
 
     const accommodation = alRows[0];
 
-    // Obtener habitaciones disponibles
-    const spaces = await this.alojamientoRepository.query(
-      `SELECT * FROM espacios_rentables 
-       WHERE "alojamientoId" = $1 AND "cantidadDisponible" > 0 AND (estado = 'Activo' OR estado IS NULL)`,
-      [accommodation.id],
+    // Obtener habitaciones de la propiedad
+    let query = `
+      SELECT e.* 
+      FROM espacios_rentables e
+      WHERE e."alojamientoId" = $1 AND (e.estado = 'Activo' OR e.estado IS NULL)
+    `;
+    const params: any[] = [accommodation.id];
+
+    if (tipoHabitacion) {
+      params.push(tipoHabitacion);
+      query += ` AND (e.codigo = $2 OR e.id = $2)`;
+    }
+
+    query += ` ORDER BY e.nombre`;
+    const spaces = await this.alojamientoRepository.query(query, params);
+
+    const opciones: any[] = [];
+    for (const sp of spaces) {
+      const availCheck = await this.alojamientoRepository.query(
+        `SELECT (
+           e."cantidadDisponible" - (
+             SELECT COUNT(*) 
+             FROM reservas r 
+             WHERE r."espacioId" = e.id 
+               AND r."estadoId" IN ('EST-001', 'EST-002') 
+               AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2
+           )
+         ) as disponibles
+         FROM espacios_rentables e
+         WHERE e.id = $1`,
+        [sp.id, checkin, checkout],
+      );
+
+      const disponibles = Math.max(0, Number(availCheck[0]?.disponibles ?? sp.cantidadDisponible));
+      const precioNocheNum = Number(sp.precioPorNoche || 0);
+      const precioTotalNum = Math.round(precioNocheNum * noches * rooms * 100) / 100;
+
+      opciones.push({
+        tipoHabitacionCodigo: sp.codigo || 'SUITE_DELUXE',
+        nombre: sp.nombre,
+        estaDisponible: disponibles >= rooms,
+        habitacionesRemanentes: disponibles,
+        precioNoche: precioNocheNum.toFixed(2),
+        precioTotalEstancia: precioTotalNum.toFixed(2),
+        regimen: 'SOLO_HABITACION',
+        planTarifaCodigo: 'FLEX_BB',
+      });
+    }
+
+    return {
+      alojamientoId: accommodation.id,
+      checkin,
+      checkout,
+      noches,
+      opciones,
+    };
+  }
+
+  async checkAvailability(availabilityRequest: any): Promise<any> {
+    const accommodationId = String(
+      availabilityRequest.alojamientoId ||
+      availabilityRequest.accommodation ||
+      availabilityRequest.accommodation_id ||
+      ''
     );
+    const checkin = availabilityRequest.fechaInicio || availabilityRequest.checkin || availabilityRequest.dates?.checkin;
+    const checkout = availabilityRequest.fechaFin || availabilityRequest.checkout || availabilityRequest.dates?.checkout;
+    const tipoHabitacionCodigo = availabilityRequest.tipoHabitacionCodigo || availabilityRequest.product_id || availabilityRequest.productId;
+    const cantidadHabitaciones = Number(availabilityRequest.cantidadHabitaciones || availabilityRequest.rooms || availabilityRequest.guests?.number_of_rooms || 1);
+    const planTarifaCodigo = availabilityRequest.planTarifaCodigo || 'FLEX_BB';
+
+    const alRows = await this.alojamientoRepository.query(
+      `SELECT * FROM alojamientos WHERE id = $1 OR codigo = $1 OR id = ('ALO-' || $1)`,
+      [accommodationId],
+    );
+
+    if (!alRows || alRows.length === 0) {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/not-found',
+          title: 'Hotel Not Found',
+          status: HttpStatus.NOT_FOUND,
+          code: 'HOTEL_NOT_FOUND',
+          detail: `Alojamiento "${accommodationId}" no encontrado.`,
+        },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const accommodation = alRows[0];
+
+    // Buscar habitación
+    let query = `
+      SELECT e.* 
+      FROM espacios_rentables e
+      WHERE e."alojamientoId" = $1 AND (e.estado = 'Activo' OR e.estado IS NULL)
+    `;
+    const params: any[] = [accommodation.id];
+
+    if (tipoHabitacionCodigo) {
+      params.push(tipoHabitacionCodigo);
+      query += ` AND (e.codigo = $2 OR e.id = $2)`;
+    }
+
+    query += ` ORDER BY (CASE WHEN e.codigo = $2 THEN 0 ELSE 1 END) LIMIT 1`;
+    const spaces = await this.alojamientoRepository.query(query, params);
+
+    if (!spaces || spaces.length === 0) {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/not-found',
+          title: 'Room Not Found',
+          status: HttpStatus.NOT_FOUND,
+          code: 'NOT_FOUND',
+          detail: `Tipo de habitación "${tipoHabitacionCodigo || 'cualquiera'}" no disponible en ${accommodation.nombre}.`,
+        },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const room = spaces[0];
 
     // Calcular noches
     let nights = 1;
@@ -287,24 +447,74 @@ export class AlojamientosService {
       nights = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
     }
 
-    const products = spaces.map((sp: any) => ({
-      product_id: sp.id,
-      name: sp.nombre,
-      price: Math.round(Number(sp.precioPorNoche) * nights * 100) / 100,
-      price_per_night: Number(sp.precioPorNoche),
-      currency: 'USD',
-      capacity_adults: sp.capacidadAdultos,
-      capacity_children: sp.capacidadNinos,
-      available_rooms: sp.cantidadDisponible,
-    }));
+    // Validar disponibilidad
+    const availCheck = await this.alojamientoRepository.query(
+      `SELECT (
+         e."cantidadDisponible" - (
+           SELECT COUNT(*) 
+           FROM reservas r 
+           WHERE r."espacioId" = e.id 
+             AND r."estadoId" IN ('EST-001', 'EST-002') 
+             AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2
+         )
+       ) as disponibles
+       FROM espacios_rentables e
+       WHERE e.id = $1`,
+      [room.id, checkin || '2026-11-01', checkout || '2026-11-02'],
+    );
+
+    const disponibles = Math.max(0, Number(availCheck[0]?.disponibles ?? room.cantidadDisponible));
+    if (disponibles < cantidadHabitaciones) {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/out-of-stock',
+          title: 'Sin habitaciones disponibles',
+          status: HttpStatus.CONFLICT,
+          code: 'OUT_OF_STOCK',
+          detail: 'No hay cupos disponibles para el tipo de habitación en las fechas solicitadas.',
+        },
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    const pricing = this.pricingService.calculatePrice(
+      Number(room.precioPorNoche),
+      checkin || new Date().toISOString().split('T')[0],
+      checkout || new Date(Date.now() + 86400000).toISOString().split('T')[0],
+      cantidadHabitaciones,
+    );
+
+    const cotizacionId = crypto.randomUUID();
+    const tarifaValidaHasta = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+    ReservasService.quotesCache.set(cotizacionId, {
+      alojamientoId: accommodation.id,
+      espacioId: room.id,
+      tipoHabitacionCodigo: room.codigo || 'SUITE_DELUXE',
+      fechaInicio: checkin,
+      fechaFin: checkout,
+      cantidadHabitaciones,
+      total: pricing.total,
+      tarifaValidaHasta: new Date(Date.now() + 30 * 60 * 1000),
+    });
 
     return {
-      request_id: crypto.randomUUID(),
-      data: {
-        id: accommodation.id,
-        currency: 'USD',
-        products,
-        url: `/availability`,
+      alojamientoId: accommodation.id,
+      tipoHabitacionCodigo: room.codigo || 'SUITE_DELUXE',
+      estaDisponible: true,
+      habitacionesRemanentes: disponibles,
+      nochesEstancia: nights,
+      precioTotalCotizado: pricing.totalStr,
+      cotizacionId: cotizacionId,
+      tarifaValidaHasta: tarifaValidaHasta,
+      currency: 'USD',
+      planTarifaCodigo: planTarifaCodigo,
+      desglosePrecio: {
+        subtotal: pricing.subtotalStr,
+        iva: pricing.ivaStr,
+        tasaMunicipal: pricing.tasaMunicipalStr,
+        total: pricing.totalStr,
+        moneda: 'USD',
       },
     };
   }
@@ -473,8 +683,8 @@ export class AlojamientosService {
     return this.reservasService.previewOrder(previewRequest);
   }
 
-  createOrder(createRequest: any, userId: string): Promise<any> {
-    return this.reservasService.createOrder(createRequest, userId);
+  createOrder(createRequest: any, userId: string, clientIdHeader?: string): Promise<any> {
+    return this.reservasService.createOrder(createRequest, userId, clientIdHeader);
   }
 
   getOrder(orderId: string): Promise<any> {
@@ -585,10 +795,239 @@ export class AlojamientosService {
     };
   }
 
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  Catálogo Paginado OpenAPI v2.2.0
+  // ═══════════════════════════════════════════════════════════════════════
+
+  async listAlojamientos(
+    page: number = 1,
+    limit: number = 10,
+    ciudad?: string,
+    estrellas?: number,
+    minPrecio?: number,
+    maxPrecio?: number,
+  ): Promise<any> {
+    const p = Math.max(1, page);
+    const l = Math.min(50, Math.max(1, limit));
+    const offset = (p - 1) * l;
+
+    let whereClause = `WHERE (a.estado = 'Activo' OR a.estado IS NULL)`;
+    const params: any[] = [];
+
+    if (ciudad) {
+      params.push(`%${ciudad}%`);
+      whereClause += ` AND c.nombre ILIKE $${params.length}`;
+    }
+
+    const countRes = await this.alojamientoRepository.query(
+      `SELECT COUNT(*) as total
+       FROM alojamientos a
+       LEFT JOIN ubicaciones u ON a."ubicacionId" = u.id
+       LEFT JOIN ciudades c ON u."ciudadId" = c.id
+       ${whereClause}`,
+      params,
+    );
+    const totalResults = parseInt(countRes[0]?.total || '0', 10);
+
+    const query = `
+      SELECT 
+        a.id, 
+        a.nombre, 
+        a.descripcion,
+        a."imagenUrl",
+        a.estado,
+        c.nombre as destino,
+        (SELECT "precioPorNoche" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "precioPorNoche",
+        (SELECT "capacidadAdultos" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "capacidadAdultos",
+        (SELECT "capacidadNinos" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "capacidadNinos",
+        (SELECT COUNT(*) FROM espacios_rentables er WHERE er."alojamientoId" = a.id)::int as habitaciones,
+        (SELECT COUNT(*) FROM espacios_rentables er WHERE er."alojamientoId" = a.id AND (er.estado = 'Activo' OR er.estado IS NULL))::int as habitaciones_disponibles,
+        EXISTS (
+          SELECT 1 FROM alojamientos_servicios aser 
+          JOIN servicios s ON s.id = aser."servicioId"
+          WHERE aser."alojamientoId" = a.id AND s.nombre = 'Piscina'
+        ) as "tienePiscina"
+      FROM alojamientos a
+      LEFT JOIN ubicaciones u ON a."ubicacionId" = u.id
+      LEFT JOIN ciudades c ON u."ciudadId" = c.id
+      ${whereClause}
+      ORDER BY a.id ASC
+      LIMIT ${l} OFFSET ${offset}
+    `;
+
+    const rows = await this.alojamientoRepository.query(query, params);
+
+    const data = rows.map((item: any) => ({
+      id: item.id,
+      nombre: item.nombre,
+      descripcion: item.descripcion,
+      imagenUrl: item.imagenUrl,
+      destino: item.destino || 'Ecuador',
+      estrellas: 5,
+      precioPorNoche: Number(item.precioPorNoche || 85).toFixed(2),
+      moneda: 'USD',
+      permitePaquete: true,
+      habitacionesDisponibles: item.habitaciones_disponibles,
+      tienePiscina: item.tienePiscina,
+    }));
+
+    return {
+      data,
+      metadata: {
+        total_results: totalResults,
+        page: p,
+        limit: l,
+        total_pages: Math.ceil(totalResults / l),
+        has_next: p * l < totalResults,
+      },
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  Módulo de Clientes (Requisito de Cátedra)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  async getClient(email?: string, identificacion?: string): Promise<any> {
+    if (!email && !identificacion) {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/validation-failed',
+          title: 'Validation Failed',
+          status: HttpStatus.BAD_REQUEST,
+          code: 'VALIDATION_FAILED',
+          detail: 'Debe proporcionar email o identificacion para buscar al cliente.',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const rows = await this.alojamientoRepository.query(
+      `SELECT client_id, nombre, email, identificacion, telefono
+       FROM clientes
+       WHERE ($1::text IS NOT NULL AND email = $1)
+          OR ($2::text IS NOT NULL AND identificacion = $2)
+       LIMIT 1`,
+      [email || null, identificacion || null],
+    );
+
+    if (rows && rows.length > 0) {
+      return rows[0];
+    }
+
+    // Fallback en tabla usuarios
+    const userRows = await this.alojamientoRepository.query(
+      `SELECT id as client_id, "nombreCompleto" as nombre, email, COALESCE(identificacion, '') as identificacion, telefono
+       FROM usuarios
+       WHERE ($1::text IS NOT NULL AND email = $1)
+          OR ($2::text IS NOT NULL AND identificacion = $2)
+       LIMIT 1`,
+      [email || null, identificacion || null],
+    );
+
+    if (userRows && userRows.length > 0) {
+      return userRows[0];
+    }
+
+    throw new ProblemDetailsException(
+      {
+        type: 'https://api.booking-hub.com/errors/not-found',
+        title: 'Client Not Found',
+        status: HttpStatus.NOT_FOUND,
+        code: 'NOT_FOUND',
+        detail: 'Cliente no encontrado con los criterios proporcionados.',
+      },
+      HttpStatus.NOT_FOUND,
+    );
+  }
+
+  async createClient(dto: any): Promise<any> {
+    const nombre = dto.nombre || dto.nombreCompleto;
+    const email = dto.email;
+    const identificacion = dto.identificacion;
+    const telefono = dto.telefono || '+593991234567';
+
+    if (!nombre || !email || !identificacion) {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/validation-failed',
+          title: 'Validation Failed',
+          status: HttpStatus.BAD_REQUEST,
+          code: 'VALIDATION_FAILED',
+          detail: 'Los campos nombre, email e identificacion son requeridos.',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Validar cédula ecuatoriana
+    const valResult = validarIdentificacion(String(identificacion).trim());
+    if (!valResult.valido) {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/invalid-document',
+          title: 'Invalid Document',
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+          code: 'INVALID_DOCUMENT',
+          detail: valResult.mensaje || 'Documento de identidad no válido (algoritmo módulo 10 SRI).',
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
+    // Verificar si ya existe
+    const existing = await this.alojamientoRepository.query(
+      `SELECT client_id, nombre, email, identificacion, telefono
+       FROM clientes
+       WHERE email = $1 OR identificacion = $2
+       LIMIT 1`,
+      [email, identificacion],
+    );
+
+    if (existing && existing.length > 0) {
+      return existing[0];
+    }
+
+    const clientId = 'CLI-' + Math.floor(100000 + Math.random() * 900000);
+
+    await this.alojamientoRepository.query(
+      `INSERT INTO clientes (client_id, nombre, email, identificacion, telefono)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [clientId, nombre, email, identificacion, telefono],
+    );
+
+    await this.alojamientoRepository.query(
+      `INSERT INTO usuarios (id, "nombreCompleto", email, telefono, identificacion, contrasena)
+       VALUES ($1, $2, $3, $4, $5, 'CLIENTE_GDS_GUEST')
+       ON CONFLICT (id) DO UPDATE
+       SET "nombreCompleto" = EXCLUDED."nombreCompleto", email = EXCLUDED.email, 
+           telefono = EXCLUDED.telefono, identificacion = EXCLUDED.identificacion`,
+      [clientId, nombre, email, telefono, identificacion],
+    );
+
+    return {
+      client_id: clientId,
+      nombre,
+      email,
+      identificacion,
+      telefono,
+    };
+  }
+
+
   async checkInOrder(orderId: string, body?: any): Promise<any> {
     const order = await this.reservasService.getOrder(orderId);
-    if (order.estadoId === 'EST-003') {
-      throw new ConflictException('No se puede hacer check-in en una orden cancelada.');
+    if (order.estadoId === 'EST-003' || order.estado === 'CANCELLED') {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/invalid-state-transition',
+          title: 'Invalid State Transition',
+          status: HttpStatus.CONFLICT,
+          code: 'INVALID_STATE_TRANSITION',
+          detail: 'No se puede realizar check-in en una reserva cancelada.',
+        },
+        HttpStatus.CONFLICT,
+      );
     }
 
     await this.alojamientoRepository.query(
@@ -596,11 +1035,43 @@ export class AlojamientosService {
       [order.id],
     );
 
+    const externalOrderId = order.external_order_id || order.externalOrderId || order.ordenId || order.id;
+    const clientId = body?.client_id || order.usuarioId || order.clienteIdentificacion || 'CLI-001';
+
+    // Notificación Push obligatoria hacia Booking Core API (Requisito de Cátedra)
+    const bookingCheckinUrl = `https://booking-core-api.azurewebsites.net/api/v2/reservas/${encodeURIComponent(externalOrderId)}/checkin`;
+    const apiKey = process.env.API_KEY || 'luxestays_key_booking_2026_rda1_secure';
+
+    const checkinNoticePayload = {
+      external_order_id: String(externalOrderId),
+      client_id: String(clientId),
+      estado: 'CONFIRMADO_ASISTIDO',
+      huespedes_reales: Number(body?.huespedes_reales || order.numeroPersonas || 1),
+      admin_id: body?.admin_id || 'recepcionista-hotel',
+      fecha_checkin: new Date().toISOString(),
+      observaciones: body?.observaciones || 'Huésped presentado en recepción',
+    };
+
+    try {
+      const response = await fetch(bookingCheckinUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey,
+        },
+        body: JSON.stringify(checkinNoticePayload),
+      });
+      const respText = await response.text().catch(() => '');
+      console.log(`[BOOKING-CHECKIN-NOTIFY] Status: ${response.status}, Response: ${respText}`);
+    } catch (err: any) {
+      console.warn(`[BOOKING-CHECKIN-NOTIFY] Aviso a Booking falló o no disponible: ${err.message}`);
+    }
+
     return {
-      reservaId: order.ordenId || order.id,
       orderId: order.ordenId || order.id,
-      estado: 'CHECKED_IN',
-      habitacionAsignada: `${order.habitacionNombre || 'Habitación Asignada'} - Piso 2`,
+      external_order_id: externalOrderId,
+      estado: 'CONFIRMADO_ASISTIDO',
+      habitacionAsignada: `${order.habitacionNombre || 'Suite Deluxe'} - Piso 2`,
       claveAccesoDigital: `PIN-${Math.floor(1000 + Math.random() * 9000)}#`,
       checkInHora: new Date().toISOString(),
       instruccionesAcceso: 'Presente su identificación en la recepción o use su PIN digital en la cerradura.',
@@ -633,7 +1104,24 @@ export class AlojamientosService {
     };
   }
 
-  async listOrders(sagaId?: string, idempotencyKey?: string): Promise<any> {
+  async listOrders(sagaId?: string, idempotencyKey?: string, page: string = '1', limit: string = '50'): Promise<any> {
+    // Si se envía idempotency_key para recuperación de Saga tras timeout
+    if (idempotencyKey) {
+      const cached = await this.idempotencyService.findByKey(idempotencyKey);
+      if (cached) {
+        return {
+          orders: [cached],
+          total: 1,
+          page: 1,
+          limit: 1,
+        };
+      }
+    }
+
+    const p = Math.max(1, parseInt(page, 10) || 1);
+    const l = Math.min(50, Math.max(1, parseInt(limit, 10) || 50));
+    const offset = (p - 1) * l;
+
     let query = `
       SELECT r.id, r."ordenId", r."ordenId" as "orderId", r."ordenId" as "externalOrderId",
              r."fechaEntrada" as "checkinFecha", r."fechaSalida" as "checkoutFecha",
@@ -643,7 +1131,8 @@ export class AlojamientosService {
                WHEN r."estadoId" = 'EST-002' THEN 'CONFIRMED'
                ELSE 'PENDING'
              END as "estado",
-             e.nombre as "habitacionNombre", a.nombre as "alojamientoNombre",
+             e.nombre as "habitacionNombre", e.codigo as "tipoHabitacionCodigo",
+             a.nombre as "alojamientoNombre", a.id as "alojamientoId",
              u."nombreCompleto" as "titularNombre", u.email as "titularEmail"
       FROM reservas r
       JOIN estados_reserva er ON r."estadoId" = er.id
@@ -657,13 +1146,14 @@ export class AlojamientosService {
       params.push(`%${sagaId}%`);
       query += ` WHERE c.terminos ILIKE $${params.length} OR r."ordenId"::text ILIKE $${params.length}`;
     }
-    query += ` ORDER BY r."fechaCreacion" DESC LIMIT 50`;
+    query += ` ORDER BY r."fechaCreacion" DESC LIMIT ${l} OFFSET ${offset}`;
     const rows = await this.alojamientoRepository.query(query, params);
+
     return {
       orders: rows,
       total: rows.length,
-      page: 1,
-      limit: 50,
+      page: p,
+      limit: l,
     };
   }
 }

@@ -37,7 +37,8 @@ export class IdempotencyInterceptor implements NestInterceptor {
     );
 
     if (check.isCached) {
-      // Replay stored response
+      // Replay stored response with Idempotent-Replayed header
+      res.setHeader('Idempotent-Replayed', 'true');
       if (check.statusCode) {
         res.status(check.statusCode);
       }

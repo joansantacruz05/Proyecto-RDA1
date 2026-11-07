@@ -40,10 +40,10 @@ export class ScopesGuard implements CanActivate {
       throw new ProblemDetailsException(
         {
           type: 'https://api.booking-hub.com/errors/unauthorized',
-          title: 'Unauthorized: Authentication required',
+          title: 'Unauthorized',
           status: HttpStatus.UNAUTHORIZED,
-          code: 'VALIDATION_FAILED',
-          detail: 'You must provide a valid Bearer token with appropriate OAuth2 scopes.',
+          code: 'UNAUTHORIZED',
+          detail: 'You must provide a valid Bearer token or X-API-Key with appropriate scopes.',
         },
         HttpStatus.UNAUTHORIZED,
       );
@@ -65,7 +65,7 @@ export class ScopesGuard implements CanActivate {
           type: 'https://api.booking-hub.com/errors/forbidden',
           title: 'Forbidden: Insufficient Scope',
           status: HttpStatus.FORBIDDEN,
-          code: 'VALIDATION_FAILED',
+          code: 'INSUFFICIENT_SCOPE',
           detail: `Operation requires OAuth2 scope(s): ${requiredScopes.join(', ')}. Granted scopes: ${grantedScopes.join(', ') || 'none'}`,
         },
         HttpStatus.FORBIDDEN,

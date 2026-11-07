@@ -186,7 +186,7 @@ export class InventorySyncService implements OnModuleInit, OnModuleDestroy {
 
       const room = roomRows[0];
       const itemId = `${room.alojamientoCodigo || 'ALO'}:${room.espacioCodigo || room.id}`;
-      const nodeId = this.configService.get<string>('NODE_ID') || 'NODE_ALO_LUXE';
+      const nodeId = this.configService.get<string>('NODE_ID') || 'NODE_ALO_LUXESTAY_E5K3';
       const eventBusMode = (this.configService.get<string>('EVENT_BUS_MODE') || 'rabbitmq').toLowerCase();
 
       // Iterar sobre cada noche del rango
@@ -261,7 +261,7 @@ export class InventorySyncService implements OnModuleInit, OnModuleDestroy {
     let failed = 0;
 
     try {
-      const nodeId = this.configService.get<string>('NODE_ID') || 'NODE_ALO_LUXE';
+      const nodeId = this.configService.get<string>('NODE_ID') || 'NODE_ALO_LUXESTAY_E5K3';
       const eventBusMode = (this.configService.get<string>('EVENT_BUS_MODE') || 'rabbitmq').toLowerCase();
       const grpcEnabled = this.configService.get<string>('GRPC_ENABLED') === 'true';
       const serviceId = this.configService.get<string>('GRPC_SERVICE_ID') || 'alojamientos';
@@ -352,7 +352,7 @@ export class InventorySyncService implements OnModuleInit, OnModuleDestroy {
    * Sincronización masiva de inventario para los próximos 90 días hacia Booking
    */
   async syncNext90Days(): Promise<{ totalRooms: number; totalSlotsGenerated: number; serviceId: string; timestamp: number }> {
-    const serviceId = this.configService.get<string>('NODE_ID') || 'NODE_ALO_LUXE';
+    const serviceId = this.configService.get<string>('NODE_ID') || 'NODE_ALO_LUXESTAY_E5K3';
     const eventBusMode = (this.configService.get<string>('EVENT_BUS_MODE') || 'rabbitmq').toLowerCase();
 
     const rooms = await this.dataSource.query(
@@ -410,7 +410,7 @@ export class InventorySyncService implements OnModuleInit, OnModuleDestroy {
    * Consulta y verifica el inventario en Booking Hub vs Base de Datos local
    */
   async verifyBookingSlot(itemId: string, dateStr: string): Promise<any> {
-    const serviceId = this.configService.get<string>('NODE_ID') || 'NODE_ALO_LUXE';
+    const serviceId = this.configService.get<string>('NODE_ID') || 'NODE_ALO_LUXESTAY_E5K3';
     const dateCompact = dateStr.replace(/-/g, '');
     const slotId = `slot-${dateCompact}-1400`;
 

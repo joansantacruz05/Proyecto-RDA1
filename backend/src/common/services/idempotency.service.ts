@@ -43,16 +43,16 @@ export class IdempotencyService {
           response: record.respuesta,
         };
       } else {
-        // Same key, different body -> 409 Conflict
+        // Same key, different body -> 422 Unprocessable Entity
         throw new ProblemDetailsException(
           {
-            type: 'https://api.booking-hub.com/errors/idempotency-conflict',
-            title: 'Conflicto de Idempotencia: llave ya utilizada con un cuerpo diferente',
-            status: HttpStatus.CONFLICT,
-            code: 'IDEMPOTENCY_KEY_REUSE_WITH_DIFFERENT_PAYLOAD',
-            detail: `La Idempotency-Key "${key}" ya fue procesada anteriormente con parámetros distintos.`,
+            type: 'https://api.booking-hub.com/errors/idempotency-key-reused',
+            title: 'Idempotency Key Reused',
+            status: HttpStatus.UNPROCESSABLE_ENTITY,
+            code: 'IDEMPOTENCY_KEY_REUSED',
+            detail: `La Idempotency-Key "${key}" ya fue procesada anteriormente con un cuerpo diferente.`,
           },
-          HttpStatus.CONFLICT,
+          HttpStatus.UNPROCESSABLE_ENTITY,
         );
       }
     }
@@ -82,5 +82,18 @@ export class IdempotencyService {
     } catch (err) {
       console.error('Failed to save idempotency key:', err);
     }
+  }
+
+  async findByKey(key: string): Promise<any | null> {
+    const rows = await this.dataSource.query(
+      `SELECT llave, "hashCuerpo", status, respuesta, "creadoEn"
+       FROM idempotency_keys 
+       WHERE llave = $1::uuid`,
+      [key],
+    );
+    if (rows && rows.length > 0) {
+      return rows[0].respuesta;
+    }
+    return null;
   }
 }

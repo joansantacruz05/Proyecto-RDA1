@@ -58,36 +58,76 @@ export class ProblemDetailsFilter implements ExceptionFilter {
             } else {
               detail = String(msg);
             }
+          } else if (typeof exceptionResponse === 'string') {
+            detail = exceptionResponse;
           }
         } else if (status === HttpStatus.NOT_FOUND) {
           title = 'Resource Not Found';
           type = 'https://api.booking-hub.com/errors/not-found';
-          code = 'VALIDATION_FAILED';
-          detail = typeof exceptionResponse === 'string' ? exceptionResponse : (exceptionResponse as any).message;
+          code = 'NOT_FOUND';
+          detail = typeof exceptionResponse === 'string' 
+            ? exceptionResponse 
+            : (exceptionResponse as any)?.message || 'El recurso solicitado no fue encontrado.';
+          if (detail && (detail.toLowerCase().includes('hotel') || detail.toLowerCase().includes('alojamiento'))) {
+            code = 'HOTEL_NOT_FOUND';
+          }
         } else if (status === HttpStatus.UNAUTHORIZED) {
           title = 'Unauthorized';
           type = 'https://api.booking-hub.com/errors/unauthorized';
-          code = 'VALIDATION_FAILED';
-          detail = 'Authentication is required to access this resource';
+          code = 'UNAUTHORIZED';
+          detail = typeof exceptionResponse === 'string'
+            ? exceptionResponse
+            : (exceptionResponse as any)?.message || 'Authentication is required to access this resource';
         } else if (status === HttpStatus.FORBIDDEN) {
           title = 'Forbidden';
           type = 'https://api.booking-hub.com/errors/forbidden';
-          code = 'VALIDATION_FAILED';
-          detail = 'Insufficient permissions or scope';
+          code = 'FORBIDDEN';
+          detail = typeof exceptionResponse === 'string'
+            ? exceptionResponse
+            : (exceptionResponse as any)?.message || 'Insufficient permissions or scope';
         } else if (status === HttpStatus.CONFLICT) {
           title = 'Conflict';
           type = 'https://api.booking-hub.com/errors/conflict';
-          code = 'ROOM_NO_LONGER_AVAILABLE';
-          detail = typeof exceptionResponse === 'string' ? exceptionResponse : (exceptionResponse as any).message;
+          code = 'OUT_OF_STOCK';
+          detail = typeof exceptionResponse === 'string' 
+            ? exceptionResponse 
+            : (exceptionResponse as any)?.message || 'Conflicto al procesar la reserva.';
+          if (detail && (detail.toLowerCase().includes('precio') || detail.toLowerCase().includes('tarifa'))) {
+            code = 'PRICE_MISMATCH';
+          } else if (detail && detail.toLowerCase().includes('cotizacion')) {
+            code = 'QUOTE_EXPIRED';
+          }
+        } else if (status === HttpStatus.UNPROCESSABLE_ENTITY) {
+          title = 'Unprocessable Entity';
+          type = 'https://api.booking-hub.com/errors/unprocessable';
+          code = 'VALIDATION_FAILED';
+          detail = typeof exceptionResponse === 'string'
+            ? exceptionResponse
+            : (exceptionResponse as any)?.message || 'No se puede procesar la solicitud.';
+          if (detail && (detail.toLowerCase().includes('cedula') || detail.toLowerCase().includes('documento'))) {
+            code = 'INVALID_DOCUMENT';
+          } else if (detail && detail.toLowerCase().includes('capacidad')) {
+            code = 'CAPACITY_EXCEEDED';
+          } else if (detail && detail.toLowerCase().includes('idempotenc')) {
+            code = 'IDEMPOTENCY_KEY_REUSED';
+          }
         } else if (status === HttpStatus.TOO_MANY_REQUESTS) {
           title = 'Too Many Requests';
           type = 'https://api.booking-hub.com/errors/rate-limit-exceeded';
-          code = 'RATE_LIMIT_EXCEEDED';
+          code = 'RATE_LIMITED';
           detail = 'Rate limit exceeded. Please try again later.';
         } else {
           title = 'Internal Server Error';
           type = 'https://api.booking-hub.com/errors/internal-server-error';
-          code = 'VALIDATION_FAILED';
+          code = 'INTERNAL_ERROR';
+          detail = typeof exceptionResponse === 'string'
+            ? exceptionResponse
+            : (exceptionResponse as any)?.message || 'Error interno inesperado en el servidor.';
+        }
+
+        // Si la excepción original traía un 'code' personalizado
+        if (typeof exceptionResponse === 'object' && (exceptionResponse as any)?.code) {
+          code = (exceptionResponse as any).code as ProblemErrorCode;
         }
 
         payload = {
@@ -103,33 +143,30 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       // Check for Postgres database errors (TypeORM QueryFailedError)
       const dbError = exception as any;
       if (dbError && dbError.code === '23505') {
-        // Unique constraint violation
         status = HttpStatus.CONFLICT;
         payload = {
           type: 'https://api.booking-hub.com/errors/conflict',
           title: 'Conflicto de registro duplicado',
           status: HttpStatus.CONFLICT,
-          code: 'IDEMPOTENCY_KEY_REUSE_WITH_DIFFERENT_PAYLOAD' as ProblemErrorCode,
+          code: 'IDEMPOTENCY_KEY_REUSED',
           detail: 'El registro ya existe o se produjo un conflicto de duplicidad de clave única en la base de datos.',
         };
       } else if (dbError && dbError.code === '23503') {
-        // Foreign key violation
         status = HttpStatus.CONFLICT;
         payload = {
           type: 'https://api.booking-hub.com/errors/conflict',
           title: 'Violación de integridad referencial',
           status: HttpStatus.CONFLICT,
-          code: 'VALIDATION_FAILED' as ProblemErrorCode,
+          code: 'VALIDATION_FAILED',
           detail: 'No se puede procesar la acción debido a que existen registros dependientes o la entidad referenciada no existe.',
         };
       } else {
-        // Unknown runtime error
         status = HttpStatus.INTERNAL_SERVER_ERROR;
         payload = {
           type: 'https://api.booking-hub.com/errors/internal-server-error',
           title: 'Error Interno del Servidor',
           status: HttpStatus.INTERNAL_SERVER_ERROR,
-          code: 'VALIDATION_FAILED' as ProblemErrorCode,
+          code: 'INTERNAL_ERROR',
           detail: exception instanceof Error ? exception.message : 'Error interno inesperado en el servidor.',
         };
       }

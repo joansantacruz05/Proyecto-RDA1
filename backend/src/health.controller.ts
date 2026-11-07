@@ -20,7 +20,7 @@ export class HealthController {
   @ApiResponse({ status: 503, description: 'Error de conexión a la BD' })
   async checkHealth(@Res() res: Response) {
     const start = Date.now();
-    const nodeId = this.configService.get<string>('NODE_ID') || 'NODE_ALO_LUXE';
+    const nodeId = this.configService.get<string>('NODE_ID') || 'NODE_ALO_LUXESTAY_E5K3';
     try {
       await this.dataSource.query('SELECT 1');
       const latencyMs = Date.now() - start;
@@ -63,7 +63,7 @@ export class HealthController {
   @ApiOperation({ summary: 'Ping raíz e información del nodo para Booking Hub' })
   @ApiResponse({ status: 200, description: 'Información básica del servicio' })
   getRoot() {
-    const nodeId = this.configService.get<string>('NODE_ID') || 'NODE_ALO_LUXE';
+    const nodeId = this.configService.get<string>('NODE_ID') || 'NODE_ALO_LUXESTAY_E5K3';
     return {
       servicio: 'MS_ALOJAMIENTOS',
       service: 'MS_ALOJAMIENTOS',

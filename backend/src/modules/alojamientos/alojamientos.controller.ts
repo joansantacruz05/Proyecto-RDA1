@@ -43,9 +43,32 @@ export class AlojamientosController {
     return this.alojamientosService.createAdmin(dto);
   }
 
-  @Get(['alojamientos', 'admin/alojamientos'])
-  @ApiTags('Catálogo y Administración')
-  @ApiOperation({ summary: 'Listar todos los alojamientos' })
+  @Get('alojamientos')
+  @ApiTags('Catálogo y Búsqueda v2')
+  @ApiOperation({ summary: 'Catálogo paginado de propiedades de hospedaje' })
+  listAlojamientos(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('ciudad') ciudad?: string,
+    @Query('estrellas') estrellas?: string,
+    @Query('minPrecio') minPrecio?: string,
+    @Query('maxPrecio') maxPrecio?: string,
+  ) {
+    const p = page ? parseInt(page, 10) : 1;
+    const l = limit ? parseInt(limit, 10) : 10;
+    return this.alojamientosService.listAlojamientos(
+      isNaN(p) || p < 1 ? 1 : p,
+      isNaN(l) || l < 1 ? 10 : l,
+      ciudad,
+      estrellas ? parseInt(estrellas, 10) : undefined,
+      minPrecio ? parseFloat(minPrecio) : undefined,
+      maxPrecio ? parseFloat(maxPrecio) : undefined,
+    );
+  }
+
+  @Get('admin/alojamientos')
+  @ApiTags('Administración')
+  @ApiOperation({ summary: 'Listar todos los alojamientos para administración' })
   @ApiResponse({ status: 200, description: 'Lista de alojamientos.' })
   findAllAdmin() {
     return this.alojamientosService.findAllAdmin();
@@ -254,6 +277,32 @@ export class AlojamientosController {
     return this.alojamientosService.getInventorySnapshot(id, desde, hasta);
   }
 
+  @Get([
+    'alojamientos/:id/availability',
+    'alojamientos/:id/disponibilidad',
+    ':id/availability',
+    ':id/disponibilidad',
+  ])
+  @ApiTags('Disponibilidad y Cotización v2')
+  @ApiOperation({ summary: 'Consultar disponibilidad indicativa por fechas y tipo de habitación' })
+  getPropertyAvailability(
+    @Param('id') id: string,
+    @Query('checkin') checkin?: string,
+    @Query('checkout') checkout?: string,
+    @Query('adults') adults?: string,
+    @Query('rooms') rooms?: string,
+    @Query('tipoHabitacion') tipoHabitacion?: string,
+  ) {
+    return this.alojamientosService.getPropertyAvailability(
+      id,
+      checkin,
+      checkout,
+      adults ? parseInt(adults, 10) : 1,
+      rooms ? parseInt(rooms, 10) : 1,
+      tipoHabitacion,
+    );
+  }
+
   @Post(['alojamientos/:id/availability', 'alojamientos/:id/disponibilidad'])
   @ApiTags('Disponibilidad y Cotización v2')
   @ApiOperation({ summary: 'Consultar disponibilidad para un alojamiento específico' })
@@ -294,6 +343,28 @@ export class AlojamientosController {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  //  Módulo de Clientes (Requisito de Cátedra)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  @Get(['clientes', 'alojamientos/clientes'])
+  @ApiTags('Clientes y Huéspedes v2')
+  @ApiOperation({ summary: 'Buscar cliente huésped por email o identificación' })
+  getClientes(
+    @Query('email') email?: string,
+    @Query('identificacion') identificacion?: string,
+  ) {
+    return this.alojamientosService.getClient(email, identificacion);
+  }
+
+  @Post(['clientes', 'alojamientos/clientes'])
+  @ApiTags('Clientes y Huéspedes v2')
+  @ApiOperation({ summary: 'Registrar un nuevo cliente huésped' })
+  @HttpCode(HttpStatus.CREATED)
+  createCliente(@Body() dto: any) {
+    return this.alojamientosService.createClient(dto);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   //  Gestión de Órdenes (Reservas) — Contrato GDS Alojamientos Hub v2
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -319,11 +390,12 @@ export class AlojamientosController {
   @Scopes('alojamientos:book')
   createOrder(
     @Headers('Idempotency-Key') idempotencyKey: string,
+    @Headers('X-Client-Id') clientIdHeader: string,
     @Body() createRequest: any,
     @Req() req: any,
   ) {
-    const userId = req.user?.sub || req.user?.id;
-    return this.alojamientosService.createOrder(createRequest, userId);
+    const userId = clientIdHeader || req.user?.sub || req.user?.id || 'NODE_SYSTEM_HUB';
+    return this.alojamientosService.createOrder(createRequest, userId, clientIdHeader);
   }
 
   @Get(['orders', 'alojamientos/orders', 'alojamientos/reservas', 'alojamientos/reservations'])
@@ -332,8 +404,10 @@ export class AlojamientosController {
   listOrders(
     @Query('saga_id') sagaId?: string,
     @Query('idempotency_key') idempotencyKey?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.alojamientosService.listOrders(sagaId, idempotencyKey);
+    return this.alojamientosService.listOrders(sagaId, idempotencyKey, page, limit);
   }
 
   @Get(['orders/:orderId', 'alojamientos/orders/:orderId', 'alojamientos/reservas/:orderId', 'alojamientos/reservations/:orderId'])
