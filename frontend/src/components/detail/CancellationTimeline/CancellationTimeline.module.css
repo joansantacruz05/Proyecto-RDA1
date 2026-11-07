@@ -1,0 +1,134 @@
+.container {
+  background-color: var(--color-surface-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  margin-top: var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.heading {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-xl);
+  color: var(--color-primary-dark);
+}
+
+.scheduleTags {
+  display: flex;
+  gap: var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--color-primary-navy);
+  font-weight: 600;
+}
+
+.scheduleItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background-color: var(--color-surface-subtle);
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+/* Timeline Visual */
+.timelineTrack {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.trackSegment {
+  height: 8px;
+  border-radius: var(--radius-full);
+}
+
+.segGreen {
+  background-color: var(--color-success);
+}
+
+.segAmber {
+  background-color: var(--color-warning);
+}
+
+.segRed {
+  background-color: var(--color-error);
+}
+
+.cardsRow {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+@media (min-width: 768px) {
+  .cardsRow {
+    grid-template-columns: 1.5fr 1fr 1fr;
+  }
+}
+
+.tierCard {
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.tierGreen {
+  background-color: #F0FDF4;
+  border: 1px solid #BBF7D0;
+}
+
+.tierAmber {
+  background-color: #FFFBEB;
+  border: 1px solid #FDE68A;
+}
+
+.tierRed {
+  background-color: #FEF2F2;
+  border: 1px solid #FECACA;
+}
+
+.tierBadge {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tierGreen .tierBadge {
+  color: var(--color-success);
+}
+
+.tierAmber .tierBadge {
+  color: var(--color-warning);
+}
+
+.tierRed .tierBadge {
+  color: var(--color-error);
+}
+
+.tierTitle {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-primary-dark);
+}
+
+.tierDesc {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+

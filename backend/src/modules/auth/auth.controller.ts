@@ -6,6 +6,7 @@ import { CrearUsuarioDto } from '../usuarios/dto/crear-usuario.dto';
 import { UsuariosService } from '../usuarios/usuarios.service';
 import { IsString, IsOptional, Min, Max } from 'class-validator';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { Public } from '../../common/decorators/public.decorator';
 
 export class UpdateProfileDto {
   @IsString()
@@ -38,6 +39,7 @@ export class AuthController {
     private readonly usuariosService: UsuariosService,
   ) {}
 
+  @Public()
   @Post('login')
   @ApiOperation({ summary: 'Iniciar sesión y obtener Token JWT' })
   @ApiResponse({ status: 200, description: 'Token emitido exitosamente' })
@@ -47,6 +49,7 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
+  @Public()
   @Post('register')
   @ApiOperation({ summary: 'Registrar un nuevo usuario' })
   @ApiResponse({ status: 201, description: 'Usuario registrado exitosamente' })

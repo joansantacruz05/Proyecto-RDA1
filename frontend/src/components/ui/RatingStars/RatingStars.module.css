@@ -1,0 +1,35 @@
+.wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.stars {
+  display: inline-flex;
+  gap: 2px;
+  color: var(--color-gold);
+}
+
+.star {
+  width: 1rem;
+  height: 1rem;
+  fill: currentColor;
+}
+
+.emptyStar {
+  color: #CBD5E1;
+  fill: #CBD5E1;
+}
+
+.scoreText {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary-dark);
+  margin-left: var(--space-1);
+}
+
+.reviewsCount {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+

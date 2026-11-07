@@ -5,7 +5,7 @@
 **Nombre Comercial:** LuxeStays  
 **URL Base de Integración (Azure):** `https://posada-ec-alojamientos.azurewebsites.net/api/v2`  
 **URL Health Check:** `https://posada-ec-alojamientos.azurewebsites.net/api/v2/alojamientos/health`  
-**X-API-Key:** `luxestays_key_booking_2026_rda1_secure`  
+**X-API-Key:** *(Gestionada de forma segura mediante variable de entorno BOOKING_API_KEY / INTEGRATION_API_KEY)*  
 
 ---
 

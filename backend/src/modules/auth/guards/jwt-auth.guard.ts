@@ -1,15 +1,56 @@
 import { Injectable, ExecutionContext, HttpStatus } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Reflector } from '@nestjs/core';
+import * as crypto from 'crypto';
 import { ProblemDetailsException } from '../../../common/exceptions/problem-details.exception';
+import { IS_PUBLIC_KEY } from '../../../common/decorators/public.decorator';
+
+function timingSafeCompare(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  const bufA = Buffer.from(a, 'utf-8');
+  const bufB = Buffer.from(b, 'utf-8');
+  if (bufA.length !== bufB.length) {
+    // Mitigación de timing attack por longitud
+    crypto.timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
+  constructor(private reflector: Reflector) {
+    super();
+  }
+
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
     const request = context.switchToHttp().getRequest();
     const apiKeyHeader = request.headers['x-api-key'] || request.headers['X-API-Key'];
 
-    // Soporte para X-API-Key (acordada con Booking Hub)
-    if (apiKeyHeader && String(apiKeyHeader).trim().length > 0) {
+    // Si viene la cabecera X-API-Key, validar obligatoriamente en tiempo constante contra INTEGRATION_API_KEY
+    if (apiKeyHeader !== undefined && apiKeyHeader !== null) {
+      const providedKey = String(apiKeyHeader).trim();
+      const expectedKey = process.env.INTEGRATION_API_KEY || process.env.API_KEY || '';
+
+      if (!expectedKey || !timingSafeCompare(providedKey, expectedKey)) {
+        throw new ProblemDetailsException(
+          {
+            type: 'https://api.booking-hub.com/errors/unauthorized',
+            title: 'Unauthorized',
+            status: HttpStatus.UNAUTHORIZED,
+            code: 'UNAUTHORIZED',
+            detail: 'X-API-Key inválida o no autorizada.',
+          },
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+
+      // Clave válida de integración Booking Core
       request.user = {
         id: 'NODE_SYSTEM_HUB',
         sub: 'NODE_SYSTEM_HUB',
@@ -22,7 +63,12 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       return true;
     }
 
-    // Si no viene Authorization Bearer ni X-API-Key -> 401 UNAUTHORIZED
+    // Si la ruta está decorada con @Public() y no mandó X-API-Key, permitir paso libre
+    if (isPublic) {
+      return true;
+    }
+
+    // Si no viene Authorization Bearer -> 401 UNAUTHORIZED
     if (!request.headers.authorization) {
       throw new ProblemDetailsException(
         {
@@ -30,7 +76,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
           title: 'Unauthorized',
           status: HttpStatus.UNAUTHORIZED,
           code: 'UNAUTHORIZED',
-          detail: 'Authentication is required to access this resource. Provide a valid X-API-Key or Bearer token.',
+          detail: 'Authentication is required to access this resource. Provide a valid Bearer token or X-API-Key.',
         },
         HttpStatus.UNAUTHORIZED,
       );

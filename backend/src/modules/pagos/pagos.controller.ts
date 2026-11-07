@@ -13,12 +13,14 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../usuarios/entities/usuario.entity';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Facturación y Pagos')
 @Controller()
 export class PagosController {
   constructor(private readonly pagosService: PagosService) {}
 
+  @Public()
   @Get('pagos/metodos')
   @ApiOperation({ summary: 'Obtener métodos de pago activos' })
   @ApiResponse({ status: 200, description: 'Lista de métodos de pago activos' })

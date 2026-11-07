@@ -695,8 +695,8 @@ export class AlojamientosService {
     return this.reservasService.modifyOrder(orderId, modifyRequest);
   }
 
-  cancelOrder(orderId: string): Promise<any> {
-    return this.reservasService.cancelOrder(orderId);
+  cancelOrder(orderId: string, userId?: string, userRol?: string, reason?: string, solicitadoPor?: string): Promise<any> {
+    return this.reservasService.cancelOrder(orderId, userId, userRol, reason, solicitadoPor);
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -1040,7 +1040,20 @@ export class AlojamientosService {
 
     // Notificación Push obligatoria hacia Booking Core API (Requisito de Cátedra)
     const bookingCheckinUrl = `https://booking-core-api.azurewebsites.net/api/v2/reservas/${encodeURIComponent(externalOrderId)}/checkin`;
-    const apiKey = process.env.BOOKING_API_KEY || process.env.API_KEY || process.env.INTEGRATION_API_KEY || 'luxestays_key_booking_2026_rda1_secure';
+    const apiKey = process.env.BOOKING_API_KEY;
+    if (!apiKey) {
+      console.error('[BOOKING-CHECKIN-NOTIFY] FATAL: Variable BOOKING_API_KEY no configurada en el entorno.');
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/internal-server-error',
+          title: 'Configuration Error',
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          code: 'INTERNAL_ERROR',
+          detail: 'Servicio de integración de check-in no configurado (falta BOOKING_API_KEY).',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
 
     const checkinNoticePayload = {
       external_order_id: String(externalOrderId),

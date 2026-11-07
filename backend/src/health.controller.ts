@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+import { Public } from './common/decorators/public.decorator';
 
 const APP_START_TIME = Date.now();
 
@@ -14,6 +15,7 @@ export class HealthController {
     private readonly configService: ConfigService,
   ) {}
 
+  @Public()
   @Get(['health', 'api/v1/health', 'api/v2/health', 'alojamientos/health', 'api/v1/alojamientos/health', 'api/v2/alojamientos/health'])
   @ApiOperation({ summary: 'Verificación de salud del servicio y base de datos (Semáforo v2)' })
   @ApiResponse({ status: 200, description: 'Servicio y BD operativos' })
@@ -25,8 +27,8 @@ export class HealthController {
       await this.dataSource.query('SELECT 1');
       const latencyMs = Date.now() - start;
       const uptimeSeconds = Math.floor((Date.now() - APP_START_TIME) / 1000);
-      const semaforo = latencyMs < 1000 ? 'GREEN' : latencyMs < 2000 ? 'YELLOW' : 'RED';
-      const status = latencyMs < 2000 ? 'HEALTHY' : 'DEGRADED';
+      const semaforo = latencyMs < 200 ? 'GREEN' : latencyMs <= 800 ? 'YELLOW' : 'RED';
+      const status = latencyMs <= 800 ? 'HEALTHY' : 'DEGRADED';
 
       return res.status(HttpStatus.OK).json({
         status,

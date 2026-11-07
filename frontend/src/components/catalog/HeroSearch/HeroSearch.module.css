@@ -1,0 +1,202 @@
+.heroSection {
+  background: linear-gradient(180deg, var(--color-primary-dark) 0%, #162B48 100%);
+  color: var(--color-text-inverted);
+  padding: var(--space-12) 0 var(--space-16);
+  position: relative;
+  overflow: hidden;
+}
+
+.heroContent {
+  text-align: center;
+  max-width: 840px;
+  margin: 0 auto var(--space-8);
+}
+
+.heroTag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.35rem 0.85rem;
+  background: rgba(201, 162, 39, 0.15);
+  border: 1px solid rgba(201, 162, 39, 0.3);
+  border-radius: var(--radius-full);
+  color: var(--color-gold);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: var(--space-4);
+}
+
+.heroTitle {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-4xl);
+  font-weight: 700;
+  color: var(--color-text-inverted);
+  line-height: 1.2;
+  margin-bottom: var(--space-3);
+}
+
+@media (min-width: 768px) {
+  .heroTitle {
+    font-size: var(--font-size-5xl);
+  }
+}
+
+.heroSubtitle {
+  font-size: var(--font-size-lg);
+  color: #CBD5E1;
+  line-height: 1.6;
+}
+
+/* ── Floating Search Bar Container ─────────────────────────────────────────── */
+.searchBarCard {
+  background-color: var(--color-surface-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.searchGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+@media (min-width: 768px) {
+  .searchGrid {
+    grid-template-columns: 1.5fr 1fr 1fr 1fr auto;
+    align-items: center;
+  }
+}
+
+.searchField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-subtle);
+  background-color: var(--color-surface-subtle);
+  transition: all var(--transition-fast);
+  text-align: left;
+}
+
+.searchField:focus-within {
+  background-color: #FFFFFF;
+  border-color: var(--color-primary-navy);
+  box-shadow: 0 0 0 2px rgba(20, 64, 107, 0.1);
+}
+
+.fieldLabel {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.selectInput,
+.dateInput {
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-primary-dark);
+  width: 100%;
+  cursor: pointer;
+}
+
+.popoverTrigger {
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-primary-dark);
+  cursor: pointer;
+  padding: 0;
+  width: 100%;
+}
+
+.occupancyMenu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: var(--space-2);
+  width: 280px;
+  background-color: #FFFFFF;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-4);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.counterRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.counterTitle {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-primary-dark);
+}
+
+.counterSubtitle {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.counterControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.counterBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: bold;
+  color: var(--color-primary-dark);
+  background-color: var(--color-surface-subtle);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.counterBtn:hover:not(:disabled) {
+  background-color: var(--color-primary-navy);
+  color: #FFFFFF;
+}
+
+.counterBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.counterValue {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  min-width: 20px;
+  text-align: center;
+}
+

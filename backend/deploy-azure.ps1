@@ -33,6 +33,17 @@ az webapp create --resource-group $RG_NAME --plan $PLAN_NAME --name $APP_NAME --
 Write-Host "`n[5/7] Configurando Always On y comando de inicio..." -ForegroundColor Yellow
 az webapp config set --resource-group $RG_NAME --name $APP_NAME --always-on true --startup-file "node dist/main.js"
 
+if (-not $env:DATABASE_URL) {
+    throw "ERROR: La variable de entorno DATABASE_URL es obligatoria para desplegar en Azure."
+}
+if (-not $env:JWT_SECRET) {
+    throw "ERROR: La variable de entorno JWT_SECRET es obligatoria para desplegar en Azure."
+}
+
+$DATABASE_URL = $env:DATABASE_URL
+$JWT_SECRET = $env:JWT_SECRET
+$RABBITMQ_URL = if ($env:RABBITMQ_URL) { $env:RABBITMQ_URL } else { "" }
+
 Write-Host "`nConfigurando variables de entorno de la aplicacion..." -ForegroundColor Yellow
 az webapp config appsettings set --resource-group $RG_NAME --name $APP_NAME --settings `
   SCM_DO_BUILD_DURING_DEPLOYMENT="false" `
@@ -45,11 +56,11 @@ az webapp config appsettings set --resource-group $RG_NAME --name $APP_NAME --se
   WEBSITE_TIME_ZONE="America/Guayaquil" `
   NODE_ID="$NODE_ID" `
   EVENT_BUS_MODE="rabbitmq" `
-  RABBITMQ_URL="amqps://qkvqjvku:ATBxToI1JvR6YbRBIIAnATa5mnjdIqz_@shark.rmq.cloudamqp.com/qkvqjvku" `
+  RABBITMQ_URL="$RABBITMQ_URL" `
   BOOKING_REST_STOCK_URL="https://booking-core-api.azurewebsites.net/api/v3/inventory/stock" `
   BOOKING_BASE_URL="https://booking-core-api.azurewebsites.net/api/v3" `
-  DATABASE_URL="postgresql://postgres.hieymocmcfftjtjsspjl:Sebastianv631498@aws-0-ca-central-1.pooler.supabase.com:6543/postgres" `
-  JWT_SECRET="luxestays_jwt_secret_enterprise_secure_key_2026_rda1_epn" `
+  DATABASE_URL="$DATABASE_URL" `
+  JWT_SECRET="$JWT_SECRET" `
   JWT_EXPIRES_IN="7d" `
   IVA_RATE="0.15" `
   TASA_MUNICIPAL="2.00" `

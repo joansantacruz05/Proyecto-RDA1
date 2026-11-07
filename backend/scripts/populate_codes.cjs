@@ -1,6 +1,10 @@
 const { Client } = require('pg');
 
-const connectionString = process.env.DATABASE_URL || 'postgresql://postgres.hieymocmcfftjtjsspjl:Sebastianv631498@aws-0-ca-central-1.pooler.supabase.com:6543/postgres';
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  console.error('ERROR: La variable de entorno DATABASE_URL es obligatoria para ejecutar populate_codes.cjs.');
+  process.exit(1);
+}
 
 async function main() {
   const client = new Client({ connectionString });

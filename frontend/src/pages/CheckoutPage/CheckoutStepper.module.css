@@ -1,0 +1,103 @@
+.stepperContainer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: var(--spacing-6);
+  padding: var(--spacing-4) var(--spacing-6);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.stepItem {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  position: relative;
+  cursor: default;
+}
+
+.stepCircle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: var(--font-size-sm);
+  background-color: var(--color-border-light);
+  color: var(--color-text-muted);
+  border: 2px solid var(--color-border);
+  transition: all var(--transition-normal);
+}
+
+.stepCircleActive {
+  background-color: var(--color-pacific-blue);
+  color: #FFFFFF;
+  border-color: var(--color-pacific-blue);
+  box-shadow: 0 0 0 4px rgba(20, 64, 107, 0.15);
+}
+
+.stepCircleCompleted {
+  background-color: var(--color-success);
+  color: #FFFFFF;
+  border-color: var(--color-success);
+}
+
+.stepTexts {
+  display: flex;
+  flex-direction: column;
+}
+
+.stepNumber {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.stepTitle {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.stepTitleActive {
+  color: var(--color-midnight-blue);
+  font-weight: 700;
+}
+
+.stepDivider {
+  flex: 1;
+  height: 2px;
+  background-color: var(--color-border);
+  margin: 0 var(--spacing-4);
+  transition: background-color var(--transition-normal);
+}
+
+.stepDividerCompleted {
+  background-color: var(--color-success);
+}
+
+@media (max-width: 640px) {
+  .stepperContainer {
+    padding: var(--spacing-3);
+  }
+
+  .stepTexts {
+    display: none;
+  }
+
+  .stepCircle {
+    width: 32px;
+    height: 32px;
+    font-size: var(--font-size-xs);
+  }
+
+  .stepDivider {
+    margin: 0 var(--spacing-2);
+  }
+}

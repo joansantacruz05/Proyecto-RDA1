@@ -1,0 +1,176 @@
+.confirmationContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-6);
+  text-align: center;
+}
+
+.successHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.checkCircle {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background-color: #DCFCE7;
+  color: var(--color-success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--spacing-2);
+  box-shadow: 0 0 0 8px rgba(31, 122, 77, 0.1);
+}
+
+.successTitle {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-2xl);
+  color: var(--color-midnight-blue);
+}
+
+.successSubtitle {
+  font-size: var(--font-size-base);
+  color: var(--color-text-secondary);
+  max-width: 500px;
+}
+
+.codeBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-4);
+  background-color: var(--color-surface);
+  border: 2px dashed var(--color-pacific-blue);
+  border-radius: var(--radius-xl);
+  margin: var(--spacing-2) auto;
+  width: 100%;
+  max-width: 480px;
+}
+
+.codeLabel {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.codeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
+.codeValue {
+  font-family: monospace;
+  font-size: var(--font-size-2xl);
+  font-weight: 800;
+  color: var(--color-pacific-blue);
+  letter-spacing: 0.05em;
+}
+
+.copyButton {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-size: var(--font-size-xs);
+  background-color: var(--color-pacific-blue-light);
+  color: var(--color-pacific-blue);
+  border: 1px solid rgba(20, 64, 107, 0.2);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+.copyButton:hover {
+  background-color: var(--color-pacific-blue);
+  color: #FFFFFF;
+}
+
+.detailsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-4);
+  text-align: left;
+  margin-top: var(--spacing-2);
+}
+
+.voucherCard {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-5);
+  box-shadow: var(--shadow-sm);
+}
+
+.cardTitle {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-base);
+  font-weight: 700;
+  color: var(--color-midnight-blue);
+  margin-bottom: var(--spacing-3);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--spacing-2);
+}
+
+.infoRow {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-2);
+  font-size: var(--font-size-sm);
+}
+
+.infoLabel {
+  color: var(--color-text-secondary);
+}
+
+.infoValue {
+  font-weight: 600;
+  color: var(--color-text-primary);
+  text-align: right;
+}
+
+.actionsContainer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-3);
+  justify-content: center;
+  margin-top: var(--spacing-4);
+  padding-top: var(--spacing-4);
+  border-top: 1px solid var(--color-border);
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .confirmationContainer,
+  .confirmationContainer * {
+    visibility: visible;
+  }
+  .confirmationContainer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  .actionsContainer {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .detailsGrid {
+    grid-template-columns: 1fr;
+  }
+}

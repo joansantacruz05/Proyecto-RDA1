@@ -1,0 +1,39 @@
+.container {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.currency {
+  font-size: 0.85em;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary-navy);
+}
+
+.amount {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary-dark);
+  letter-spacing: -0.02em;
+}
+
+.period {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.originalPrice {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+  margin-right: var(--space-1);
+}
+
+.sm .amount {
+  font-size: var(--font-size-lg);
+}
+
+.lg .amount {
+  font-size: var(--font-size-3xl);
+}
+

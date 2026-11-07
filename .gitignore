@@ -7,6 +7,9 @@ dist/
 .DS_Store
 *.log
 *.zip
+deploy.zip
+package_deploy.py
+test_node*.log
 
 semana*
 

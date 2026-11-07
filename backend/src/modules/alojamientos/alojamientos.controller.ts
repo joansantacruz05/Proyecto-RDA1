@@ -14,6 +14,9 @@ import { ScopesGuard } from '../../common/guards/scopes.guard';
 import { Scopes } from '../../common/decorators/scopes.decorator';
 import { CrearAlojamientoDto } from './dto/crear-alojamiento.dto';
 import { ActualizarAlojamientoDto } from './dto/actualizar-alojamiento.dto';
+import { Public } from '../../common/decorators/public.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '../usuarios/entities/usuario.entity';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Controlador BFF de Alojamientos — Alineado 1:1 con alojamientos-openapi.yaml
@@ -28,6 +31,7 @@ export class AlojamientosController {
   // ══════════════════════════════════════════════════════════════════════════
 
   @Get('admin/dashboard-stats')
+  @Roles(Role.ADMIN)
   @ApiTags('Administración')
   @ApiOperation({ summary: 'Obtener estadísticas del dashboard admin desde la Vista SQL' })
   getDashboardStats() {
@@ -35,6 +39,7 @@ export class AlojamientosController {
   }
 
   @Post('admin/alojamientos')
+  @Roles(Role.ADMIN)
   @ApiTags('Administración')
   @ApiOperation({ summary: 'Crear un nuevo alojamiento' })
   @ApiResponse({ status: 201, description: 'Alojamiento creado exitosamente.' })
@@ -43,6 +48,7 @@ export class AlojamientosController {
     return this.alojamientosService.createAdmin(dto);
   }
 
+  @Public()
   @Get('alojamientos')
   @ApiTags('Catálogo y Búsqueda v2')
   @ApiOperation({ summary: 'Catálogo paginado de propiedades de hospedaje' })
@@ -67,6 +73,7 @@ export class AlojamientosController {
   }
 
   @Get('admin/alojamientos')
+  @Roles(Role.ADMIN)
   @ApiTags('Administración')
   @ApiOperation({ summary: 'Listar todos los alojamientos para administración' })
   @ApiResponse({ status: 200, description: 'Lista de alojamientos.' })
@@ -74,6 +81,7 @@ export class AlojamientosController {
     return this.alojamientosService.findAllAdmin();
   }
 
+  @Public()
   @Get(['ciudades', 'admin/ciudades'])
   @ApiTags('Catálogo y Administración')
   @ApiOperation({ summary: 'Obtener lista de todas las ciudades de Ecuador' })
@@ -83,6 +91,7 @@ export class AlojamientosController {
 
 
   @Put('admin/alojamientos/:id')
+  @Roles(Role.ADMIN)
   @ApiTags('Administración')
   @ApiOperation({ summary: 'Reemplazar un alojamiento' })
   @ApiResponse({ status: 200, description: 'Alojamiento reemplazado.' })
@@ -95,6 +104,7 @@ export class AlojamientosController {
   }
 
   @Patch('admin/alojamientos/:id')
+  @Roles(Role.ADMIN)
   @ApiTags('Administración')
   @ApiOperation({ summary: 'Actualizar parcialmente un alojamiento' })
   @ApiResponse({ status: 200, description: 'Alojamiento actualizado.' })
@@ -107,6 +117,7 @@ export class AlojamientosController {
   }
 
   @Delete('admin/alojamientos/:id')
+  @Roles(Role.ADMIN)
   @ApiTags('Administración')
   @ApiOperation({ summary: 'Eliminar un alojamiento' })
   @ApiResponse({ status: 204, description: 'Alojamiento eliminado.' })
@@ -121,24 +132,28 @@ export class AlojamientosController {
   // ══════════════════════════════════════════════════════════════════════════
 
   @Get('admin/alojamientos/:id/habitaciones')
+  @Roles(Role.ADMIN)
   @ApiTags('Administración')
   getRoomsAdmin(@Param('id') id: string) {
     return this.alojamientosService.getRoomsAdmin(id);
   }
 
   @Post('admin/alojamientos/:id/habitaciones')
+  @Roles(Role.ADMIN)
   @ApiTags('Administración')
   createRoomAdmin(@Param('id') id: string, @Body() dto: any) {
     return this.alojamientosService.createRoomAdmin(id, dto);
   }
 
   @Patch('admin/habitaciones/:habId')
+  @Roles(Role.ADMIN)
   @ApiTags('Administración')
   updateRoomAdmin(@Param('habId') habId: string, @Body() dto: any) {
     return this.alojamientosService.updateRoomAdmin(habId, dto);
   }
 
   @Delete('admin/habitaciones/:habId')
+  @Roles(Role.ADMIN)
   @ApiTags('Administración')
   deleteRoomAdmin(@Param('habId') habId: string) {
     return this.alojamientosService.deleteRoomAdmin(habId);
@@ -147,6 +162,7 @@ export class AlojamientosController {
   // ══════════════════════════════════════════════════════════════════════════
   //  Búsqueda y Catálogo
   // ══════════════════════════════════════════════════════════════════════════
+  @Public()
   @Post(['search', 'alojamientos/search'])
   @Get(['search', 'alojamientos/search'])
   @ApiTags('Búsqueda y Catálogo')
@@ -163,6 +179,7 @@ export class AlojamientosController {
     return this.alojamientosService.search(searchRequest || {});
   }
 
+  @Public()
   @Post(['availability', 'alojamientos/availability'])
   @ApiTags('Disponibilidad y Precios')
   @ApiOperation({ summary: 'Consultar disponibilidad y precio de un alojamiento' })
@@ -173,6 +190,7 @@ export class AlojamientosController {
     return this.alojamientosService.checkAvailability(availabilityRequest);
   }
 
+  @Public()
   @Post(['bulk-availability', 'alojamientos/bulk-availability'])
   @ApiTags('Disponibilidad y Precios')
   @ApiOperation({ summary: 'Consultar disponibilidad múltiple de alojamientos' })
@@ -181,6 +199,7 @@ export class AlojamientosController {
     return this.alojamientosService.checkBulkAvailability(bulkRequest);
   }
 
+  @Public()
   @Post('details')
   @ApiTags('Búsqueda y Catálogo')
   @ApiOperation({ summary: 'Obtener detalles extendidos de los alojamientos' })
@@ -201,6 +220,7 @@ export class AlojamientosController {
     return this.alojamientosService.getDetailsChanges(changesRequest);
   }
 
+  @Public()
   @Post('chains')
   @ApiTags('Búsqueda y Catálogo')
   @ApiOperation({ summary: 'Listar cadenas hoteleras y sus marcas' })
@@ -214,6 +234,7 @@ export class AlojamientosController {
   //  Taxonomía, Promociones y Eventos Outbox (OpenAPI v2.2.0)
   // ══════════════════════════════════════════════════════════════════════════
 
+  @Public()
   @Get(['alojamientos/categorias', 'alojamientos/tipos', 'categorias', 'tipos'])
   @ApiTags('Taxonomía y Catálogo v2')
   @ApiOperation({ summary: 'Obtener categorías y tipos de alojamientos' })
@@ -221,6 +242,7 @@ export class AlojamientosController {
     return this.alojamientosService.getConstants({});
   }
 
+  @Public()
   @Get(['alojamientos/promociones/contrato', 'promociones/contrato'])
   @ApiTags('Promociones B2B y Combos v2')
   @ApiOperation({ summary: 'Consultar acuerdo de promociones y combos B2B' })
@@ -236,6 +258,7 @@ export class AlojamientosController {
     };
   }
 
+  @Roles(Role.ADMIN)
   @Put(['alojamientos/promociones/contrato', 'promociones/contrato'])
   @ApiTags('Promociones B2B y Combos v2')
   @ApiOperation({ summary: 'Actualizar acuerdo de promociones y combos B2B' })
@@ -251,6 +274,7 @@ export class AlojamientosController {
     };
   }
 
+  @Public()
   @Get(['alojamientos/eventos', 'eventos'])
   @ApiTags('Telemetría y Salud de Nodo v2')
   @ApiOperation({ summary: 'Feed de eventos outbox CloudEvents 1.0 para conciliación' })
@@ -259,6 +283,7 @@ export class AlojamientosController {
     return this.alojamientosService.getEventosOutbox(isNaN(afterSeq) ? 0 : afterSeq);
   }
 
+  @Public()
   @Get(['alojamientos/:id/habitaciones', 'admin/alojamientos/:id/habitaciones', ':id/habitaciones'])
   @ApiTags('Propiedades y Habitaciones v2')
   @ApiOperation({ summary: 'Listar habitaciones y planes de tarifa de un alojamiento' })
@@ -266,6 +291,7 @@ export class AlojamientosController {
     return this.alojamientosService.getRoomsAdmin(id);
   }
 
+  @Public()
   @Get(['alojamientos/:id/inventario', ':id/inventario'])
   @ApiTags('Disponibilidad y Cotización v2')
   @ApiOperation({ summary: 'Snapshot de inventario y stock por noche' })
@@ -277,6 +303,7 @@ export class AlojamientosController {
     return this.alojamientosService.getInventorySnapshot(id, desde, hasta);
   }
 
+  @Public()
   @Get([
     'alojamientos/:id/availability',
     'alojamientos/:id/disponibilidad',
@@ -303,6 +330,7 @@ export class AlojamientosController {
     );
   }
 
+  @Public()
   @Post(['alojamientos/:id/availability', 'alojamientos/:id/disponibilidad'])
   @ApiTags('Disponibilidad y Cotización v2')
   @ApiOperation({ summary: 'Consultar disponibilidad para un alojamiento específico' })
@@ -310,6 +338,7 @@ export class AlojamientosController {
     return this.alojamientosService.checkAvailability({ ...body, accommodation: id });
   }
 
+  @Public()
   @Get(['alojamientos/:id/resenas', 'alojamientos/:id/reviews'])
   @ApiTags('Reseñas y Calificaciones v2')
   @ApiOperation({ summary: 'Obtener reseñas verificadas de un alojamiento' })
@@ -318,6 +347,7 @@ export class AlojamientosController {
   }
 
 
+  @Public()
   @Post('constants')
   @ApiTags('Componentes Comunes')
   @ApiOperation({ summary: 'Consultar constantes del sistema' })
@@ -326,6 +356,7 @@ export class AlojamientosController {
     return this.alojamientosService.getConstants(constantsRequest);
   }
 
+  @Public()
   @Post('reviews')
   @ApiTags('Búsqueda y Catálogo')
   @ApiOperation({ summary: 'Obtener reseñas de alojamientos' })
@@ -334,6 +365,7 @@ export class AlojamientosController {
     return this.alojamientosService.getReviews(reviewsRequest);
   }
 
+  @Public()
   @Post('reviews/scores')
   @ApiTags('Búsqueda y Catálogo')
   @ApiOperation({ summary: 'Obtener puntuaciones de reseñas' })
@@ -346,6 +378,7 @@ export class AlojamientosController {
   //  Módulo de Clientes (Requisito de Cátedra)
   // ══════════════════════════════════════════════════════════════════════════
 
+  @Public()
   @Get(['clientes', 'alojamientos/clientes'])
   @ApiTags('Clientes y Huéspedes v2')
   @ApiOperation({ summary: 'Buscar cliente huésped por email o identificación' })
@@ -356,6 +389,7 @@ export class AlojamientosController {
     return this.alojamientosService.getClient(email, identificacion);
   }
 
+  @Public()
   @Post(['clientes', 'alojamientos/clientes'])
   @ApiTags('Clientes y Huéspedes v2')
   @ApiOperation({ summary: 'Registrar un nuevo cliente huésped' })
@@ -447,8 +481,14 @@ export class AlojamientosController {
   cancelOrder(
     @Headers('Idempotency-Key') idempotencyKey: string,
     @Param('orderId') orderId: string,
+    @Body() cancelRequest?: any,
+    @Req() req?: any,
   ) {
-    return this.alojamientosService.cancelOrder(orderId);
+    const userId = req?.user?.sub || req?.user?.id || 'NODE_SYSTEM_HUB';
+    const userRol = req?.user?.rol || 'ADMIN';
+    const solicitadoPor = cancelRequest?.solicitadoPor || cancelRequest?.requestedBy;
+    const reason = cancelRequest?.motivo || cancelRequest?.reason;
+    return this.alojamientosService.cancelOrder(orderId, userId, userRol, reason, solicitadoPor);
   }
 
   @Post([
@@ -489,6 +529,7 @@ export class AlojamientosController {
     return this.alojamientosService.setEarlyCheckin(orderId, body);
   }
 
+  @Public()
   @Get(['alojamientos/:id', 'admin/alojamientos/:id'])
   @ApiTags('Catálogo y Administración')
   @ApiOperation({ summary: 'Obtener un alojamiento por ID' })
@@ -503,6 +544,7 @@ export class AlojamientosController {
   // ══════════════════════════════════════════════════════════════════════════
 
   @Get('webhooks')
+  @Roles(Role.ADMIN)
   @ApiTags('Webhooks')
   @ApiSecurity('OAuth2Security', ['alojamientos:webhooks'])
   @ApiOperation({ summary: 'Listar suscripciones' })
@@ -514,6 +556,7 @@ export class AlojamientosController {
   }
 
   @Post('webhooks')
+  @Roles(Role.ADMIN)
   @ApiTags('Webhooks')
   @ApiSecurity('OAuth2Security', ['alojamientos:webhooks'])
   @ApiOperation({ summary: 'Registrar webhook' })
@@ -526,6 +569,7 @@ export class AlojamientosController {
   }
 
   @Delete('webhooks/:id')
+  @Roles(Role.ADMIN)
   @ApiTags('Webhooks')
   @ApiSecurity('OAuth2Security', ['alojamientos:webhooks'])
   @ApiOperation({ summary: 'Eliminar suscripción' })

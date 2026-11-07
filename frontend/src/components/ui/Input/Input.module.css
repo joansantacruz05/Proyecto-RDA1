@@ -1,0 +1,97 @@
+.fieldWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+  text-align: left;
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-primary-dark);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.requiredMark {
+  color: var(--color-error);
+}
+
+.inputContainer {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: var(--font-size-base);
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-card);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  transition: all var(--transition-fast);
+  outline: none;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: var(--color-primary-navy);
+  box-shadow: 0 0 0 3px rgba(20, 64, 107, 0.12);
+}
+
+.input.hasError,
+.select.hasError,
+.textarea.hasError {
+  border-color: var(--color-error);
+  background-color: #FFFDFD;
+}
+
+.input.hasError:focus,
+.select.hasError:focus,
+.textarea.hasError:focus {
+  box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.15);
+}
+
+.input:disabled,
+.select:disabled,
+.textarea:disabled {
+  background-color: var(--color-surface-subtle);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.iconLeft {
+  position: absolute;
+  left: 0.85rem;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.hasIconLeft {
+  padding-left: 2.75rem;
+}
+
+.helperText {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.errorMessage {
+  font-size: var(--font-size-xs);
+  color: var(--color-error);
+  font-weight: var(--font-weight-medium);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+

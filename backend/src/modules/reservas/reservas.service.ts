@@ -848,7 +848,13 @@ export class ReservasService {
     return { message: 'Reserva confirmada exitosamente.', id: reserva.id, estadoId: 'EST-002' };
   }
 
-  async cancelarReserva(id: string, userId?: string, userRol?: string, reason?: string) {
+  async cancelarReserva(
+    id: string,
+    userId?: string,
+    userRol?: string,
+    reason?: string,
+    solicitadoPor?: string,
+  ) {
     const reserva = await this.getOrder(id);
 
     const numCode = Math.abs(
@@ -876,11 +882,46 @@ export class ReservasService {
     }
 
     const esAdmin = (userRol || '').toLowerCase().includes('admin');
+    const esOrquestador = solicitadoPor === 'SAGA_ORCHESTRATOR' || userId === 'NODE_SYSTEM_HUB';
 
     // Validación de titularidad
-    if (!esAdmin && userId && reserva.usuarioId && reserva.usuarioId !== userId && userId !== 'NODE_SYSTEM_HUB') {
+    if (!esAdmin && !esOrquestador && userId && reserva.usuarioId && reserva.usuarioId !== userId) {
       throw new ForbiddenException('No tienes autorización para cancelar esta reserva.');
     }
+
+    // Cálculo de política de reembolso y penalidad
+    const totalMonto = Number(reserva.precioTotal || reserva.total || 0);
+    let porcentajeReembolso = 100;
+    let penalidad = 0;
+
+    if (esOrquestador) {
+      // Reembolso del 100% garantizado siempre para la Saga compensatoria de Booking Hub
+      porcentajeReembolso = 100;
+      penalidad = 0;
+    } else {
+      // Regla de negocio para clientes/usuarios de LuxeStays:
+      // Si faltan más de 48 horas para el check-in: 100% reembolso
+      // Si faltan entre 24 y 48 horas: 50% reembolso (50% penalidad)
+      // Si faltan menos de 24 horas: 0% reembolso (100% penalidad)
+      // NUNCA bloquea la cancelación del usuario, aplica la penalidad
+      const fechaEntrada = new Date(reserva.fechaEntrada);
+      const ahora = new Date();
+      const horasRestantes = (fechaEntrada.getTime() - ahora.getTime()) / (1000 * 60 * 60);
+
+      if (horasRestantes > 48) {
+        porcentajeReembolso = 100;
+        penalidad = 0;
+      } else if (horasRestantes >= 24) {
+        porcentajeReembolso = 50;
+        penalidad = 50;
+      } else {
+        porcentajeReembolso = 0;
+        penalidad = 100;
+      }
+    }
+
+    const montoReembolsado = ((totalMonto * porcentajeReembolso) / 100).toFixed(2);
+    const montoPenalidad = ((totalMonto * penalidad) / 100).toFixed(2);
 
     await this.dataSource.query(`UPDATE reservas SET "estadoId" = 'EST-003' WHERE id = $1`, [reserva.id]);
 
@@ -891,7 +932,7 @@ export class ReservasService {
         generateEntityId('HIS'),
         reserva.id,
         reserva.estadoId || 'EST-002',
-        reason || 'Cancelación procesada conforme a la política (Saga Compensación)',
+        reason || (esOrquestador ? 'Compensación Saga Booking Hub' : `Cancelación de usuario (Reembolso: ${porcentajeReembolso}%, Penalidad: ${penalidad}%)`),
       ],
     );
 
@@ -915,18 +956,20 @@ export class ReservasService {
       orderId: reserva.ordenId || reserva.id,
       external_order_id: externalOrderId,
       estado: 'CANCELLED',
-      refundStatus: 'REFUNDED',
+      refundStatus: porcentajeReembolso > 0 ? 'REFUNDED' : 'NO_REFUND',
       codigoReembolso,
-      porcentajeReembolso: 100,
-      montoReembolsado: String(Number(reserva.precioTotal || reserva.total || 0).toFixed(2)),
+      porcentajeReembolso,
+      montoReembolsado,
+      montoPenalidad,
+      penalidad,
       cuposRestaurados: 1,
       yaCancelada: false,
       timestamp: new Date().toISOString(),
     };
   }
 
-  async cancelOrder(orderId: string): Promise<any> {
-    return this.cancelarReserva(orderId);
+  async cancelOrder(orderId: string, userId?: string, userRol?: string, reason?: string, solicitadoPor?: string): Promise<any> {
+    return this.cancelarReserva(orderId, userId, userRol, reason, solicitadoPor);
   }
 
   async modifyOrder(orderId: string, modifyRequest: any): Promise<any> {

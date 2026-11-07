@@ -1,0 +1,177 @@
+.paymentContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-6);
+}
+
+.stepHeading {
+  margin-bottom: var(--spacing-2);
+}
+
+.stepTitle {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-xl);
+  color: var(--color-midnight-blue);
+  margin-bottom: var(--spacing-1);
+}
+
+.stepSubtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.methodsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-4);
+}
+
+.methodCard {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  padding: var(--spacing-4);
+  background-color: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  user-select: none;
+}
+
+.methodCard:hover {
+  border-color: var(--color-pacific-blue);
+  background-color: var(--color-surface-hover);
+}
+
+.methodCardActive {
+  border-color: var(--color-gold);
+  background-color: var(--color-gold-light);
+  box-shadow: 0 0 0 1px var(--color-gold);
+}
+
+.methodIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-border-light);
+  color: var(--color-pacific-blue);
+  flex-shrink: 0;
+}
+
+.methodCardActive .methodIcon {
+  background-color: var(--color-pacific-blue);
+  color: #FFFFFF;
+}
+
+.methodDetails {
+  display: flex;
+  flex-direction: column;
+}
+
+.methodName {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-midnight-blue);
+}
+
+.methodNote {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.paymentDetailsBox {
+  padding: var(--spacing-5);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.cardFormGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-4);
+}
+
+.fullCol {
+  grid-column: 1 / -1;
+}
+
+.cardNumberWrapper {
+  position: relative;
+}
+
+.brandBadge {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--color-pacific-blue);
+  background-color: var(--color-pacific-blue-light);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.transferBox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+
+.bankDetailsCard {
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-4);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+.securityNote {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-4);
+  padding: var(--spacing-3);
+  background-color: #F0FDF4;
+  border: 1px solid #BBF7D0;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  color: #166534;
+}
+
+.actionsRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: var(--spacing-4);
+}
+
+.errorBanner {
+  padding: var(--spacing-3) var(--spacing-4);
+  background-color: #FDF2F2;
+  border: 1px solid #F8B4B4;
+  border-radius: var(--radius-md);
+  margin-top: var(--spacing-3);
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+@media (max-width: 768px) {
+  .methodsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .cardFormGrid {
+    grid-template-columns: 1fr;
+  }
+}

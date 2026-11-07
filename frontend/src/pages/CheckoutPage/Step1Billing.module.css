@@ -1,0 +1,188 @@
+.billingContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-6);
+}
+
+.stepHeading {
+  margin-bottom: var(--spacing-2);
+}
+
+.stepTitle {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-xl);
+  color: var(--color-midnight-blue);
+  margin-bottom: var(--spacing-1);
+}
+
+.stepSubtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.authNoticeBox {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-4);
+  background-color: var(--color-pacific-blue-light);
+  border: 1px solid rgba(20, 64, 107, 0.15);
+  border-radius: var(--radius-lg);
+  gap: var(--spacing-3);
+}
+
+.authNoticeText {
+  font-size: var(--font-size-sm);
+  color: var(--color-pacific-blue);
+  line-height: 1.4;
+}
+
+.docTypeSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+
+.sectionLabel {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.docGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-3);
+}
+
+.docCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--spacing-4) var(--spacing-2);
+  background-color: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  gap: var(--spacing-2);
+  user-select: none;
+}
+
+.docCard:hover {
+  border-color: var(--color-pacific-blue);
+  background-color: var(--color-surface-hover);
+}
+
+.docCardActive {
+  border-color: var(--color-gold);
+  background-color: var(--color-gold-light);
+  box-shadow: 0 0 0 1px var(--color-gold);
+}
+
+.docCardIcon {
+  font-size: 24px;
+}
+
+.docCardTitle {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-midnight-blue);
+}
+
+.docCardDesc {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  line-height: 1.2;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-4);
+}
+
+.fullCol {
+  grid-column: 1 / -1;
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+
+.fieldLabel {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.fieldRequired {
+  color: var(--color-error);
+  margin-left: 2px;
+}
+
+.inputError {
+  border-color: var(--color-error) !important;
+}
+
+.errorText {
+  font-size: var(--font-size-xs);
+  color: var(--color-error);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.errorSummaryBox {
+  padding: var(--spacing-3) var(--spacing-4);
+  background-color: #FDF2F2;
+  border: 1px solid #F8B4B4;
+  border-radius: var(--radius-md);
+  margin-top: var(--spacing-3);
+}
+
+.errorSummaryTitle {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-error);
+  margin-bottom: var(--spacing-1);
+}
+
+.errorSummaryList {
+  margin: 0;
+  padding-left: var(--spacing-4);
+  font-size: var(--font-size-xs);
+  color: var(--color-error);
+}
+
+.actionsRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--spacing-4);
+}
+
+.loginInlineBox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+  padding: var(--spacing-4);
+  background-color: var(--color-background);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--spacing-4);
+}
+
+@media (max-width: 768px) {
+  .docGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+}
