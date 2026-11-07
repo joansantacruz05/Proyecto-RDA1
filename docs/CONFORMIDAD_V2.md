@@ -47,3 +47,4 @@
   * `semaforo`: `"GREEN"`
   * `latency_ms`: ~890 ms
   * `uptime_seconds`: Activo 24/7 sin cold start.
+
