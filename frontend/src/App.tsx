@@ -1623,6 +1623,42 @@ const AdminDashboard = () => {
       });
   };
 
+  const handleConfirmarLlegada = async (id: string, ordenId?: string) => {
+    const targetId = ordenId || id;
+    try {
+      const token = localStorage.getItem('token');
+      const headers: any = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      headers['X-API-Key'] = 'luxestays_key_booking_2026_rda1_secure';
+
+      const res = await fetch(`${API_URL}/api/v1/alojamientos/orders/${targetId}/checkin`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          external_order_id: targetId,
+          client_id: 'NODE_SYSTEM_HUB',
+          estado: 'CONFIRMADO_ASISTIDO',
+          huespedes_reales: 1,
+          admin_id: 'recepcionista-hotel',
+          fecha_checkin: new Date().toISOString(),
+          observaciones: 'Huésped presentado en recepción de LuxeStays',
+        }),
+      });
+
+      if (res.ok) {
+        setToast({ message: '¡Llegada confirmada y notificada a Booking Core Hub!', type: 'success' });
+        fetch(`${API_URL}/api/v1/reservas/admin/todas`).then(r => r.json()).then(d => setTodasReservas(Array.isArray(d) ? d : []));
+        refreshStats();
+        addLog('Check-in Confirmado', `Huésped registrado en orden ${targetId} con push a Booking Core`);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setToast({ message: `Error al confirmar llegada: ${err.detail || 'Verifique el estado'}`, type: 'error' });
+      }
+    } catch {
+      setToast({ message: 'Error de conexión al confirmar llegada.', type: 'error' });
+    }
+  };
+
   useEffect(() => {
     const savedLogs = localStorage.getItem('adminLogs');
     if (savedLogs) {
@@ -2166,8 +2202,8 @@ const AdminDashboard = () => {
                     <td style={{ padding: '15px 10px', fontSize: '0.9rem' }}>
                       {res.pagoCompletado ? <span style={{ color: '#10B981', fontWeight: 'bold' }}>✓ Pagado</span> : res.contratoFirmado ? <span style={{ color: '#F59E0B', fontWeight: 'bold' }}>✎ Contrato Firmado</span> : <span style={{ color: '#EF4444', fontWeight: 'bold' }}>⏳ Pendiente</span>}
                     </td>
-                    <td style={{ padding: '15px 10px', textAlign: 'center' }}>
-                      {res.estado !== 'Confirmada' && res.estado !== 'Cancelada' && (
+                    <td style={{ padding: '15px 10px', textAlign: 'center', display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                      {res.estado !== 'Confirmada' && res.estado !== 'Cancelada' && res.estado !== 'CONFIRMADO_ASISTIDO' && (
                         <button 
                           onClick={() => handleAprobarReserva(res.id)}
                           style={{
@@ -2176,6 +2212,19 @@ const AdminDashboard = () => {
                           }}>
                           Aprobar
                         </button>
+                      )}
+                      {res.estado !== 'Cancelada' && res.estado !== 'CONFIRMADO_ASISTIDO' && (
+                        <button 
+                          onClick={() => handleConfirmarLlegada(res.id, res.ordenId)}
+                          style={{
+                            background: '#2563EB', color: 'white', border: 'none', borderRadius: '6px',
+                            padding: '6px 12px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold'
+                          }}>
+                          🏨 Confirmar llegada
+                        </button>
+                      )}
+                      {res.estado === 'CONFIRMADO_ASISTIDO' && (
+                        <span style={{ color: '#10B981', fontWeight: 'bold', fontSize: '0.85rem' }}>✓ Check-in Realizado</span>
                       )}
                     </td>
                   </tr>

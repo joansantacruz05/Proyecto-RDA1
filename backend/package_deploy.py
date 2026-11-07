@@ -23,7 +23,7 @@ def package():
     ]
     
     total_files = 0
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as zipf:
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED, compresslevel=1) as zipf:
         for item_name, is_dir in items_to_zip:
             src_path = os.path.join(base_dir, item_name)
             

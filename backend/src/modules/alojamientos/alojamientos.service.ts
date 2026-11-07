@@ -988,7 +988,7 @@ export class AlojamientosService {
       return existing[0];
     }
 
-    const clientId = 'CLI-' + Math.floor(100000 + Math.random() * 900000);
+    const clientId = crypto.randomUUID();
 
     await this.alojamientoRepository.query(
       `INSERT INTO clientes (client_id, nombre, email, identificacion, telefono)
@@ -1040,7 +1040,7 @@ export class AlojamientosService {
 
     // Notificación Push obligatoria hacia Booking Core API (Requisito de Cátedra)
     const bookingCheckinUrl = `https://booking-core-api.azurewebsites.net/api/v2/reservas/${encodeURIComponent(externalOrderId)}/checkin`;
-    const apiKey = process.env.API_KEY || 'luxestays_key_booking_2026_rda1_secure';
+    const apiKey = process.env.BOOKING_API_KEY || process.env.API_KEY || process.env.INTEGRATION_API_KEY || 'luxestays_key_booking_2026_rda1_secure';
 
     const checkinNoticePayload = {
       external_order_id: String(externalOrderId),
@@ -1052,19 +1052,51 @@ export class AlojamientosService {
       observaciones: body?.observaciones || 'Huésped presentado en recepción',
     };
 
+    // Registro transaccional en tabla outbox (booking.evento_outbox)
     try {
-      const response = await fetch(bookingCheckinUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': apiKey,
-        },
-        body: JSON.stringify(checkinNoticePayload),
-      });
-      const respText = await response.text().catch(() => '');
-      console.log(`[BOOKING-CHECKIN-NOTIFY] Status: ${response.status}, Response: ${respText}`);
-    } catch (err: any) {
-      console.warn(`[BOOKING-CHECKIN-NOTIFY] Aviso a Booking falló o no disponible: ${err.message}`);
+      const orderUuid = order.ordenId && order.ordenId.length === 36 ? order.ordenId : crypto.randomUUID();
+      const corrUuid = crypto.randomUUID();
+      await this.alojamientoRepository.query(
+        `INSERT INTO booking.evento_outbox (tipo, agregado, agregado_id, correlacion_id, payload, created_at, publicado_en)
+         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
+        [
+          'RESERVA_CHECKIN_CONFIRMADO',
+          'reserva',
+          orderUuid,
+          corrUuid,
+          JSON.stringify(checkinNoticePayload),
+        ],
+      );
+    } catch (e: any) {
+      console.warn(`[OUTBOX-CHECKIN] Advertencia al registrar en outbox: ${e.message}`);
+    }
+
+    // Reintentos con backoff para garantizar entrega
+    let pushSuccess = false;
+    let lastError = '';
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const response = await fetch(bookingCheckinUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': apiKey,
+          },
+          body: JSON.stringify(checkinNoticePayload),
+        });
+        const respText = await response.text().catch(() => '');
+        console.log(`[BOOKING-CHECKIN-NOTIFY] Intento ${attempt}: Status ${response.status}, Respuesta: ${respText}`);
+        if (response.ok) {
+          pushSuccess = true;
+          break;
+        }
+        lastError = `Status ${response.status}: ${respText}`;
+      } catch (err: any) {
+        lastError = err.message;
+        if (attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+      }
     }
 
     return {

@@ -273,6 +273,18 @@ export class ReservasService {
         } else {
           finalUserId = 'USR-001';
         }
+      } else {
+        // Garantizar existencia del usuario (ej. si viene de X-Client-Id o integrador externo)
+        await manager.query(
+          `INSERT INTO usuarios (id, "nombreCompleto", email, contrasena)
+           VALUES ($1, $2, $3, 'EXTERNAL_GUEST_USER')
+           ON CONFLICT (id) DO NOTHING`,
+          [
+            finalUserId,
+            crearReservaDto.nombreCliente || 'Huésped Booking',
+            crearReservaDto.emailCliente || `${finalUserId}@booking-hub.com`,
+          ],
+        );
       }
 
       // 5. Calcular precio exacto en el servidor
