@@ -80,7 +80,11 @@ export const HotelDetailPage: React.FC = () => {
     );
   }
 
-  const destination = hotel.destino || hotel.ciudad || 'Ecuador';
+  const destination = typeof hotel.destino === 'string'
+    ? hotel.destino
+    : typeof hotel.ciudad === 'string'
+    ? hotel.ciudad
+    : (hotel.ciudad as { nombre?: string } | undefined)?.nombre || 'Ecuador';
   const defaultPrice = hotelRooms[0]?.precioPorNoche
     ? Number(hotelRooms[0].precioPorNoche)
     : 120;

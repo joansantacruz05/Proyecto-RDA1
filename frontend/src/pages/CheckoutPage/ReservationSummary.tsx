@@ -56,7 +56,11 @@ export const ReservationSummary: React.FC<ReservationSummaryProps> = ({
   };
 
   const hotelName = hotel?.nombre || 'Alojamiento LuxeStays';
-  const location = hotel?.destino || hotel?.ciudad || 'Ecuador';
+  const location = typeof hotel?.destino === 'string'
+    ? hotel.destino
+    : typeof hotel?.ciudad === 'string'
+    ? hotel.ciudad
+    : (hotel?.ciudad as { nombre?: string } | undefined)?.nombre || 'Ecuador';
   const stars = hotel?.estrellas || 4;
 
   return (

@@ -46,11 +46,31 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
   const [showOccupancy, setShowOccupancy] = useState(false);
   const [dateError, setDateError] = useState('');
 
-  // 100% dinámico: Ciudades desde la API
-  const { data: ciudades = [] } = useQuery({
+  // 100% dinámico: Ciudades desde la API (puede ser objeto { id, nombre } o string)
+  interface CiudadObj {
+    id?: string;
+    nombre?: string;
+  }
+
+  const { data: rawCiudades = [] } = useQuery<Array<CiudadObj | string>>({
     queryKey: ['ciudades'],
-    queryFn: () => api.get<string[]>('/ciudades'),
+    queryFn: () => api.get<Array<CiudadObj | string>>('/ciudades'),
   });
+
+  const ciudades = React.useMemo(() => {
+    return rawCiudades
+      .map((c) => {
+        if (typeof c === 'string') return { id: c, nombre: c };
+        if (c && typeof c === 'object') {
+          return {
+            id: c.id || c.nombre || '',
+            nombre: c.nombre || c.id || '',
+          };
+        }
+        return null;
+      })
+      .filter((c): c is { id: string; nombre: string } => Boolean(c && c.nombre));
+  }, [rawCiudades]);
 
   const handleCheckinChange = (val: string) => {
     setCheckin(val);
@@ -119,8 +139,8 @@ export const HeroSearch: React.FC<HeroSearchProps> = ({
               >
                 <option value="">Todos los destinos del país</option>
                 {ciudades.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                  <option key={c.id} value={c.nombre}>
+                    {c.nombre}
                   </option>
                 ))}
               </select>

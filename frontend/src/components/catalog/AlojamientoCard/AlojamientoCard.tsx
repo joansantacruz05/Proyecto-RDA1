@@ -57,7 +57,13 @@ export const AlojamientoCard: React.FC<AlojamientoCardProps> = ({
         </div>
         <div className={styles.cityBadge}>
           <MapPin size={12} color="#C9A227" />
-          <span>{alojamiento.destino || alojamiento.ciudad || 'Ecuador'}</span>
+          <span>
+            {typeof alojamiento.destino === 'string'
+              ? alojamiento.destino
+              : typeof alojamiento.ciudad === 'string'
+              ? alojamiento.ciudad
+              : (alojamiento.ciudad as { nombre?: string } | undefined)?.nombre || 'Ecuador'}
+          </span>
         </div>
       </div>
 
