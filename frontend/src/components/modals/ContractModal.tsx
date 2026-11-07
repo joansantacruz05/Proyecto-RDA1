@@ -107,3 +107,4 @@ export const ContractModal: React.FC<ContractModalProps> = ({
     </Modal>
   );
 };
+

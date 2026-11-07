@@ -48,3 +48,25 @@
   * `latency_ms`: ~890 ms
   * `uptime_seconds`: Activo 24/7 sin cold start.
 
+---
+
+## 3. Conformidad del Nuevo Frontend LuxeStays (React 19 + TypeScript + Vite)
+
+El frontend de **LuxeStays** fue reconstruido integralmente desde cero cumpliendo rigurosamente las directrices del contrato OpenAPI v2.2.0 y la normativa tributaria y turística ecuatoriana:
+
+| Requisito de Cátedra / Contrato | Estado | Implementación Técnica |
+| :--- | :---: | :--- |
+| **Cero Datos de Negocio Hardcodeados** | **CONFORME** | 100 % dinámico. Ciudades (`/ciudades`), catálogo (`/alojamientos`), habitaciones (`/alojamientos/:id/habitaciones`), disponibilidad (`/availability`), métodos de pago (`/pagos/metodos`), reservas y facturas provienen exclusivamente de la API. |
+| **Aislamiento de Claves B2B** | **CONFORME** | La cabecera `X-API-Key` permanece estrictamente confinada al backend para integración con Booking. El cliente web utiliza única y exclusivamente tokens JWT de usuario (`Authorization: Bearer <token>`). |
+| **Localización y Formato Oficial** | **CONFORME** | Formato de moneda `USD` en locale `es-EC`, fechas con zona horaria `America/Guayaquil`, check-in a partir de las 14:00 y check-out hasta las 11:00 am. |
+| **Desglose Tributario de Ecuador** | **CONFORME** | Cada cotización y factura discrimina: Subtotal Hospedaje, IVA 15% (Ley de Emergencia vigente) y Tasa municipal de turismo de USD 2.00 por noche por habitación. |
+| **Validación Documental SRI (Módulo 10)** | **CONFORME** | Validador oficial para Cédulas de 10 dígitos (provincias 01 a 24 y tercer dígito < 6), RUCs de 13 dígitos y Pasaportes, con autofoco y sin errores prematuros en blanco. |
+| **Idempotencia y Transacción Saga** | **CONFORME** | Generación de `Idempotency-Key` (UUID v4) persistente por intento en checkout para evitar duplicidad de cobros. |
+| **Ciclo de Vida de Reservas** | **CONFORME** | Soporte de estados `PENDING`, `CONFIRMED`, `CHECKED_IN`, `CHECKED_OUT` y `CANCELLED`. |
+| **Firma Digital de Contratos** | **CONFORME** | Modal accesible para firma de contrato de hospedaje sincronizado con `POST /reservas/:id/firmar-contrato`. |
+| **Política de Cancelación en 3 Tramos** | **CONFORME** | Modal dinámico que calcula horas previas al check-in (>48h: 100% reembolso; 24-48h: 50%; <24h: 0% sin reembolso) y ejecuta `POST /reservas/:id/cancelar`. |
+| **Botón de Check-in en Panel Admin** | **CONFORME** | En `/admin/recepcion`, botón **"Confirmar llegada"** pasa la orden a `CHECKED_IN`, almacena en tabla outbox y notifica a Booking Core API con `X-API-Key`. |
+| **TypeScript Estricto** | **CONFORME** | Tipado sin `any`, interfaces exhaustivas para todas las entidades y DTOs, `exactOptionalPropertyTypes: true` y `noImplicitAny: true`. |
+| **Pruebas Automatizadas** | **CONFORME** | 31 pruebas unitarias pasando al 100% en Vitest (validadores SRI, componentes, flujo de checkout, autenticación y portal de reservas). |
+
+

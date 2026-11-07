@@ -3,9 +3,13 @@ import { ProblemDetails, ProblemDetailsException } from './types';
 export const API_BASE_URL: string = (() => {
   const url = import.meta.env.VITE_API_URL;
   if (!url || typeof url !== 'string' || url.trim() === '') {
-    // En desarrollo con Vite podemos alertar o usar fallback local por seguridad
+    if (import.meta.env.PROD) {
+      throw new Error(
+        'Configuración faltante: la variable de entorno VITE_API_URL no está definida. Por favor configure VITE_API_URL para conectar el frontend con el backend NestJS.',
+      );
+    }
     console.warn(
-      '⚠️ VITE_API_URL no está definida en frontend/.env. Usando http://localhost:3000 por defecto.',
+      '⚠️ VITE_API_URL no está definida en frontend/.env. Usando http://localhost:3000 por defecto en desarrollo local.',
     );
     return 'http://localhost:3000';
   }
