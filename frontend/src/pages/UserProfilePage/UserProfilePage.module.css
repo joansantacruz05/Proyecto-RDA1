@@ -1,0 +1,110 @@
+.profileContainer {
+  padding: var(--spacing-8) 0 var(--spacing-16);
+  min-height: calc(100vh - 200px);
+}
+
+.profileHeader {
+  margin-bottom: var(--spacing-6);
+}
+
+.profileTitle {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-2xl);
+  color: var(--color-midnight-blue);
+  margin-bottom: var(--spacing-1);
+}
+
+.profileSubtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.layoutGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-8);
+  align-items: start;
+}
+
+.cardSection {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-6);
+  box-shadow: var(--shadow-sm);
+}
+
+.sectionTitle {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-midnight-blue);
+  margin-bottom: var(--spacing-4);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--spacing-3);
+}
+
+.formGrid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+
+.fieldLabel {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.invoicesTableWrapper {
+  overflow-x: auto;
+}
+
+.invoicesTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-xs);
+}
+
+.invoicesTable th {
+  text-align: left;
+  padding: 10px 8px;
+  background-color: var(--color-background);
+  color: var(--color-text-secondary);
+  font-weight: 700;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.invoicesTable td {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+}
+
+.successAlert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: var(--spacing-3);
+  background-color: #F0FDF4;
+  border: 1px solid #BBF7D0;
+  border-radius: var(--radius-md);
+  color: #166534;
+  font-size: var(--font-size-xs);
+  margin-bottom: var(--spacing-4);
+}
+
+@media (max-width: 860px) {
+  .layoutGrid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -68,3 +68,4 @@ export const CheckoutStepper: React.FC<CheckoutStepperProps> = ({ currentStep })
     </nav>
   );
 };
+

@@ -228,3 +228,4 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ currentUser }) => {
     </div>
   );
 };
+

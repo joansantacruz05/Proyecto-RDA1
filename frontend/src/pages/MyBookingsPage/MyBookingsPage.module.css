@@ -1,0 +1,210 @@
+.pageContainer {
+  padding: var(--spacing-8) 0 var(--spacing-16);
+  min-height: calc(100vh - 200px);
+}
+
+.pageHeader {
+  margin-bottom: var(--spacing-6);
+}
+
+.pageTitle {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-2xl);
+  color: var(--color-midnight-blue);
+  margin-bottom: var(--spacing-1);
+}
+
+.pageSubtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.tabsRow {
+  display: flex;
+  gap: var(--spacing-2);
+  border-bottom: 2px solid var(--color-border);
+  margin-bottom: var(--spacing-6);
+}
+
+.tabButton {
+  padding: var(--spacing-3) var(--spacing-5);
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.tabButton:hover {
+  color: var(--color-pacific-blue);
+}
+
+.tabButtonActive {
+  color: var(--color-pacific-blue);
+  border-bottom-color: var(--color-pacific-blue);
+}
+
+.tabCount {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-border-light);
+  color: var(--color-text-muted);
+}
+
+.tabButtonActive .tabCount {
+  background-color: var(--color-pacific-blue-light);
+  color: var(--color-pacific-blue);
+}
+
+.bookingsList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+.bookingCard {
+  display: grid;
+  grid-template-columns: 200px 1fr auto;
+  gap: var(--spacing-5);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-4);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-normal);
+  align-items: center;
+}
+
+.bookingCard:hover {
+  box-shadow: var(--shadow-md);
+  border-color: #CBD5E1;
+}
+
+.cardImage {
+  width: 100%;
+  height: 140px;
+  border-radius: var(--radius-lg);
+  object-fit: cover;
+  border: 1px solid var(--color-border);
+}
+
+.cardDetails {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  min-width: 0;
+}
+
+.hotelTitleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  flex-wrap: wrap;
+}
+
+.hotelName {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-midnight-blue);
+  text-decoration: none;
+}
+
+.hotelName:hover {
+  color: var(--color-pacific-blue);
+}
+
+.infoMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-4);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  flex-wrap: wrap;
+}
+
+.metaItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.codePill {
+  font-family: monospace;
+  font-size: 11px;
+  background-color: var(--color-background);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+}
+
+.priceActionsCol {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--spacing-3);
+  padding-left: var(--spacing-4);
+  border-left: 1px solid var(--color-border);
+  min-width: 170px;
+}
+
+.totalPrice {
+  font-size: var(--font-size-xl);
+  font-weight: 800;
+  color: var(--color-pacific-blue);
+}
+
+.actionsButtons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  width: 100%;
+}
+
+.emptyState {
+  text-align: center;
+  padding: var(--spacing-12) var(--spacing-4);
+  background-color: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-xl);
+}
+
+.emptyTitle {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-lg);
+  color: var(--color-midnight-blue);
+  margin-bottom: var(--spacing-1);
+}
+
+.emptyText {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-4);
+}
+
+@media (max-width: 860px) {
+  .bookingCard {
+    grid-template-columns: 1fr;
+  }
+
+  .cardImage {
+    height: 180px;
+  }
+
+  .priceActionsCol {
+    align-items: stretch;
+    border-left: none;
+    border-top: 1px solid var(--color-border);
+    padding-left: 0;
+    padding-top: var(--spacing-3);
+  }
+}

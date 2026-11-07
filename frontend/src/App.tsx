@@ -8,6 +8,12 @@ import { UsuarioSession } from './api/types';
 import { CatalogPage } from './pages/CatalogPage/CatalogPage';
 import { HotelDetailPage } from './pages/HotelDetailPage/HotelDetailPage';
 import { CheckoutPage } from './pages/CheckoutPage/CheckoutPage';
+import { LoginPage } from './pages/AuthPage/LoginPage';
+import { RegisterPage } from './pages/AuthPage/RegisterPage';
+import { MyBookingsPage } from './pages/MyBookingsPage/MyBookingsPage';
+import { BookingDetailPage } from './pages/BookingDetailPage/BookingDetailPage';
+import { UserProfilePage } from './pages/UserProfilePage/UserProfilePage';
+import { AdminReceptionPage } from './pages/AdminReceptionPage/AdminReceptionPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -45,6 +51,13 @@ export const App: React.FC = () => {
               <Route path="/buscar" element={<CatalogPage />} />
               <Route path="/alojamiento/:id" element={<HotelDetailPage />} />
               <Route path="/reservar" element={<CheckoutPage currentUser={user} />} />
+              <Route path="/login" element={<LoginPage onLoginSuccess={(u) => setUser(u)} />} />
+              <Route path="/registro" element={<RegisterPage onLoginSuccess={(u) => setUser(u)} />} />
+              <Route path="/mis-reservas" element={<MyBookingsPage currentUser={user} />} />
+              <Route path="/mis-reservas/:id" element={<BookingDetailPage currentUser={user} />} />
+              <Route path="/perfil" element={<UserProfilePage currentUser={user} onUserUpdate={(u) => setUser(u)} />} />
+              <Route path="/admin" element={<AdminReceptionPage currentUser={user} />} />
+              <Route path="/admin/recepcion" element={<AdminReceptionPage currentUser={user} />} />
               <Route path="*" element={<CatalogPage />} />
             </Routes>
           </MainLayout>

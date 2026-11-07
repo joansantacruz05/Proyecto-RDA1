@@ -128,3 +128,4 @@ export function validarDocumento(
       return { valido: false, mensaje: 'Tipo de documento no soportado.' };
   }
 }
+

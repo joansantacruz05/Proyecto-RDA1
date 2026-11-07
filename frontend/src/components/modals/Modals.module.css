@@ -1,0 +1,103 @@
+.contractContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: var(--spacing-2);
+}
+
+.legalBox {
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-4);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.legalTitle {
+  font-weight: 700;
+  color: var(--color-midnight-blue);
+  margin-bottom: var(--spacing-1);
+}
+
+.termsCheckbox {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-2);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-3);
+  margin-top: var(--spacing-4);
+}
+
+/* Modal de Cancelación */
+.cancelNotice {
+  padding: var(--spacing-4);
+  border-radius: var(--radius-md);
+  background-color: #FEF2F2;
+  border: 1px solid #FECACA;
+  margin-bottom: var(--spacing-4);
+}
+
+.cancelTiers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  margin: var(--spacing-3) 0;
+  font-size: var(--font-size-xs);
+}
+
+.tierRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.tierActive {
+  border-color: var(--color-gold);
+  background-color: var(--color-gold-light);
+  font-weight: 700;
+}
+
+/* Modal de Calificación */
+.ratingCenter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-4);
+  padding: var(--spacing-3) 0;
+}
+
+.starsRow {
+  display: flex;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.starBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: var(--color-border);
+  transition: transform var(--transition-fast), color var(--transition-fast);
+}
+
+.starBtn:hover,
+.starBtnActive {
+  color: var(--color-gold);
+  transform: scale(1.15);
+}
