@@ -97,3 +97,4 @@ Se seleccionaron un máximo de **dos familias tipográficas complementarias**, g
 * **100 % CSS Modules**: Cero estilos en línea (`style={{...}}`) en componentes de producción para facilitar mantenimiento y evitar fugas de especificidad.
 * **Tokens Globales**: Definidos en `:root` y consumidos en los módulos (`tokens.css`).
 * **Diseño Mobile-First**: Estructurado pensando primero en pantallas de 360 px (ancho de smartphone moderno) con tarjetas compactas, y adaptado mediante *media queries* hacia escritorios de alta resolución.
+
