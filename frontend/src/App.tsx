@@ -3,7 +3,17 @@ import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-do
 import { Home, User, MapPin, Star, ArrowLeft, Search, Users, DollarSign, Building, BedDouble, LayoutGrid, Info, CheckCircle2, Heart, Plus, Edit2, Trash2, Settings, CreditCard, X, Calendar, XCircle, Clock, Terminal } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = (() => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  // En producción o Vercel, si apunta a Render (inactivo/lento) o está vacío, priorizar Azure App Service
+  if (!envUrl || envUrl.includes('onrender.com')) {
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      return 'http://localhost:3000';
+    }
+    return 'https://posada-ec-alojamientos.azurewebsites.net';
+  }
+  return envUrl;
+})();
 export const CIUDADES_ECUADOR = [
   'Quito', 'Guayaquil', 'Cuenca', 'Manta', 'Baños', 'Ambato', 'Loja', 'Machala',
   'Portoviejo', 'Santo Domingo', 'Esmeraldas', 'Riobamba', 'Ibarra', 'Latacunga',
