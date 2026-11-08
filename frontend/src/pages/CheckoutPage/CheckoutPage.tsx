@@ -17,6 +17,7 @@ import { Step2Payment } from './Step2Payment';
 import { Step3Confirmation } from './Step3Confirmation';
 import { Skeleton } from '../../components/ui/Skeleton/Skeleton';
 import { Button } from '../../components/ui/Button/Button';
+import { checkIsAlojamientoReserved, ReservaItemLike } from '../../utils/accommodationStatus';
 import styles from './CheckoutPage.module.css';
 
 interface CheckoutPageProps {
@@ -58,6 +59,13 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ currentUser }) => {
     queryKey: ['hotelRooms', hotelId],
     queryFn: () => api.get<HabitacionDetalle[]>(`/alojamientos/${hotelId}/habitaciones`),
     enabled: Boolean(hotelId),
+  });
+
+  // 3. Consultar reservas activas para validación de disponibilidad
+  const { data: activeReservas = [] } = useQuery<ReservaItemLike[]>({
+    queryKey: ['reservasActivasPublicas'],
+    queryFn: () => api.get<ReservaItemLike[]>('/reservas'),
+    staleTime: 5000,
   });
 
   const selectedRoom = hotelRooms.find((r) => r.id === roomId || r.codigo === roomCode);
@@ -161,7 +169,19 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ currentUser }) => {
     );
   }
 
-  if (hotel?.estaReservado && step < 3) {
+  const isReserved =
+    Boolean(hotel?.estaReservado) ||
+    checkIsAlojamientoReserved({
+      alojamientoId: hotelId,
+      alojamientoNombre: hotel?.nombre,
+      alojamientoCodigo: hotel?.codigo,
+      estaReservadoApi: hotel?.estaReservado,
+      estado: hotel?.estado,
+      activeReservas,
+      checkDates: checkin && checkout ? { checkin, checkout } : undefined,
+    });
+
+  if (isReserved && step < 3) {
     return (
       <div className={`container ${styles.checkoutPage}`} style={{ textAlign: 'center', padding: '60px 20px', maxWidth: '600px', margin: '40px auto' }}>
         <div style={{ background: '#FFFFFF', padding: '48px 36px', borderRadius: '24px', border: '1px solid #FCA5A5', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
@@ -172,7 +192,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ currentUser }) => {
             Alojamiento Reservado
           </h2>
           <p style={{ color: '#64748B', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '32px' }}>
-            Lo sentimos: este alojamiento ({hotel.nombre}) ya cuenta con una reserva activa confirmada y no se encuentra disponible para nuevas reservas.
+            Lo sentimos: este alojamiento ({hotel?.nombre || 'seleccionado'}) ya cuenta con una reserva activa confirmada y no se encuentra disponible para nuevas reservas.
           </p>
           <Button variant="gold" size="lg" onClick={() => navigate('/')}>
             Explorar otros alojamientos

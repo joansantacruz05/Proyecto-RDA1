@@ -9,6 +9,7 @@ interface RoomCardProps {
   habitacion: HabitacionDetalle;
   onSelect: (hab: HabitacionDetalle) => void;
   isSelected?: boolean;
+  isHotelReserved?: boolean;
 }
 
 const DEFAULT_ROOM_IMG = 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=600&q=80';
@@ -17,14 +18,15 @@ export const RoomCard: React.FC<RoomCardProps> = ({
   habitacion,
   onSelect,
   isSelected = false,
+  isHotelReserved = false,
 }) => {
   const precio = typeof habitacion.precioPorNoche === 'string'
     ? parseFloat(habitacion.precioPorNoche)
     : habitacion.precioPorNoche || 100;
 
   const stock = habitacion.cantidadDisponible ?? 3;
-  const isOutOfStock = stock <= 0 || habitacion.estado === 'Inactivo';
-  const isLowStock = stock > 0 && stock <= 2;
+  const isOutOfStock = Boolean(isHotelReserved) || stock <= 0 || habitacion.estado === 'Inactivo';
+  const isLowStock = !isOutOfStock && stock > 0 && stock <= 2;
   const code = habitacion.codigo || 'SUITE_DELUXE';
   const capacity = habitacion.capacidadAdultos ?? habitacion.capacidad ?? 2;
 

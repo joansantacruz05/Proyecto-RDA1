@@ -7,6 +7,7 @@ import { Badge } from '../../ui/Badge/Badge';
 import { formatUSD } from '../../ui/PriceDisplay/PriceDisplay';
 import { api, getAuthToken } from '../../../api/client';
 import { AvailabilityResponse } from '../../../api/types';
+import { checkIsAlojamientoReserved, ReservaItemLike } from '../../../utils/accommodationStatus';
 import styles from './StickyBookingCard.module.css';
 
 interface StickyBookingCardProps {
@@ -65,6 +66,19 @@ export const StickyBookingCard: React.FC<StickyBookingCardProps> = ({
     enabled: Boolean(checkin && checkout && checkout > checkin),
   });
 
+  // 3. Consulta de Reservas Activas para validar superposición de fechas
+  const { data: activeReservas = [] } = useQuery<ReservaItemLike[]>({
+    queryKey: ['reservasActivasPublicas'],
+    queryFn: () => api.get<ReservaItemLike[]>('/reservas'),
+    staleTime: 5000,
+  });
+
+  const isReservedForDates = checkIsAlojamientoReserved({
+    alojamientoId,
+    activeReservas,
+    checkDates: checkin && checkout ? { checkin, checkout } : undefined,
+  });
+
   const dIn = new Date(checkin);
   const dOut = new Date(checkout);
   const noches = Math.max(1, Math.round((dOut.getTime() - dIn.getTime()) / (1000 * 60 * 60 * 24)));
@@ -75,6 +89,7 @@ export const StickyBookingCard: React.FC<StickyBookingCardProps> = ({
 
   const estaDisponible =
     !isHotelReserved &&
+    !isReservedForDates &&
     (availabilityData
       ? Boolean(matchingOption && matchingOption.estaDisponible)
       : true);
@@ -88,6 +103,11 @@ export const StickyBookingCard: React.FC<StickyBookingCardProps> = ({
   const total = Math.round((subtotal + iva + tasaMunicipal) * 100) / 100;
 
   const handleCheckoutClick = () => {
+    if (isHotelReserved || isReservedForDates || !estaDisponible) {
+      alert('Esta propiedad ya se encuentra reservada para las fechas seleccionadas.');
+      return;
+    }
+
     const roomParam = selectedRoomId
       ? `&roomId=${selectedRoomId}&roomCode=${selectedRoomCode || ''}`
       : matchingOption?.tipoHabitacionCodigo
@@ -118,7 +138,7 @@ export const StickyBookingCard: React.FC<StickyBookingCardProps> = ({
         <Badge variant={estaDisponible ? 'gold' : 'error'}>
           {isCheckingAvail
             ? 'Verificando...'
-            : isHotelReserved
+            : isHotelReserved || isReservedForDates
             ? 'Reservado'
             : estaDisponible
             ? 'Disponible'
@@ -235,12 +255,12 @@ export const StickyBookingCard: React.FC<StickyBookingCardProps> = ({
         variant="gold"
         size="lg"
         fullWidth
-        disabled={!estaDisponible || isCheckingAvail || isHotelReserved}
+        disabled={!estaDisponible || isCheckingAvail || isHotelReserved || isReservedForDates}
         loading={isCheckingAvail}
         icon={estaDisponible ? <Sparkles size={18} /> : undefined}
         onClick={handleCheckoutClick}
       >
-        {isHotelReserved
+        {isHotelReserved || isReservedForDates
           ? 'Propiedad reservada'
           : estaDisponible
           ? 'Reservar ahora'
@@ -253,12 +273,12 @@ export const StickyBookingCard: React.FC<StickyBookingCardProps> = ({
         <span>Precio garantizado con reserva inmediata</span>
       </div>
 
-      {!estaDisponible && (
+      {(!estaDisponible || isHotelReserved || isReservedForDates) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-error)', fontSize: 'var(--font-size-xs)' }}>
           <AlertCircle size={14} />
           <span>
-            {isHotelReserved
-              ? 'Esta propiedad ya cuenta con una reserva activa confirmada.'
+            {isHotelReserved || isReservedForDates
+              ? 'Esta propiedad ya cuenta con una reserva activa confirmada para estas fechas.'
               : 'Sin habitaciones suficientes para las fechas seleccionadas.'}
           </span>
         </div>

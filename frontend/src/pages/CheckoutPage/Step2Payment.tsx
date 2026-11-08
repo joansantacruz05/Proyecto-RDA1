@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CreditCard,
   Building,
@@ -19,6 +19,7 @@ import {
   PagoResponse,
   ProblemDetailsException,
 } from '../../api/types';
+import { markAlojamientoReserved } from '../../utils/accommodationStatus';
 import { BillingFormData } from './Step1Billing';
 import styles from './Step2Payment.module.css';
 
@@ -66,6 +67,7 @@ export const Step2Payment: React.FC<Step2PaymentProps> = ({
   onBack,
   onSuccess,
 }) => {
+  const queryClient = useQueryClient();
   // 1. Obtener métodos de pago activos de la base de datos
   const { data: metodos = [], isLoading: isLoadingMetodos } = useQuery<MetodoPagoItem[]>({
     queryKey: ['metodosPago'],
@@ -257,6 +259,20 @@ export const Step2Payment: React.FC<Step2PaymentProps> = ({
       };
 
       const pagoResult = await api.post<PagoResponse>('/pagos', pagoPayload);
+
+      // Registrar propiedad como reservada inmediatamente en estado global
+      markAlojamientoReserved({
+        alojamientoId: hotelId,
+        fechaEntrada: checkin,
+        fechaSalida: checkout,
+        ordenId: targetReservaId,
+      });
+
+      // Invalidar queries para que catálogo y detalle se actualicen de inmediato a 'Reservado'
+      queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
+      queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
+      queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
+      queryClient.invalidateQueries({ queryKey: ['availability'] });
 
       // Limpiar borrador de sesión tras éxito
       try {

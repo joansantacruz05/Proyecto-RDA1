@@ -13,6 +13,7 @@ import { Skeleton } from '../../components/ui/Skeleton/Skeleton';
 import { Button } from '../../components/ui/Button/Button';
 import { api } from '../../api/client';
 import { AlojamientoDetalle, HabitacionDetalle } from '../../api/types';
+import { checkIsAlojamientoReserved, ReservaItemLike } from '../../utils/accommodationStatus';
 import styles from './HotelDetailPage.module.css';
 
 export const HotelDetailPage: React.FC = () => {
@@ -43,6 +44,13 @@ export const HotelDetailPage: React.FC = () => {
     queryKey: ['hotelRooms', id],
     queryFn: () => api.get<HabitacionDetalle[]>(`/alojamientos/${id}/habitaciones`),
     enabled: Boolean(id),
+  });
+
+  // 3. Reservas Activas (cruce con Azure para detectar si ya está reservado)
+  const { data: activeReservas = [] } = useQuery<ReservaItemLike[]>({
+    queryKey: ['reservasActivasPublicas'],
+    queryFn: () => api.get<ReservaItemLike[]>('/reservas'),
+    staleTime: 5000,
   });
 
   const hotelRooms = rooms.length > 0 ? rooms : hotel?.habitaciones || [];
@@ -88,7 +96,17 @@ export const HotelDetailPage: React.FC = () => {
   const defaultPrice = hotelRooms[0]?.precioPorNoche
     ? Number(hotelRooms[0].precioPorNoche)
     : 120;
-  const isHotelReserved = Boolean(hotel.estaReservado);
+  const isHotelReserved =
+    Boolean(hotel.estaReservado) ||
+    checkIsAlojamientoReserved({
+      alojamientoId: hotel.id,
+      alojamientoNombre: hotel.nombre,
+      alojamientoCodigo: hotel.codigo,
+      estaReservadoApi: hotel.estaReservado,
+      estado: hotel.estado,
+      activeReservas,
+      checkDates: checkinParam && checkoutParam ? { checkin: checkinParam, checkout: checkoutParam } : undefined,
+    });
 
   return (
     <div className={`container ${styles.detailContainer}`}>
@@ -182,6 +200,7 @@ export const HotelDetailPage: React.FC = () => {
                     key={room.id}
                     habitacion={room}
                     isSelected={selectedHabitacion?.id === room.id}
+                    isHotelReserved={isHotelReserved}
                     onSelect={(hab) => setSelectedHabitacion(hab)}
                   />
                 ))}

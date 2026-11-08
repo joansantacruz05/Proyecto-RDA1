@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { MapPin, Sparkles, Waves, AlertCircle } from 'lucide-react';
 import { AlojamientoItem } from '../../../api/types';
+import { api } from '../../../api/client';
+import { checkIsAlojamientoReserved, ReservaItemLike } from '../../../utils/accommodationStatus';
 import { RatingStars } from '../../ui/RatingStars/RatingStars';
 import { PriceDisplay } from '../../ui/PriceDisplay/PriceDisplay';
 import { Badge } from '../../ui/Badge/Badge';
@@ -24,9 +27,24 @@ export const AlojamientoCard: React.FC<AlojamientoCardProps> = ({
 }) => {
   const [imgSrc, setImgSrc] = useState(alojamiento.imagenUrl || FALLBACK_IMAGE);
 
+  const { data: activeReservas = [] } = useQuery<ReservaItemLike[]>({
+    queryKey: ['reservasActivasPublicas'],
+    queryFn: () => api.get<ReservaItemLike[]>('/reservas'),
+    staleTime: 5000,
+  });
+
   const isReserved = Boolean(
     alojamiento.estaReservado ||
-    (alojamiento.habitacionesDisponibles !== undefined && alojamiento.habitacionesDisponibles <= 0)
+    (alojamiento.habitacionesDisponibles !== undefined && alojamiento.habitacionesDisponibles <= 0) ||
+    checkIsAlojamientoReserved({
+      alojamientoId: alojamiento.id,
+      alojamientoNombre: alojamiento.nombre,
+      alojamientoCodigo: alojamiento.codigo,
+      estaReservadoApi: alojamiento.estaReservado,
+      estado: alojamiento.activo === false ? 'Inactivo' : 'Activo',
+      activeReservas,
+      checkDates: searchDates?.checkin && searchDates.checkout ? { checkin: searchDates.checkin, checkout: searchDates.checkout } : undefined,
+    })
   );
 
   const price = typeof alojamiento.precioPorNoche === 'string'

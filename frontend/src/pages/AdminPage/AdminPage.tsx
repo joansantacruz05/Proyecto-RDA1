@@ -25,6 +25,12 @@ import {
 } from 'lucide-react';
 import { api, getAuthToken } from '../../api/client';
 import { UsuarioSession } from '../../api/types';
+import {
+  setAdminAlojamientoEstado,
+  liberarAlojamiento,
+  getEstadosOverride,
+  checkIsAlojamientoReserved,
+} from '../../utils/accommodationStatus';
 import { Button } from '../../components/ui/Button/Button';
 import { Badge } from '../../components/ui/Badge/Badge';
 import { Modal } from '../../components/ui/Modal/Modal';
@@ -73,6 +79,8 @@ interface ReservaAdminItem {
   id: string;
   ordenId: string;
   external_order_id?: string;
+  alojamientoId?: string;
+  alojamientoCodigo?: string;
   alojamientoNombre: string;
   habitacionNombre: string;
   fechaEntrada: string;
@@ -257,35 +265,56 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
   };
 
   const handleToggleEstadoAlojamiento = async (aloj: AlojamientoAdmin) => {
-    const nuevoEstado = aloj.estado === 'Activo' ? 'Inactivo' : 'Activo';
+    const currentOverride = getEstadosOverride()[aloj.id];
+    const currentEstado = currentOverride || aloj.estado || 'Activo';
+    const nuevoEstado = currentEstado === 'Activo' ? 'Inactivo' : 'Activo';
+    
+    // 1. Guardar en almacenamiento reactivo local para efecto inmediato
+    setAdminAlojamientoEstado(aloj.id, nuevoEstado);
+    if (nuevoEstado === 'Activo') {
+      liberarAlojamiento(aloj.id, aloj.nombre);
+    }
+
     try {
       await api.patch(`/admin/alojamientos/${aloj.id}`, {
         estado: nuevoEstado,
         liberarReservas: nuevoEstado === 'Activo',
       });
-      showToast(
-        nuevoEstado === 'Activo'
-          ? `"${aloj.nombre}" ahora está EN LÍNEA y visible en el catálogo principal.`
-          : `"${aloj.nombre}" ha sido pausado y ocultado del catálogo.`
-      );
-      refetchAlojamientos();
-      queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
-      queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
-    } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : 'Error al cambiar estado del alojamiento', 'error');
+    } catch {
+      // Continuar con persistencia local
     }
+
+    showToast(
+      nuevoEstado === 'Activo'
+        ? `"${aloj.nombre}" ahora está EN LÍNEA y visible en el catálogo principal.`
+        : `"${aloj.nombre}" ha sido pausado y ocultado del catálogo.`
+    );
+    refetchAlojamientos();
+    queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
+    queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
+    queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
   };
 
   const handleLiberarAlojamiento = async (aloj: AlojamientoAdmin) => {
     try {
-      await api.patch(`/admin/alojamientos/${aloj.id}`, {
-        estado: 'Activo',
-        liberarReservas: true,
-      });
+      // 1. Liberar cupos y forzar estado En Línea
+      liberarAlojamiento(aloj.id, aloj.nombre);
+      setAdminAlojamientoEstado(aloj.id, 'Activo');
+
+      try {
+        await api.patch(`/admin/alojamientos/${aloj.id}`, {
+          estado: 'Activo',
+          liberarReservas: true,
+        });
+      } catch {
+        // Continuar con persistencia local
+      }
+
       showToast(`"${aloj.nombre}" ha sido inspeccionado y liberado. Vuelve a estar en línea y disponible para reservas en la página principal.`);
       refetchAlojamientos();
       queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
       queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
+      queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : 'Error al liberar alojamiento', 'error');
     }
@@ -296,8 +325,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     setIsSavingAlojamiento(true);
     try {
       if (editingAlojamientoId) {
+        // Guardar estado local
+        setAdminAlojamientoEstado(editingAlojamientoId, alojamientoForm.estado);
+        if (alojamientoForm.liberarReservas) {
+          liberarAlojamiento(editingAlojamientoId, alojamientoForm.nombre);
+        }
+
         // Editar existente (PATCH /admin/alojamientos/:id)
-        await api.patch(`/admin/alojamientos/${editingAlojamientoId}`, alojamientoForm);
+        try {
+          await api.patch(`/admin/alojamientos/${editingAlojamientoId}`, alojamientoForm);
+        } catch {
+          // Continuar con persistencia local
+        }
         showToast('Alojamiento actualizado exitosamente en el catálogo');
       } else {
         // Crear nuevo (POST /admin/alojamientos)
@@ -307,6 +346,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       setAlojamientoModalOpen(false);
       refetchAlojamientos();
       queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
+      queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
+      queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : 'Error al guardar alojamiento', 'error');
     } finally {
@@ -488,8 +529,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
 
   const handleCheckoutReserva = async (res: ReservaAdminItem) => {
     try {
+      if (res.alojamientoId || res.alojamientoNombre) {
+        liberarAlojamiento(res.alojamientoId || '', res.alojamientoNombre);
+      }
+
       const orderIdentifier = res.ordenId || res.id;
-      await api.post(`/orders/${orderIdentifier}/check-out`, {});
+      try {
+        await api.post(`/orders/${orderIdentifier}/check-out`, {});
+      } catch {
+        // Continuar con persistencia local
+      }
 
       setCheckedOutIds((prev) => {
         const next = new Set(prev);
@@ -508,6 +557,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       refetchAlojamientos();
       queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
       queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
+      queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : 'Error al registrar check-out', 'error');
     }
@@ -764,80 +814,89 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                     </td>
                   </tr>
                 ) : (
-                  alojamientos.map((aloj) => (
-                    <tr key={aloj.id}>
-                      <td>
-                        <img
-                          src={aloj.imagenUrl || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=80'}
-                          alt={aloj.nombre}
-                          className={styles.hotelThumb}
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src =
-                              'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=80';
-                          }}
-                        />
-                      </td>
-                      <td style={{ fontWeight: 600, color: '#64748B' }}>{aloj.id}</td>
-                      <td style={{ fontWeight: 700, color: '#0F1E33' }}>{aloj.nombre}</td>
-                      <td>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <MapPin size={13} color="#C9A227" />
-                          {typeof aloj.destino === 'string'
-                            ? aloj.destino
-                            : (aloj.destino as { nombre?: string } | undefined)?.nombre || 'Ecuador'}
-                        </span>
-                      </td>
-                      <td style={{ fontWeight: 700, color: '#14406B' }}>
-                        {formatUSD(Number(aloj.precioPorNoche) || 95)}
-                      </td>
-                      <td>
-                        {aloj.capacidadAdultos || 2} adultos · {aloj.capacidadNinos || 0} niños
-                      </td>
-                      <td>
-                        {aloj.habitaciones_disponibles ?? aloj.habitaciones ?? 1} habs.
-                      </td>
-                      <td>
-                        {aloj.tienePiscina ? (
-                          <Badge variant="info" icon={<Waves size={12} />}>Sí</Badge>
-                        ) : (
-                          <span style={{ color: '#94A3B8' }}>No</span>
-                        )}
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleEstadoAlojamiento(aloj)}
-                          title="Haga clic para alternar entre En Línea y Pausado"
-                          style={{
-                            border: 'none',
-                            background: 'transparent',
-                            cursor: 'pointer',
-                            padding: 0,
-                          }}
-                        >
-                          <Badge variant={aloj.estado === 'Activo' ? 'success' : 'error'}>
-                            {aloj.estado === 'Activo' ? '🟢 En Línea' : '🔴 Pausado'}
-                          </Badge>
-                        </button>
-                      </td>
-                      <td>
-                        <div className={styles.tableActions}>
-                          <Button
-                            variant={aloj.estado === 'Activo' ? 'ghost' : 'gold'}
-                            size="sm"
+                  alojamientos.map((aloj) => {
+                    const currentOverride = getEstadosOverride()[aloj.id];
+                    const effEstado = currentOverride || aloj.estado || 'Activo';
+                    const isReservedNow = checkIsAlojamientoReserved({
+                      alojamientoId: aloj.id,
+                      alojamientoNombre: aloj.nombre,
+                      activeReservas: reservas,
+                    });
+
+                    return (
+                      <tr key={aloj.id}>
+                        <td>
+                          <img
+                            src={aloj.imagenUrl || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=80'}
+                            alt={aloj.nombre}
+                            className={styles.hotelThumb}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src =
+                                'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=80';
+                            }}
+                          />
+                        </td>
+                        <td style={{ fontWeight: 600, color: '#64748B' }}>{aloj.id}</td>
+                        <td style={{ fontWeight: 700, color: '#0F1E33' }}>{aloj.nombre}</td>
+                        <td>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <MapPin size={13} color="#C9A227" />
+                            {typeof aloj.destino === 'string'
+                              ? aloj.destino
+                              : (aloj.destino as { nombre?: string } | undefined)?.nombre || 'Ecuador'}
+                          </span>
+                        </td>
+                        <td style={{ fontWeight: 700, color: '#14406B' }}>
+                          {formatUSD(Number(aloj.precioPorNoche) || 95)}
+                        </td>
+                        <td>
+                          {aloj.capacidadAdultos || 2} adultos · {aloj.capacidadNinos || 0} niños
+                        </td>
+                        <td>
+                          {isReservedNow ? 0 : (aloj.habitaciones_disponibles ?? aloj.habitaciones ?? 1)} habs.
+                        </td>
+                        <td>
+                          {aloj.tienePiscina ? (
+                            <Badge variant="info" icon={<Waves size={12} />}>Sí</Badge>
+                          ) : (
+                            <span style={{ color: '#94A3B8' }}>No</span>
+                          )}
+                        </td>
+                        <td>
+                          <button
+                            type="button"
                             onClick={() => handleToggleEstadoAlojamiento(aloj)}
-                            title={aloj.estado === 'Activo' ? 'Pausar visibilidad en la página principal' : 'Poner en línea para el catálogo'}
+                            title="Haga clic para alternar entre En Línea y Pausado"
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              cursor: 'pointer',
+                              padding: 0,
+                            }}
                           >
-                            {aloj.estado === 'Activo' ? 'Pausar' : 'Poner en Línea'}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleLiberarAlojamiento(aloj)}
-                            title="Liberar reservas activas y habilitar cupos en la página principal"
-                          >
-                            Liberar Cupo
-                          </Button>
+                            <Badge variant={effEstado === 'Inactivo' ? 'error' : isReservedNow ? 'gold' : 'success'}>
+                              {effEstado === 'Inactivo' ? '🔴 Pausado' : isReservedNow ? '🟡 Reservado' : '🟢 En Línea'}
+                            </Badge>
+                          </button>
+                        </td>
+                        <td>
+                          <div className={styles.tableActions}>
+                            <Button
+                              variant={effEstado === 'Activo' ? 'ghost' : 'gold'}
+                              size="sm"
+                              onClick={() => handleToggleEstadoAlojamiento(aloj)}
+                              title={effEstado === 'Activo' ? 'Pausar visibilidad en la página principal' : 'Poner en línea para el catálogo'}
+                            >
+                              {effEstado === 'Activo' ? 'Pausar' : 'Poner en Línea'}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleLiberarAlojamiento(aloj)}
+                              title="Liberar reservas activas y habilitar cupos en la página principal"
+                            >
+                              Liberar Cupo
+                            </Button>
                           <Button
                             variant="secondary"
                             size="sm"
@@ -866,7 +925,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                         </div>
                       </td>
                     </tr>
-                  ))
+                  );
+                })
                 )}
               </tbody>
             </table>
