@@ -20,49 +20,52 @@
 }
 
 .tabsRow {
-  display: flex;
-  gap: var(--spacing-2);
-  border-bottom: 2px solid var(--color-border);
+  display: inline-flex;
+  gap: 8px;
+  background-color: #F1F5F9;
+  padding: 6px;
+  border-radius: 14px;
   margin-bottom: var(--spacing-6);
+  border: none;
 }
 
 .tabButton {
-  padding: var(--spacing-3) var(--spacing-5);
+  padding: 8px 18px;
   font-family: var(--font-body);
   font-size: var(--font-size-sm);
   font-weight: 600;
-  color: var(--color-text-secondary);
-  background: none;
+  color: #64748B;
+  background: transparent;
   border: none;
-  border-bottom: 3px solid transparent;
-  margin-bottom: -2px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 0.2s ease;
   display: flex;
   align-items: center;
-  gap: var(--spacing-2);
+  gap: 8px;
 }
 
 .tabButton:hover {
-  color: var(--color-pacific-blue);
+  color: var(--color-midnight-blue);
 }
 
 .tabButtonActive {
-  color: var(--color-pacific-blue);
-  border-bottom-color: var(--color-pacific-blue);
+  color: #FFFFFF;
+  background-color: var(--color-midnight-blue);
+  box-shadow: 0 2px 8px rgba(15, 30, 51, 0.15);
 }
 
 .tabCount {
   font-size: 11px;
-  padding: 1px 6px;
-  border-radius: var(--radius-full);
-  background-color: var(--color-border-light);
-  color: var(--color-text-muted);
+  padding: 2px 7px;
+  border-radius: 10px;
+  background-color: rgba(255, 255, 255, 0.2);
+  color: inherit;
 }
 
 .tabButtonActive .tabCount {
-  background-color: var(--color-pacific-blue-light);
-  color: var(--color-pacific-blue);
+  background-color: rgba(255, 255, 255, 0.25);
+  color: #FFFFFF;
 }
 
 .bookingsList {
@@ -172,10 +175,11 @@
 
 .emptyState {
   text-align: center;
-  padding: var(--spacing-12) var(--spacing-4);
-  background-color: var(--color-surface);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-xl);
+  padding: 56px 24px;
+  background-color: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
 }
 
 .emptyTitle {

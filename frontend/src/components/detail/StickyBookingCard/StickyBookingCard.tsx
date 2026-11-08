@@ -5,7 +5,7 @@ import { ShieldCheck, AlertCircle, Sparkles } from 'lucide-react';
 import { Button } from '../../ui/Button/Button';
 import { Badge } from '../../ui/Badge/Badge';
 import { formatUSD } from '../../ui/PriceDisplay/PriceDisplay';
-import { api } from '../../../api/client';
+import { api, getAuthToken } from '../../../api/client';
 import { AvailabilityResponse } from '../../../api/types';
 import styles from './StickyBookingCard.module.css';
 
@@ -83,9 +83,16 @@ export const StickyBookingCard: React.FC<StickyBookingCardProps> = ({
       : primeraOpcion?.tipoHabitacionCodigo
       ? `&roomCode=${primeraOpcion.tipoHabitacionCodigo}`
       : '';
-    navigate(
-      `/reservar?hotelId=${alojamientoId}&checkin=${checkin}&checkout=${checkout}&adults=${adults}&rooms=${rooms}&subtotal=${subtotal}&total=${total}${roomParam}`,
-    );
+    const targetUrl = `/reservar?hotelId=${alojamientoId}&checkin=${checkin}&checkout=${checkout}&adults=${adults}&rooms=${rooms}&subtotal=${subtotal}&total=${total}${roomParam}`;
+
+    const token = getAuthToken();
+    if (!token) {
+      // Requerir inicio de sesión antes de reservar
+      navigate(`/login?returnUrl=${encodeURIComponent(targetUrl)}`);
+      return;
+    }
+
+    navigate(targetUrl);
   };
 
   const todayStr = today.toISOString().split('T')[0] || '';

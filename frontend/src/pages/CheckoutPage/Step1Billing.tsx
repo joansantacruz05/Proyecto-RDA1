@@ -51,7 +51,7 @@ export const Step1Billing: React.FC<Step1BillingProps> = ({
       identificacion: '',
       nombre: currentUser?.nombre || '',
       email: currentUser?.correo || '',
-      telefono: '',
+      telefono: currentUser?.telefono || '',
       direccion: '',
       peticionesEspeciales: '',
       crearCuenta: false,
@@ -66,6 +66,7 @@ export const Step1Billing: React.FC<Step1BillingProps> = ({
         ...prev,
         nombre: prev.nombre || currentUser.nombre,
         email: prev.email || currentUser.correo,
+        telefono: prev.telefono || currentUser.telefono || '',
       }));
     }
   }, [currentUser]);

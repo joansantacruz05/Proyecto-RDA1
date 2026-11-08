@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Building2 } from 'lucide-react';
-import { api } from '../../api/client';
+import { api, getAuthToken } from '../../api/client';
 import {
   AlojamientoDetalle,
   HabitacionDetalle,
@@ -105,6 +105,34 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ currentUser }) => {
     setStep(3);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const token = getAuthToken();
+  if (!token || !currentUser) {
+    const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
+    return (
+      <div className={`container ${styles.checkoutPage}`} style={{ textAlign: 'center', padding: '60px 20px', maxWidth: '600px', margin: '40px auto' }}>
+        <div style={{ background: '#FFFFFF', padding: '48px 36px', borderRadius: '24px', border: '1px solid #E2E8F0', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
+          <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(20, 64, 107, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
+            <Building2 size={32} color="#14406B" />
+          </div>
+          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.75rem', marginBottom: '12px', color: '#0F1E33' }}>
+            Inicia sesión para reservar
+          </h2>
+          <p style={{ color: '#64748B', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '32px' }}>
+            Para garantizar la seguridad de tu reserva, emitir tu factura electrónica ante el SRI y gestionar tus estadías, debes acceder con tu cuenta de LuxeStays.
+          </p>
+          <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Button variant="gold" size="lg" onClick={() => navigate(`/login?returnUrl=${returnUrl}`)}>
+              Iniciar Sesión
+            </Button>
+            <Button variant="outline" size="lg" onClick={() => navigate(`/registro?returnUrl=${returnUrl}`)}>
+              Crear una Cuenta
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!hotelId) {
     return (

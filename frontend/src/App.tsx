@@ -13,7 +13,7 @@ import { RegisterPage } from './pages/AuthPage/RegisterPage';
 import { MyBookingsPage } from './pages/MyBookingsPage/MyBookingsPage';
 import { BookingDetailPage } from './pages/BookingDetailPage/BookingDetailPage';
 import { UserProfilePage } from './pages/UserProfilePage/UserProfilePage';
-import { AdminReceptionPage } from './pages/AdminReceptionPage/AdminReceptionPage';
+import { AdminPage } from './pages/AdminPage/AdminPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -56,8 +56,8 @@ export const App: React.FC = () => {
               <Route path="/mis-reservas" element={<MyBookingsPage currentUser={user} />} />
               <Route path="/mis-reservas/:id" element={<BookingDetailPage currentUser={user} />} />
               <Route path="/perfil" element={<UserProfilePage currentUser={user} onUserUpdate={(u) => setUser(u)} />} />
-              <Route path="/admin" element={<AdminReceptionPage currentUser={user} />} />
-              <Route path="/admin/recepcion" element={<AdminReceptionPage currentUser={user} />} />
+              <Route path="/admin" element={<AdminPage currentUser={user} />} />
+              <Route path="/admin/recepcion" element={<AdminPage currentUser={user} />} />
               <Route path="*" element={<CatalogPage />} />
             </Routes>
           </MainLayout>

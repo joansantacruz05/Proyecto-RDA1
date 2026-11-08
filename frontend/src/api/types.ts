@@ -120,6 +120,10 @@ export interface UsuarioSession {
   nombre: string;
   correo: string;
   rol: string;
+  telefono?: string;
+  edad?: number;
+  direccion?: string;
+  pais?: string;
   scopes?: string[];
 }
 

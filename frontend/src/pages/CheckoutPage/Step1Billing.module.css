@@ -2,6 +2,11 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-6);
+  background-color: #FFFFFF;
+  padding: 32px;
+  border-radius: 20px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
 }
 
 .stepHeading {
@@ -10,49 +15,54 @@
 
 .stepTitle {
   font-family: var(--font-heading);
-  font-size: var(--font-size-xl);
+  font-size: 1.6rem;
   color: var(--color-midnight-blue);
-  margin-bottom: var(--spacing-1);
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
 }
 
 .stepSubtitle {
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  color: #64748B;
+  line-height: 1.5;
 }
 
 .authNoticeBox {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-4);
-  background-color: var(--color-pacific-blue-light);
-  border: 1px solid rgba(20, 64, 107, 0.15);
-  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  background-color: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
   gap: var(--spacing-3);
 }
 
 .authNoticeText {
   font-size: var(--font-size-sm);
-  color: var(--color-pacific-blue);
+  color: #334155;
   line-height: 1.4;
 }
 
 .docTypeSection {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3);
+  gap: 12px;
+  margin-top: 8px;
 }
 
 .sectionLabel {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  color: #1E293B;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .docGrid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: var(--spacing-3);
+  gap: 12px;
 }
 
 .docCard {
@@ -61,47 +71,48 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: var(--spacing-4) var(--spacing-2);
-  background-color: var(--color-surface);
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  padding: 16px 12px;
+  background-color: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
   cursor: pointer;
-  transition: all var(--transition-normal);
-  gap: var(--spacing-2);
+  transition: all 0.2s ease;
+  gap: 6px;
   user-select: none;
 }
 
 .docCard:hover {
-  border-color: var(--color-pacific-blue);
-  background-color: var(--color-surface-hover);
+  border-color: #CBD5E1;
+  background-color: #F8FAFC;
 }
 
 .docCardActive {
-  border-color: var(--color-gold);
-  background-color: var(--color-gold-light);
-  box-shadow: 0 0 0 1px var(--color-gold);
+  border-color: var(--color-midnight-blue);
+  background-color: #F8FAFC;
+  box-shadow: 0 0 0 2px var(--color-midnight-blue);
 }
 
 .docCardIcon {
-  font-size: 24px;
+  font-size: 20px;
 }
 
 .docCardTitle {
-  font-size: var(--font-size-sm);
+  font-size: 13px;
   font-weight: 700;
   color: var(--color-midnight-blue);
 }
 
 .docCardDesc {
   font-size: 11px;
-  color: var(--color-text-secondary);
-  line-height: 1.2;
+  color: #64748B;
+  line-height: 1.25;
 }
 
 .formGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--spacing-4);
+  gap: 20px;
+  margin-top: 18px;
 }
 
 .fullCol {
@@ -111,13 +122,13 @@
 .fieldGroup {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-1);
+  gap: 6px;
 }
 
 .fieldLabel {
-  font-size: var(--font-size-sm);
+  font-size: 13px;
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: #1E293B;
 }
 
 .fieldRequired {
@@ -139,23 +150,23 @@
 }
 
 .errorSummaryBox {
-  padding: var(--spacing-3) var(--spacing-4);
-  background-color: #FDF2F2;
-  border: 1px solid #F8B4B4;
-  border-radius: var(--radius-md);
-  margin-top: var(--spacing-3);
+  padding: 16px 20px;
+  background-color: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 12px;
+  margin-top: 20px;
 }
 
 .errorSummaryTitle {
   font-size: var(--font-size-sm);
   font-weight: 700;
   color: var(--color-error);
-  margin-bottom: var(--spacing-1);
+  margin-bottom: 6px;
 }
 
 .errorSummaryList {
   margin: 0;
-  padding-left: var(--spacing-4);
+  padding-left: 20px;
   font-size: var(--font-size-xs);
   color: var(--color-error);
 }
@@ -163,21 +174,25 @@
 .actionsRow {
   display: flex;
   justify-content: flex-end;
-  margin-top: var(--spacing-4);
+  margin-top: 28px;
 }
 
 .loginInlineBox {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3);
-  padding: var(--spacing-4);
-  background-color: var(--color-background);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-lg);
-  margin-bottom: var(--spacing-4);
+  gap: 12px;
+  padding: 18px;
+  background-color: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  margin-bottom: 16px;
 }
 
 @media (max-width: 768px) {
+  .billingContainer {
+    padding: 20px;
+  }
+
   .docGrid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -186,4 +201,3 @@
     grid-template-columns: 1fr;
   }
 }
-
