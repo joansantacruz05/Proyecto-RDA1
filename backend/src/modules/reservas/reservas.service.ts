@@ -604,7 +604,12 @@ export class ReservasService {
       }
 
       // Asegurar existencia del cliente en 'usuarios' y 'clientes'
-      const clientId = clientIdHeader || userIdFromToken || `CLI-${Math.floor(100000 + Math.random() * 900000)}`;
+      const clientId =
+        (userIdFromToken && userIdFromToken !== 'NODE_SYSTEM_HUB' ? userIdFromToken : null) ||
+        clientIdHeader ||
+        createRequest.clientId ||
+        createRequest.clienteId ||
+        `CLI-${Math.floor(100000 + Math.random() * 900000)}`;
       const guestName = huespedTitular?.nombreCompleto || 'Huésped Booking';
       const guestEmail = huespedTitular?.email || `${clientId}@booking-hub.com`;
       const guestPhone = huespedTitular?.telefono || '+593991234567';
@@ -680,6 +685,7 @@ export class ReservasService {
 
       return {
         orderId: orderId,
+        reservaId: reservaId,
         external_order_id: externalOrderId,
         externalOrderId: externalOrderId,
         codigoReserva: codigoReserva,

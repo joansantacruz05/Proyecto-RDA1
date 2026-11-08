@@ -127,7 +127,8 @@ async function bootstrap() {
     },
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    allowedHeaders: 'Content-Type,Accept,Authorization,Idempotency-Key,X-Correlation-ID,X-Device-Fingerprint',
+    allowedHeaders:
+      'Content-Type,Accept,Authorization,Idempotency-Key,X-Correlation-ID,X-Device-Fingerprint,X-Client-Id,x-client-id,X-Requested-With',
   });
 
   // ── Filtro Global ProblemDetails y Tubería de Validación ─────────────────

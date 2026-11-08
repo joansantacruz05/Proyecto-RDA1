@@ -351,7 +351,7 @@ export const Step1Billing: React.FC<Step1BillingProps> = ({
 
       onProceed({
         billingData: formData,
-        clientId: resolvedClientId || currentUser?.id || `CLI-${Date.now()}`,
+        clientId: currentUser?.id || resolvedClientId || `CLI-${Date.now()}`,
       });
     } catch (generalErr: unknown) {
       setErrorList([

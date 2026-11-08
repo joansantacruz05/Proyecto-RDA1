@@ -148,6 +148,7 @@ export interface MetodoPagoItem {
 
 export interface OrderCreateResponse {
   orderId?: string;
+  reservaId?: string;
   external_order_id?: string;
   externalOrderId?: string;
   codigoReserva?: string;

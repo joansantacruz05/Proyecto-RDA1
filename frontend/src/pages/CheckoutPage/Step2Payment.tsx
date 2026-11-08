@@ -88,11 +88,15 @@ export const Step2Payment: React.FC<Step2PaymentProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Idempotency Key generada con UUID v4 persistida para reintentos
+  // Idempotency Key generada con UUID v4 persistida para reintentos (RFC4122)
   const idempotencyKeyRef = useRef<string>(
-    typeof crypto !== 'undefined' && crypto.randomUUID
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
-      : `IDEMP-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0;
+          const v = c === 'x' ? r : (r & 0x3) | 0x8;
+          return v.toString(16);
+        }),
   );
 
   const brand = detectCardBrand(cardNumber);
@@ -186,7 +190,7 @@ export const Step2Payment: React.FC<Step2PaymentProps> = ({
     try {
       setIsProcessing(true);
 
-      // Paso 1: Enviar POST /orders/create con Idempotency-Key y X-Client-Id
+      // Paso 1: Enviar POST /orders/create con Idempotency-Key
       const orderPayload = {
         accommodation_id: hotelId,
         alojamientoId: hotelId,
@@ -197,6 +201,8 @@ export const Step2Payment: React.FC<Step2PaymentProps> = ({
         check_in_date: checkin,
         check_out_date: checkout,
         contact_email: billingData.email,
+        clientId: clientId || undefined,
+        clienteId: clientId || undefined,
         cantidadHabitaciones: rooms,
         rooms,
         guests: {
@@ -227,13 +233,16 @@ export const Step2Payment: React.FC<Step2PaymentProps> = ({
         {
           headers: {
             'Idempotency-Key': idempotencyKeyRef.current,
-            'X-Client-Id': clientId,
           },
         },
       );
 
       const targetReservaId =
-        orderResult?.orderId || orderResult?.external_order_id || orderResult?.externalOrderId || '';
+        orderResult?.reservaId ||
+        orderResult?.orderId ||
+        orderResult?.external_order_id ||
+        orderResult?.externalOrderId ||
+        '';
 
       // Paso 2: Procesar el pago con la factura electrónica SRI secuencial
       const pagoPayload = {
