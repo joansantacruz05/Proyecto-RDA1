@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, MapPin, Building, Sparkles } from 'lucide-react';
+import { ArrowLeft, MapPin, Building, Sparkles, AlertCircle } from 'lucide-react';
 import { HotelGallery } from '../../components/detail/HotelGallery/HotelGallery';
 import { StickyBookingCard } from '../../components/detail/StickyBookingCard/StickyBookingCard';
 import { RoomCard } from '../../components/detail/RoomCard/RoomCard';
@@ -88,6 +88,7 @@ export const HotelDetailPage: React.FC = () => {
   const defaultPrice = hotelRooms[0]?.precioPorNoche
     ? Number(hotelRooms[0].precioPorNoche)
     : 120;
+  const isHotelReserved = Boolean(hotel.estaReservado);
 
   return (
     <div className={`container ${styles.detailContainer}`}>
@@ -96,6 +97,31 @@ export const HotelDetailPage: React.FC = () => {
         <ArrowLeft size={16} />
         <span>Volver a todos los alojamientos</span>
       </Link>
+
+      {/* Alerta de Alojamiento Reservado */}
+      {isHotelReserved && (
+        <div
+          style={{
+            background: '#FEF2F2',
+            border: '1px solid #FCA5A5',
+            borderRadius: '12px',
+            padding: '14px 20px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            color: '#991B1B',
+          }}
+        >
+          <AlertCircle size={22} color="#DC2626" />
+          <div>
+            <strong style={{ fontSize: '15px' }}>Propiedad Reservada</strong>
+            <p style={{ margin: '2px 0 0', fontSize: '13px', color: '#B91C1C' }}>
+              Este alojamiento ya cuenta con una reserva activa confirmada y no se encuentra disponible para nuevas fechas inmediatas.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Cabecera del Alojamiento */}
       <div className={styles.headerSection}>
@@ -185,6 +211,7 @@ export const HotelDetailPage: React.FC = () => {
             initialRooms={roomsParam}
             selectedRoomId={selectedHabitacion?.id}
             selectedRoomCode={selectedHabitacion?.codigo}
+            isHotelReserved={isHotelReserved}
           />
         </aside>
       </div>

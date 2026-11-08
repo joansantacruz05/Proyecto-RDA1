@@ -23,6 +23,7 @@ export const RoomCard: React.FC<RoomCardProps> = ({
     : habitacion.precioPorNoche || 100;
 
   const stock = habitacion.cantidadDisponible ?? 3;
+  const isOutOfStock = stock <= 0 || habitacion.estado === 'Inactivo';
   const isLowStock = stock > 0 && stock <= 2;
   const code = habitacion.codigo || 'SUITE_DELUXE';
   const capacity = habitacion.capacidadAdultos ?? habitacion.capacidad ?? 2;
@@ -34,12 +35,17 @@ export const RoomCard: React.FC<RoomCardProps> = ({
           <h4 className={styles.roomTitle}>{habitacion.nombre}</h4>
           <span className={styles.roomCode}>{code}</span>
         </div>
-        {isLowStock && (
+        {isOutOfStock ? (
+          <div className={styles.lowStockWarning} style={{ color: '#DC2626', backgroundColor: '#FEF2F2' }}>
+            <AlertTriangle size={13} />
+            <span>Agotada / Reservada</span>
+          </div>
+        ) : isLowStock ? (
           <div className={styles.lowStockWarning}>
             <AlertTriangle size={13} />
             <span>¡Pocas disponibles! Quedan solo {stock}</span>
           </div>
-        )}
+        ) : null}
       </div>
 
       <div className={styles.detailsGrid}>
@@ -72,14 +78,20 @@ export const RoomCard: React.FC<RoomCardProps> = ({
 
         <div className={styles.priceCol}>
           <PriceDisplay amount={precio} period="/ noche" size="md" />
-          <Button
-            variant={isSelected ? 'gold' : 'primary'}
-            size="sm"
-            icon={isSelected ? <CheckCircle size={15} /> : undefined}
-            onClick={() => onSelect(habitacion)}
-          >
-            {isSelected ? 'Seleccionada' : 'Seleccionar habitación'}
-          </Button>
+          {isOutOfStock ? (
+            <Button variant="outline" size="sm" disabled style={{ opacity: 0.7, cursor: 'not-allowed' }}>
+              Agotada
+            </Button>
+          ) : (
+            <Button
+              variant={isSelected ? 'gold' : 'primary'}
+              size="sm"
+              icon={isSelected ? <CheckCircle size={15} /> : undefined}
+              onClick={() => onSelect(habitacion)}
+            >
+              {isSelected ? 'Seleccionada' : 'Seleccionar habitación'}
+            </Button>
+          )}
         </div>
       </div>
     </div>

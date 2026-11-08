@@ -18,6 +18,7 @@ interface StickyBookingCardProps {
   initialRooms?: number | undefined;
   selectedRoomId?: string | undefined;
   selectedRoomCode?: string | undefined;
+  isHotelReserved?: boolean | undefined;
 }
 
 export const StickyBookingCard: React.FC<StickyBookingCardProps> = ({
@@ -29,6 +30,7 @@ export const StickyBookingCard: React.FC<StickyBookingCardProps> = ({
   initialRooms = 1,
   selectedRoomId,
   selectedRoomCode,
+  isHotelReserved = false,
 }) => {
   const navigate = useNavigate();
 
@@ -67,9 +69,17 @@ export const StickyBookingCard: React.FC<StickyBookingCardProps> = ({
   const dOut = new Date(checkout);
   const noches = Math.max(1, Math.round((dOut.getTime() - dIn.getTime()) / (1000 * 60 * 60 * 24)));
 
-  const primeraOpcion = availabilityData?.opciones?.[0];
-  const estaDisponible = primeraOpcion ? primeraOpcion.estaDisponible : true;
-  const precioNoche = primeraOpcion ? parseFloat(String(primeraOpcion.precioNoche)) : defaultPrice;
+  const matchingOption = selectedRoomCode
+    ? availabilityData?.opciones?.find((o) => o.tipoHabitacionCodigo === selectedRoomCode)
+    : availabilityData?.opciones?.[0];
+
+  const estaDisponible =
+    !isHotelReserved &&
+    (availabilityData
+      ? Boolean(matchingOption && matchingOption.estaDisponible)
+      : true);
+
+  const precioNoche = matchingOption ? parseFloat(String(matchingOption.precioNoche)) : defaultPrice;
 
   // Cálculo tributario oficial Ecuador
   const subtotal = Math.round(precioNoche * noches * rooms * 100) / 100;
@@ -80,8 +90,8 @@ export const StickyBookingCard: React.FC<StickyBookingCardProps> = ({
   const handleCheckoutClick = () => {
     const roomParam = selectedRoomId
       ? `&roomId=${selectedRoomId}&roomCode=${selectedRoomCode || ''}`
-      : primeraOpcion?.tipoHabitacionCodigo
-      ? `&roomCode=${primeraOpcion.tipoHabitacionCodigo}`
+      : matchingOption?.tipoHabitacionCodigo
+      ? `&roomCode=${matchingOption.tipoHabitacionCodigo}`
       : '';
     const targetUrl = `/reservar?hotelId=${alojamientoId}&checkin=${checkin}&checkout=${checkout}&adults=${adults}&rooms=${rooms}&subtotal=${subtotal}&total=${total}${roomParam}`;
 
@@ -108,6 +118,8 @@ export const StickyBookingCard: React.FC<StickyBookingCardProps> = ({
         <Badge variant={estaDisponible ? 'gold' : 'error'}>
           {isCheckingAvail
             ? 'Verificando...'
+            : isHotelReserved
+            ? 'Reservado'
             : estaDisponible
             ? 'Disponible'
             : 'Agotado en fechas'}
@@ -223,12 +235,16 @@ export const StickyBookingCard: React.FC<StickyBookingCardProps> = ({
         variant="gold"
         size="lg"
         fullWidth
-        disabled={!estaDisponible || isCheckingAvail}
+        disabled={!estaDisponible || isCheckingAvail || isHotelReserved}
         loading={isCheckingAvail}
-        icon={<Sparkles size={18} />}
+        icon={estaDisponible ? <Sparkles size={18} /> : undefined}
         onClick={handleCheckoutClick}
       >
-        {estaDisponible ? 'Reservar ahora' : 'No disponible en fechas'}
+        {isHotelReserved
+          ? 'Propiedad reservada'
+          : estaDisponible
+          ? 'Reservar ahora'
+          : 'No disponible en fechas'}
       </Button>
 
       {/* Aviso de Garantía */}
@@ -240,7 +256,11 @@ export const StickyBookingCard: React.FC<StickyBookingCardProps> = ({
       {!estaDisponible && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-error)', fontSize: 'var(--font-size-xs)' }}>
           <AlertCircle size={14} />
-          <span>Sin habitaciones suficientes para las fechas seleccionadas.</span>
+          <span>
+            {isHotelReserved
+              ? 'Esta propiedad ya cuenta con una reserva activa confirmada.'
+              : 'Sin habitaciones suficientes para las fechas seleccionadas.'}
+          </span>
         </div>
       )}
     </div>

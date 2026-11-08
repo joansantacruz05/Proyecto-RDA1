@@ -127,9 +127,22 @@ export class AlojamientosService {
   }
 
   async findOneAdmin(id: string): Promise<any> {
-    const result = await this.alojamientoRepository.query('SELECT * FROM alojamientos WHERE id = $1', [id]);
+    const result = await this.alojamientoRepository.query(`
+      SELECT 
+        a.*,
+        EXISTS (
+          SELECT 1 FROM reservas r
+          JOIN espacios_rentables er ON r."espacioId" = er.id
+          WHERE er."alojamientoId" = a.id 
+            AND r."estadoId" IN ('EST-001', 'EST-002')
+            AND r."fechaSalida" >= CURRENT_DATE
+        ) as esta_reservado
+      FROM alojamientos a 
+      WHERE a.id = $1 OR a.codigo = $1 OR a.id = ('ALO-' || $1)
+    `, [id]);
     if (!result.length) throw new NotFoundException(`Alojamiento ${id} no encontrado`);
     const item = result[0];
+    item.estaReservado = Boolean(item.esta_reservado);
     item.habitaciones = await this.getRoomsAdmin(id);
     return item;
   }
@@ -842,7 +855,26 @@ export class AlojamientosService {
         (SELECT "capacidadAdultos" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "capacidadAdultos",
         (SELECT "capacidadNinos" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "capacidadNinos",
         (SELECT COUNT(*) FROM espacios_rentables er WHERE er."alojamientoId" = a.id)::int as habitaciones,
-        (SELECT COUNT(*) FROM espacios_rentables er WHERE er."alojamientoId" = a.id AND (er.estado = 'Activo' OR er.estado IS NULL))::int as habitaciones_disponibles,
+        (
+          SELECT COALESCE(SUM(
+            GREATEST(0, er."cantidadDisponible" - (
+              SELECT COUNT(*) 
+              FROM reservas r 
+              WHERE r."espacioId" = er.id 
+                AND r."estadoId" IN ('EST-001', 'EST-002') 
+                AND r."fechaSalida" >= CURRENT_DATE
+            ))
+          ), 0)::int
+          FROM espacios_rentables er 
+          WHERE er."alojamientoId" = a.id AND (er.estado = 'Activo' OR er.estado IS NULL)
+        ) as habitaciones_disponibles,
+        EXISTS (
+          SELECT 1 FROM reservas r
+          JOIN espacios_rentables er ON r."espacioId" = er.id
+          WHERE er."alojamientoId" = a.id 
+            AND r."estadoId" IN ('EST-001', 'EST-002')
+            AND r."fechaSalida" >= CURRENT_DATE
+        ) as esta_reservado,
         EXISTS (
           SELECT 1 FROM alojamientos_servicios aser 
           JOIN servicios s ON s.id = aser."servicioId"
@@ -868,7 +900,8 @@ export class AlojamientosService {
       precioPorNoche: Number(item.precioPorNoche || 85).toFixed(2),
       moneda: 'USD',
       permitePaquete: true,
-      habitacionesDisponibles: item.habitaciones_disponibles,
+      habitacionesDisponibles: Number(item.habitaciones_disponibles ?? 0),
+      estaReservado: Boolean(item.esta_reservado),
       tienePiscina: item.tienePiscina,
     }));
 
@@ -1034,6 +1067,17 @@ export class AlojamientosService {
       `UPDATE reservas SET "estadoId" = 'EST-002' WHERE id = $1`,
       [order.id],
     );
+
+    try {
+      const hisId = `HIS-${Math.floor(1000 + Math.random() * 9000)}`;
+      await this.alojamientoRepository.query(
+        `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
+         VALUES ($1, $2, $3, $3, $4)`,
+        [hisId, order.id, order.estadoId || 'EST-002', 'Check-in confirmado en recepción. Huésped en estancia.'],
+      );
+    } catch (e: any) {
+      console.warn(`[CHECKIN-HISTORIAL] Advertencia: ${e?.message}`);
+    }
 
     const externalOrderId = order.external_order_id || order.externalOrderId || order.ordenId || order.id;
     const clientId = body?.client_id || order.usuarioId || order.clienteIdentificacion || 'CLI-001';

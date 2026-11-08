@@ -85,6 +85,7 @@ interface ReservaAdminItem {
   clienteNombre?: string;
   clienteEmail?: string;
   numeroPersonas?: number;
+  checkinRealizado?: boolean;
 }
 
 interface UsuarioAdminItem {
@@ -383,6 +384,33 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
   };
 
   // --- MODAL: CHECK-IN / CONFIRMAR LLEGADA RECEPCIÓN ---
+  const CHECKED_IN_KEY = 'luxestays_checked_in_orders';
+  const [checkedInIds, setCheckedInIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(CHECKED_IN_KEY);
+      if (stored) {
+        return new Set(JSON.parse(stored));
+      }
+    } catch {
+      // Ignorar error de parsing
+    }
+    return new Set<string>();
+  });
+
+  const saveCheckedInId = (id: string, ordenId?: string) => {
+    setCheckedInIds((prev) => {
+      const updated = new Set(prev);
+      if (id) updated.add(id);
+      if (ordenId) updated.add(ordenId);
+      try {
+        localStorage.setItem(CHECKED_IN_KEY, JSON.stringify(Array.from(updated)));
+      } catch {
+        // Ignorar
+      }
+      return updated;
+    });
+  };
+
   const [checkinModalReserva, setCheckinModalReserva] = useState<ReservaAdminItem | null>(null);
   const [huespedesReales, setHuespedesReales] = useState(1);
   const [observacionesCheckin, setObservacionesCheckin] = useState('Huésped presentado en recepción');
@@ -399,6 +427,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
         external_order_id: checkinModalReserva.external_order_id || undefined,
       });
 
+      saveCheckedInId(checkinModalReserva.id, checkinModalReserva.ordenId);
       showToast(`Check-in confirmado para ${checkinModalReserva.clienteNombre || checkinModalReserva.usuarioNombre || 'huésped'}. Sincronizado vía outbox.`);
       setCheckinModalReserva(null);
       refetchReservas();
@@ -788,8 +817,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                   </tr>
                 ) : (
                   filteredReservas.map((res) => {
-                    const isCheckedIn = res.estadoNombre === 'Checked-In' || res.estadoNombre === 'Check-in Realizado';
-                    const isCancelled = res.estadoNombre === 'Cancelada';
+                    const isCheckedIn =
+                      checkedInIds.has(res.id) ||
+                      checkedInIds.has(res.ordenId) ||
+                      Boolean(res.checkinRealizado) ||
+                      res.estadoNombre === 'Checked-In' ||
+                      res.estadoNombre === 'Check-in Realizado' ||
+                      res.estadoNombre === 'Llegada Confirmada' ||
+                      res.estadoNombre?.toLowerCase().includes('llegada');
+                    const isCancelled = res.estadoNombre === 'Cancelada' || res.estadoId === 'EST-003';
                     return (
                       <tr key={res.id}>
                         <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#14406B' }}>
@@ -814,12 +850,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                         </td>
                         <td>
                           <Badge variant={isCheckedIn ? 'success' : isCancelled ? 'error' : 'gold'}>
-                            {res.estadoNombre || 'Confirmada'}
+                            {isCheckedIn ? 'Llegada Confirmada' : (res.estadoNombre || 'Confirmada')}
                           </Badge>
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           {isCheckedIn ? (
-                            <span style={{ fontSize: '13px', color: '#059669', fontWeight: 600 }}>Llegada confirmada</span>
+                            <span style={{ fontSize: '13px', color: '#059669', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                              <CheckCircle2 size={16} /> Llegada confirmada
+                            </span>
                           ) : isCancelled ? (
                             <span style={{ fontSize: '13px', color: '#94A3B8' }}>Cancelada</span>
                           ) : (

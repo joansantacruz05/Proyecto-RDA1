@@ -802,11 +802,32 @@ export class ReservasService {
       SELECT 
         r.id, r."ordenId", r."fechaEntrada", r."fechaSalida", r."precioTotal", 
         r.subtotal, r.iva, r."tasaMunicipal", r."numeroPersonas", r.calificacion,
-        r."estadoId", er.nombre as "estadoNombre",
+        r."estadoId",
+        CASE 
+          WHEN EXISTS(
+            SELECT 1 FROM booking.evento_outbox eo 
+            WHERE (eo.agregado_id = r."ordenId"::text OR eo.agregado_id = r.id::text)
+              AND eo.tipo = 'RESERVA_CHECKIN_CONFIRMADO'
+          ) OR EXISTS(
+            SELECT 1 FROM historial_reservas hr
+            WHERE hr."reservaId" = r.id AND hr.notas ILIKE '%check-in%'
+          ) THEN 'Llegada Confirmada'
+          ELSE er.nombre
+        END as "estadoNombre",
         e.nombre as "habitacionNombre",
         a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo",
         u."nombreCompleto" as "clienteNombre", u.email as "clienteEmail",
-        p.id as "pagoId", p.estado as "estadoPago", p.monto as "pagoMonto"
+        p.id as "pagoId", p.estado as "estadoPago", p.monto as "pagoMonto",
+        (
+          EXISTS(
+            SELECT 1 FROM booking.evento_outbox eo 
+            WHERE (eo.agregado_id = r."ordenId"::text OR eo.agregado_id = r.id::text)
+              AND eo.tipo = 'RESERVA_CHECKIN_CONFIRMADO'
+          ) OR EXISTS(
+            SELECT 1 FROM historial_reservas hr
+            WHERE hr."reservaId" = r.id AND hr.notas ILIKE '%check-in%'
+          )
+        ) as "checkinRealizado"
       FROM reservas r
       JOIN estados_reserva er ON r."estadoId" = er.id
       JOIN espacios_rentables e ON r."espacioId" = e.id

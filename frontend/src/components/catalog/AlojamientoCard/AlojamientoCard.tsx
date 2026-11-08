@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Sparkles, Waves } from 'lucide-react';
+import { MapPin, Sparkles, Waves, AlertCircle } from 'lucide-react';
 import { AlojamientoItem } from '../../../api/types';
 import { RatingStars } from '../../ui/RatingStars/RatingStars';
 import { PriceDisplay } from '../../ui/PriceDisplay/PriceDisplay';
@@ -24,6 +24,11 @@ export const AlojamientoCard: React.FC<AlojamientoCardProps> = ({
 }) => {
   const [imgSrc, setImgSrc] = useState(alojamiento.imagenUrl || FALLBACK_IMAGE);
 
+  const isReserved = Boolean(
+    alojamiento.estaReservado ||
+    (alojamiento.habitacionesDisponibles !== undefined && alojamiento.habitacionesDisponibles <= 0)
+  );
+
   const price = typeof alojamiento.precioPorNoche === 'string'
     ? parseFloat(alojamiento.precioPorNoche)
     : alojamiento.precioPorNoche || 95;
@@ -33,7 +38,7 @@ export const AlojamientoCard: React.FC<AlojamientoCardProps> = ({
     : `/alojamiento/${alojamiento.id}`;
 
   return (
-    <article className={styles.card}>
+    <article className={`${styles.card} ${isReserved ? styles.cardReserved : ''}`}>
       {/* Imagen & Badges Superpuestos */}
       <div className={styles.imageWrapper}>
         <img
@@ -44,15 +49,23 @@ export const AlojamientoCard: React.FC<AlojamientoCardProps> = ({
           loading="lazy"
         />
         <div className={styles.badgeOverlay}>
-          {alojamiento.tienePiscina && (
-            <Badge variant="info" icon={<Waves size={12} />}>
-              Piscina
+          {isReserved ? (
+            <Badge variant="error" icon={<AlertCircle size={12} />}>
+              Reservado
             </Badge>
-          )}
-          {alojamiento.permitePaquete && (
-            <Badge variant="gold" icon={<Sparkles size={12} />}>
-              Exclusivo Luxe
-            </Badge>
+          ) : (
+            <>
+              {alojamiento.tienePiscina && (
+                <Badge variant="info" icon={<Waves size={12} />}>
+                  Piscina
+                </Badge>
+              )}
+              {alojamiento.permitePaquete && (
+                <Badge variant="gold" icon={<Sparkles size={12} />}>
+                  Exclusivo Luxe
+                </Badge>
+              )}
+            </>
           )}
         </div>
         <div className={styles.cityBadge}>
@@ -88,11 +101,29 @@ export const AlojamientoCard: React.FC<AlojamientoCardProps> = ({
             <PriceDisplay amount={price} period="/ noche" size="md" />
           </div>
 
-          <Link to={detailUrl}>
-            <Button variant="primary" size="sm">
-              Ver disponibilidad
+          {isReserved ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled
+              style={{
+                opacity: 0.85,
+                cursor: 'not-allowed',
+                color: '#DC2626',
+                borderColor: '#FCA5A5',
+                backgroundColor: '#FEF2F2',
+                fontWeight: 600,
+              }}
+            >
+              Reservado
             </Button>
-          </Link>
+          ) : (
+            <Link to={detailUrl}>
+              <Button variant="primary" size="sm">
+                Ver disponibilidad
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
     </article>

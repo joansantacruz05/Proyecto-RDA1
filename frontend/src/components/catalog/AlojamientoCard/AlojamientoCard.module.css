@@ -134,3 +134,12 @@
   font-weight: 600;
 }
 
+.cardReserved {
+  border-color: #FECACA;
+}
+
+.cardReserved .image {
+  filter: saturate(0.85);
+}
+
+

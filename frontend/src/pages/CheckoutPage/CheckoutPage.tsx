@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Building2 } from 'lucide-react';
+import { ArrowLeft, Building2, AlertCircle } from 'lucide-react';
 import { api, getAuthToken } from '../../api/client';
 import {
   AlojamientoDetalle,
@@ -156,6 +156,27 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ currentUser }) => {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '32px' }}>
           <Skeleton width="100%" height={450} style={{ borderRadius: 'var(--radius-xl)' }} />
           <Skeleton width="100%" height={450} style={{ borderRadius: 'var(--radius-xl)' }} />
+        </div>
+      </div>
+    );
+  }
+
+  if (hotel?.estaReservado && step < 3) {
+    return (
+      <div className={`container ${styles.checkoutPage}`} style={{ textAlign: 'center', padding: '60px 20px', maxWidth: '600px', margin: '40px auto' }}>
+        <div style={{ background: '#FFFFFF', padding: '48px 36px', borderRadius: '24px', border: '1px solid #FCA5A5', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
+          <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
+            <AlertCircle size={32} color="#DC2626" />
+          </div>
+          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.75rem', marginBottom: '12px', color: '#0F1E33' }}>
+            Alojamiento Reservado
+          </h2>
+          <p style={{ color: '#64748B', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '32px' }}>
+            Lo sentimos: este alojamiento ({hotel.nombre}) ya cuenta con una reserva activa confirmada y no se encuentra disponible para nuevas reservas.
+          </p>
+          <Button variant="gold" size="lg" onClick={() => navigate('/')}>
+            Explorar otros alojamientos
+          </Button>
         </div>
       </div>
     );

@@ -50,6 +50,7 @@ export interface AlojamientoItem {
   amenities?: string[];
   activo?: boolean;
   habitacionesDisponibles?: number;
+  estaReservado?: boolean;
   tienePiscina?: boolean;
   permitePaquete?: boolean;
 }
@@ -82,6 +83,7 @@ export interface AlojamientoDetalle {
   direccion?: string;
   estrellas?: number;
   estado?: string;
+  estaReservado?: boolean;
   habitaciones?: HabitacionDetalle[];
 }
 
