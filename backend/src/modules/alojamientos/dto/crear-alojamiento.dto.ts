@@ -63,4 +63,8 @@ export class CrearAlojamientoDto {
   @IsNumber()
   @IsOptional()
   habitaciones_disponibles?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  liberarReservas?: boolean;
 }

@@ -83,7 +83,12 @@ export const Step3Confirmation: React.FC<Step3ConfirmationProps> = ({
       codigoReserva: reservationCode,
       hotelNombre: hotelName,
       direccion: hotel?.direccion || undefined,
-      ciudad: hotel?.ciudad || hotel?.destino || undefined,
+      ciudad: typeof hotel?.ciudad === 'string'
+        ? hotel.ciudad
+        : (hotel?.ciudad as { nombre?: string } | undefined)?.nombre ||
+          (typeof hotel?.destino === 'string'
+            ? hotel.destino
+            : (hotel?.destino as { nombre?: string } | undefined)?.nombre) || undefined,
       checkinFecha: checkin,
       checkoutFecha: checkout,
       huespedNombre: guestName,

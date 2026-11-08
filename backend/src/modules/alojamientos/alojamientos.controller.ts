@@ -509,7 +509,9 @@ export class AlojamientosController {
 
   @Post([
     'orders/:orderId/checkout',
+    'orders/:orderId/check-out',
     'alojamientos/orders/:orderId/checkout',
+    'alojamientos/orders/:orderId/check-out',
     'alojamientos/reservas/:orderId/checkout',
     'alojamientos/reservations/:orderId/checkout',
   ])

@@ -163,6 +163,24 @@ export class AlojamientosService {
         'UPDATE espacios_rentables SET estado = $1 WHERE "alojamientoId" = $2',
         ['Inactivo', id]
       );
+    } else if (dto.estado === 'Activo') {
+      await this.alojamientoRepository.query(
+        'UPDATE espacios_rentables SET estado = $1 WHERE "alojamientoId" = $2',
+        ['Activo', id]
+      );
+    }
+
+    if (dto.liberarReservas) {
+      await this.alojamientoRepository.query(
+        `UPDATE reservas r
+         SET "fechaSalida" = LEAST("fechaSalida", CURRENT_DATE - INTERVAL '1 day')
+         FROM espacios_rentables er
+         WHERE r."espacioId" = er.id 
+           AND er."alojamientoId" = $1
+           AND r."estadoId" IN ('EST-001', 'EST-002')
+           AND r."fechaSalida" >= CURRENT_DATE`,
+        [id],
+      );
     }
     
     if (dto.precioPorNoche !== undefined || dto.capacidadAdultos !== undefined || dto.capacidadNinos !== undefined || dto.habitaciones !== undefined) {
@@ -1170,6 +1188,24 @@ export class AlojamientosService {
   async checkOutOrder(orderId: string, body?: any): Promise<any> {
     const order = await this.reservasService.getOrder(orderId);
 
+    await this.alojamientoRepository.query(
+      `UPDATE reservas 
+       SET "fechaSalida" = LEAST("fechaSalida", CURRENT_DATE - INTERVAL '1 day')
+       WHERE id = $1 OR "ordenId"::text = $1`,
+      [order.id],
+    );
+
+    try {
+      const hisId = `HIS-${Math.floor(1000 + Math.random() * 9000)}`;
+      await this.alojamientoRepository.query(
+        `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
+         VALUES ($1, $2, $3, $3, $4)`,
+        [hisId, order.id, order.estadoId || 'EST-002', 'Check-out completado. Habitación y alojamiento liberados para nuevas reservas.'],
+      );
+    } catch (e: any) {
+      console.warn(`[CHECKOUT-HISTORIAL] Advertencia: ${e?.message}`);
+    }
+
     return {
       orderId: order.ordenId || order.id,
       reservaId: order.ordenId || order.id,
@@ -1178,7 +1214,7 @@ export class AlojamientosService {
       checkOutHora: new Date().toISOString(),
       consumosAdicionales: '0.00',
       claveDigitalRevocada: true,
-      mensaje: 'Check-out completado. ¡Gracias por hospedarse en LuxeStays!',
+      mensaje: 'Check-out completado con éxito. ¡El alojamiento ha sido liberado y vuelve a estar en línea!',
     };
   }
 

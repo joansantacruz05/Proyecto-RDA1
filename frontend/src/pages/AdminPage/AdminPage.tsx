@@ -215,6 +215,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     tienePiscina: false,
     permitePaquete: true,
     estado: 'Activo',
+    liberarReservas: false,
   });
 
   const handleOpenCreateAlojamiento = () => {
@@ -231,6 +232,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       tienePiscina: false,
       permitePaquete: true,
       estado: 'Activo',
+      liberarReservas: false,
     });
     setAlojamientoModalOpen(true);
   };
@@ -249,8 +251,44 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       tienePiscina: Boolean(aloj.tienePiscina),
       permitePaquete: true,
       estado: aloj.estado || 'Activo',
+      liberarReservas: false,
     });
     setAlojamientoModalOpen(true);
+  };
+
+  const handleToggleEstadoAlojamiento = async (aloj: AlojamientoAdmin) => {
+    const nuevoEstado = aloj.estado === 'Activo' ? 'Inactivo' : 'Activo';
+    try {
+      await api.patch(`/admin/alojamientos/${aloj.id}`, {
+        estado: nuevoEstado,
+        liberarReservas: nuevoEstado === 'Activo',
+      });
+      showToast(
+        nuevoEstado === 'Activo'
+          ? `"${aloj.nombre}" ahora está EN LÍNEA y visible en el catálogo principal.`
+          : `"${aloj.nombre}" ha sido pausado y ocultado del catálogo.`
+      );
+      refetchAlojamientos();
+      queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
+      queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Error al cambiar estado del alojamiento', 'error');
+    }
+  };
+
+  const handleLiberarAlojamiento = async (aloj: AlojamientoAdmin) => {
+    try {
+      await api.patch(`/admin/alojamientos/${aloj.id}`, {
+        estado: 'Activo',
+        liberarReservas: true,
+      });
+      showToast(`"${aloj.nombre}" ha sido inspeccionado y liberado. Vuelve a estar en línea y disponible para reservas en la página principal.`);
+      refetchAlojamientos();
+      queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
+      queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Error al liberar alojamiento', 'error');
+    }
   };
 
   const handleSaveAlojamiento = async (e: React.FormEvent) => {
@@ -435,6 +473,43 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       showToast(err instanceof Error ? err.message : 'Error al registrar check-in', 'error');
     } finally {
       setIsSubmittingCheckin(false);
+    }
+  };
+
+  const [checkedOutIds, setCheckedOutIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('luxestays_checked_out_orders');
+      if (stored) return new Set(JSON.parse(stored));
+    } catch {
+      // Ignorar
+    }
+    return new Set<string>();
+  });
+
+  const handleCheckoutReserva = async (res: ReservaAdminItem) => {
+    try {
+      const orderIdentifier = res.ordenId || res.id;
+      await api.post(`/orders/${orderIdentifier}/check-out`, {});
+
+      setCheckedOutIds((prev) => {
+        const next = new Set(prev);
+        next.add(res.id);
+        if (res.ordenId) next.add(res.ordenId);
+        try {
+          localStorage.setItem('luxestays_checked_out_orders', JSON.stringify(Array.from(next)));
+        } catch {
+          // Ignorar
+        }
+        return next;
+      });
+
+      showToast(`Check-out completado para ${res.clienteNombre || res.usuarioNombre || 'huésped'}. La propiedad ha sido liberada y ya está disponible en la página principal.`);
+      refetchReservas();
+      refetchAlojamientos();
+      queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
+      queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Error al registrar check-out', 'error');
     }
   };
 
@@ -707,7 +782,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                       <td>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                           <MapPin size={13} color="#C9A227" />
-                          {aloj.destino || 'Ecuador'}
+                          {typeof aloj.destino === 'string'
+                            ? aloj.destino
+                            : (aloj.destino as { nombre?: string } | undefined)?.nombre || 'Ecuador'}
                         </span>
                       </td>
                       <td style={{ fontWeight: 700, color: '#14406B' }}>
@@ -727,10 +804,40 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                         )}
                       </td>
                       <td>
-                        <Badge variant="success">{aloj.estado || 'Activo'}</Badge>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleEstadoAlojamiento(aloj)}
+                          title="Haga clic para alternar entre En Línea y Pausado"
+                          style={{
+                            border: 'none',
+                            background: 'transparent',
+                            cursor: 'pointer',
+                            padding: 0,
+                          }}
+                        >
+                          <Badge variant={aloj.estado === 'Activo' ? 'success' : 'error'}>
+                            {aloj.estado === 'Activo' ? '🟢 En Línea' : '🔴 Pausado'}
+                          </Badge>
+                        </button>
                       </td>
                       <td>
                         <div className={styles.tableActions}>
+                          <Button
+                            variant={aloj.estado === 'Activo' ? 'ghost' : 'gold'}
+                            size="sm"
+                            onClick={() => handleToggleEstadoAlojamiento(aloj)}
+                            title={aloj.estado === 'Activo' ? 'Pausar visibilidad en la página principal' : 'Poner en línea para el catálogo'}
+                          >
+                            {aloj.estado === 'Activo' ? 'Pausar' : 'Poner en Línea'}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleLiberarAlojamiento(aloj)}
+                            title="Liberar reservas activas y habilitar cupos en la página principal"
+                          >
+                            Liberar Cupo
+                          </Button>
                           <Button
                             variant="secondary"
                             size="sm"
@@ -817,14 +924,21 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                   </tr>
                 ) : (
                   filteredReservas.map((res) => {
+                    const isCheckedOut =
+                      checkedOutIds.has(res.id) ||
+                      checkedOutIds.has(res.ordenId) ||
+                      res.estadoNombre === 'Checked-Out' ||
+                      res.estadoNombre === 'Check-out Realizado' ||
+                      res.estadoNombre === 'Estancia Finalizada';
                     const isCheckedIn =
-                      checkedInIds.has(res.id) ||
-                      checkedInIds.has(res.ordenId) ||
-                      Boolean(res.checkinRealizado) ||
-                      res.estadoNombre === 'Checked-In' ||
-                      res.estadoNombre === 'Check-in Realizado' ||
-                      res.estadoNombre === 'Llegada Confirmada' ||
-                      res.estadoNombre?.toLowerCase().includes('llegada');
+                      !isCheckedOut &&
+                      (checkedInIds.has(res.id) ||
+                        checkedInIds.has(res.ordenId) ||
+                        Boolean(res.checkinRealizado) ||
+                        res.estadoNombre === 'Checked-In' ||
+                        res.estadoNombre === 'Check-in Realizado' ||
+                        res.estadoNombre === 'Llegada Confirmada' ||
+                        res.estadoNombre?.toLowerCase().includes('llegada'));
                     const isCancelled = res.estadoNombre === 'Cancelada' || res.estadoId === 'EST-003';
                     return (
                       <tr key={res.id}>
@@ -849,15 +963,29 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                           {formatUSD(Number(res.precioTotal) || 0)}
                         </td>
                         <td>
-                          <Badge variant={isCheckedIn ? 'success' : isCancelled ? 'error' : 'gold'}>
-                            {isCheckedIn ? 'Llegada Confirmada' : (res.estadoNombre || 'Confirmada')}
+                          <Badge variant={isCheckedOut ? 'info' : isCheckedIn ? 'success' : isCancelled ? 'error' : 'gold'}>
+                            {isCheckedOut ? 'Check-out / Liberada' : isCheckedIn ? 'Llegada Confirmada' : (res.estadoNombre || 'Confirmada')}
                           </Badge>
                         </td>
                         <td style={{ textAlign: 'right' }}>
-                          {isCheckedIn ? (
-                            <span style={{ fontSize: '13px', color: '#059669', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                              <CheckCircle2 size={16} /> Llegada confirmada
+                          {isCheckedOut ? (
+                            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
+                              Liberada en Catálogo
                             </span>
+                          ) : isCheckedIn ? (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '12px', color: '#059669', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <CheckCircle2 size={14} /> En estancia
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleCheckoutReserva(res)}
+                                title="Registrar salida de huésped y liberar la propiedad para el catálogo"
+                              >
+                                Check-out y Liberar
+                              </Button>
+                            </div>
                           ) : isCancelled ? (
                             <span style={{ fontSize: '13px', color: '#94A3B8' }}>Cancelada</span>
                           ) : (
@@ -1174,10 +1302,40 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 value={alojamientoForm.estado}
                 onChange={(e) => setAlojamientoForm({ ...alojamientoForm, estado: e.target.value })}
               >
-                <option value="Activo">Activo (Visible en Catálogo)</option>
-                <option value="Inactivo">Inactivo (Pausado)</option>
+                <option value="Activo">🟢 En Línea (Visible en Catálogo)</option>
+                <option value="Inactivo">🔴 Pausado (Oculto)</option>
+                <option value="En Mantenimiento">🟡 En Revisión / Mantenimiento</option>
               </select>
             </div>
+
+            {editingAlojamientoId && (
+              <div
+                className={styles.fullSpan}
+                style={{
+                  background: '#F0FDF4',
+                  border: '1px solid #BBF7D0',
+                  padding: '14px 18px',
+                  borderRadius: '10px',
+                  marginTop: '4px',
+                }}
+              >
+                <div className={styles.checkboxRow} style={{ marginBottom: 0 }}>
+                  <input
+                    type="checkbox"
+                    id="liberarReservasCheck"
+                    checked={alojamientoForm.liberarReservas}
+                    onChange={(e) => setAlojamientoForm({ ...alojamientoForm, liberarReservas: e.target.checked })}
+                    style={{ width: '18px', height: '18px' }}
+                  />
+                  <label htmlFor="liberarReservasCheck" style={{ fontSize: '13.5px', fontWeight: 600, color: '#166534', cursor: 'pointer' }}>
+                    Liberar reservas activas y poner disponible inmediatamente para el público
+                  </label>
+                </div>
+                <p style={{ margin: '4px 0 0 26px', fontSize: '12px', color: '#15803D' }}>
+                  Marca esta casilla si ya terminaste de chequear el alojamiento tras el check-out y deseas que vuelva a estar libre y disponible para reservas en la página principal.
+                </p>
+              </div>
+            )}
 
             <div className={styles.fullSpan}>
               <label className={styles.formLabel}>URL de Fotografía Principal</label>
