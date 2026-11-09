@@ -14,6 +14,7 @@ import {
   HttpCode,
 } from '@nestjs/common';
 import { ReservasService } from './reservas.service';
+import { Public } from '../../common/decorators/public.decorator';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { ApiTags, ApiOperation, ApiHeader, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -48,21 +49,38 @@ export class ReservasController {
     return this.reservasService.createOrder(createOrderDto, userId, clientIdHeader, req, res);
   }
 
+  /**
+   * GET /reservas                         → fechas ocupadas (público, sin datos personales) para el catálogo.
+   * GET /reservas?idempotency_key=<uuid>  → SOLO la orden de esa llave (requiere autenticación):
+   *   permite a Booking recuperarse de un timeout sin crear duplicados.
+   */
+  @Public()
   @Get()
-  @ApiOperation({ summary: 'Obtener reservas o recuperar orden por idempotency_key' })
-  async findAll(
-    @Query('idempotency_key') idempotencyKey?: string,
-    @Req() req?: any,
-  ) {
-    if (idempotencyKey) {
-      return this.reservasService.recoverOrderByIdempotencyKey(idempotencyKey);
-    }
-    const userRole = (req?.user?.rol || req?.user?.role || '').toLowerCase();
-    const isAdmin = userRole.includes('admin') || req?.user?.id === 'NODE_SYSTEM_HUB';
-    if (!isAdmin) {
+  @ApiOperation({ summary: 'Reservas activas (público) o recuperación de orden por idempotency_key' })
+  async findAll(@Query('idempotency_key') idempotencyKey?: string, @Req() req?: any) {
+    if (idempotencyKey === undefined) {
       return this.reservasService.findPublicActiveReservations();
     }
-    return this.reservasService.findAll();
+
+    const user = req?.user;
+    if (!user) {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/unauthorized',
+          title: 'Unauthorized',
+          status: HttpStatus.UNAUTHORIZED,
+          code: 'UNAUTHORIZED',
+          detail: 'Para recuperar una orden por idempotency_key debe autenticarse (Bearer JWT o X-API-Key).',
+        },
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+    const role = String(user.rol || user.role || '').toLowerCase();
+    const privileged = role.includes('admin') || user.id === 'NODE_SYSTEM_HUB';
+    return this.reservasService.recoverOrderByIdempotencyKey(idempotencyKey, {
+      privileged,
+      callerIds: [user.sub, user.id],
+    });
   }
 
   @Get('admin/todas')

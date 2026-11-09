@@ -63,24 +63,17 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       return true;
     }
 
-    // Si viene X-Client-Id o es una recuperación por idempotency_key, permitir autenticación de servicio
-    const clientIdHeader = request.headers['x-client-id'] || request.headers['X-Client-Id'];
-    if (clientIdHeader || request.query?.idempotency_key) {
-      const cid = String(clientIdHeader || 'ANONYMOUS_RECOVERY');
-      request.user = {
-        id: cid,
-        sub: cid,
-        nombre: 'Booking External Client',
-        correo: `${cid}@booking-hub.com`,
-        rol: 'ADMIN',
-        scope: 'alojamientos:read alojamientos:book alojamientos:cancel alojamientos:webhooks',
-        scopes: ['alojamientos:read', 'alojamientos:book', 'alojamientos:cancel', 'alojamientos:webhooks'],
-      };
-      return true;
-    }
-
-    // Si la ruta está decorada con @Public() y no mandó X-API-Key, permitir paso libre
+    // Rutas @Public(): acceso libre, pero si el cliente manda un Bearer válido se identifica
+    // (autenticación opcional). Un Bearer inválido NO bloquea la ruta pública; simplemente
+    // se trata como anónimo. Nunca se concede identidad por cabeceras no verificadas.
     if (isPublic) {
+      if (request.headers.authorization) {
+        try {
+          await super.canActivate(context);
+        } catch {
+          request.user = undefined;
+        }
+      }
       return true;
     }
 

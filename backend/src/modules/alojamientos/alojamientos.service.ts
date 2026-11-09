@@ -12,6 +12,7 @@ import { ProblemDetailsException } from '../../common/exceptions/problem-details
 import { validarIdentificacion } from '../../common/utils/ecuador-validators';
 import { HttpStatus, BadRequestException } from '@nestjs/common';
 import * as crypto from 'crypto';
+import { catalogCache } from '../../common/utils/ttl-cache';
 
 @Injectable()
 export class AlojamientosService {
@@ -148,6 +149,7 @@ export class AlojamientosService {
   }
 
   async updateAdmin(id: string, dto: any): Promise<any> {
+    catalogCache.invalidate();
     let ubicacionId: string | undefined = undefined;
     if (dto.ubicacionId || dto.destino) {
       ubicacionId = await this.resolveUbicacion(dto.ubicacionId, dto.destino);
@@ -203,6 +205,7 @@ export class AlojamientosService {
   }
 
   async removeAdmin(id: string): Promise<void> {
+    catalogCache.invalidate();
     await this.alojamientoRepository.query('DELETE FROM alojamientos WHERE id = $1', [id]);
   }
 
@@ -224,6 +227,7 @@ export class AlojamientosService {
   }
 
   async updateRoomAdmin(habId: string, dto: any): Promise<any> {
+    catalogCache.invalidate();
     await this.alojamientoRepository.query(
         'UPDATE espacios_rentables SET nombre = COALESCE($1, nombre), "precioPorNoche" = COALESCE($2, "precioPorNoche"), "capacidadAdultos" = COALESCE($3, "capacidadAdultos"), "capacidadNinos" = COALESCE($4, "capacidadNinos"), "cantidadDisponible" = COALESCE($5, "cantidadDisponible"), "imagenesUrls" = COALESCE($6, "imagenesUrls"), estado = COALESCE($7, estado) WHERE id = $8',
         [dto.nombre, dto.precioPorNoche, dto.capacidadAdultos, dto.capacidadNinos, dto.cantidadDisponible, dto.imagenesUrls, dto.estado, habId]
@@ -363,24 +367,25 @@ export class AlojamientosService {
     query += ` ORDER BY e.nombre`;
     const spaces = await this.alojamientoRepository.query(query, params);
 
+    // Una sola consulta con la ocupación por habitación (evita N+1 viajes a la BD)
+    const ocupacionRows = spaces.length
+      ? await this.alojamientoRepository.query(
+          `SELECT r."espacioId" AS id, COUNT(*)::int AS ocupadas
+           FROM reservas r
+           WHERE r."espacioId" = ANY($1)
+             AND r."estadoId" IN ('EST-001', 'EST-002')
+             AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2
+           GROUP BY r."espacioId"`,
+          [spaces.map((s: any) => s.id), checkin, checkout],
+        )
+      : [];
+    const ocupadasPorEspacio = new Map<string, number>(
+      ocupacionRows.map((o: any) => [String(o.id), Number(o.ocupadas)] as [string, number]),
+    );
+
     const opciones: any[] = [];
     for (const sp of spaces) {
-      const availCheck = await this.alojamientoRepository.query(
-        `SELECT (
-           e."cantidadDisponible" - (
-             SELECT COUNT(*) 
-             FROM reservas r 
-             WHERE r."espacioId" = e.id 
-               AND r."estadoId" IN ('EST-001', 'EST-002') 
-               AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2
-           )
-         ) as disponibles
-         FROM espacios_rentables e
-         WHERE e.id = $1`,
-        [sp.id, checkin, checkout],
-      );
-
-      const disponibles = Math.max(0, Number(availCheck[0]?.disponibles ?? sp.cantidadDisponible));
+      const disponibles = Math.max(0, Number(sp.cantidadDisponible ?? 0) - (ocupadasPorEspacio.get(String(sp.id)) || 0));
       const precioNocheNum = Number(sp.precioPorNoche || 0);
       const precioTotalNum = Math.round(precioNocheNum * noches * rooms * 100) / 100;
 
@@ -595,19 +600,27 @@ export class AlojamientosService {
 
     const items = await this.alojamientoRepository.query(query, params);
 
+    const itemIds = items.map((i: any) => i.id);
+    const [allRooms, allFacilities] = itemIds.length
+      ? await Promise.all([
+          this.alojamientoRepository.query(
+            `SELECT * FROM espacios_rentables WHERE "alojamientoId" = ANY($1)`,
+            [itemIds],
+          ),
+          this.alojamientoRepository.query(
+            `SELECT aser."alojamientoId" AS "alojamientoId", s.id, s.nombre, s.icono
+             FROM alojamientos_servicios aser
+             JOIN servicios s ON s.id = aser."servicioId"
+             WHERE aser."alojamientoId" = ANY($1)`,
+            [itemIds],
+          ),
+        ])
+      : [[], []];
+
     const detailed = await Promise.all(
       items.map(async (item: any) => {
-        const rooms = await this.alojamientoRepository.query(
-          `SELECT * FROM espacios_rentables WHERE "alojamientoId" = $1`,
-          [item.id],
-        );
-        const facilities = await this.alojamientoRepository.query(
-          `SELECT s.id, s.nombre, s.icono 
-           FROM alojamientos_servicios aser
-           JOIN servicios s ON s.id = aser."servicioId"
-           WHERE aser."alojamientoId" = $1`,
-          [item.id],
-        );
+        const rooms = allRooms.filter((r: any) => r.alojamientoId === item.id);
+        const facilities = allFacilities.filter((f: any) => f.alojamientoId === item.id);
         return {
           id: item.id,
           name: item.nombre,
@@ -841,6 +854,14 @@ export class AlojamientosService {
   ): Promise<any> {
     const p = Math.max(1, page);
     const l = Math.min(50, Math.max(1, limit));
+    const cacheKey = JSON.stringify([p, l, ciudad || '', estrellas ?? '', minPrecio ?? '', maxPrecio ?? '']);
+
+    // Caché de 15 s + single-flight + "stale-on-error": el catálogo responde en milisegundos y,
+    // si la BD (otra región) se demora o falla, se sirve la última copia en vez de dar timeout.
+    return catalogCache.getOrLoad(cacheKey, () => this.queryAlojamientosCatalog(p, l, ciudad));
+  }
+
+  private async queryAlojamientosCatalog(p: number, l: number, ciudad?: string): Promise<any> {
     const offset = (p - 1) * l;
 
     let whereClause = `WHERE (a.estado = 'Activo' OR a.estado IS NULL)`;
@@ -851,62 +872,70 @@ export class AlojamientosService {
       whereClause += ` AND c.nombre ILIKE $${params.length}`;
     }
 
-    const countRes = await this.alojamientoRepository.query(
-      `SELECT COUNT(*) as total
-       FROM alojamientos a
-       LEFT JOIN ubicaciones u ON a."ubicacionId" = u.id
-       LEFT JOIN ciudades c ON u."ciudadId" = c.id
-       ${whereClause}`,
-      params,
-    );
-    const totalResults = parseInt(countRes[0]?.total || '0', 10);
-
+    // Un único viaje a la BD: página + total (COUNT OVER) + agregados por habitación pre-calculados
+    // para los ≤50 alojamientos de la página (sin subconsultas correlacionadas por fila).
     const query = `
-      SELECT 
-        a.id, 
-        a.nombre, 
-        a.descripcion,
-        a."imagenUrl",
-        a.estado,
-        c.nombre as destino,
-        (SELECT "precioPorNoche" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "precioPorNoche",
-        (SELECT "capacidadAdultos" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "capacidadAdultos",
-        (SELECT "capacidadNinos" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "capacidadNinos",
-        (SELECT COUNT(*) FROM espacios_rentables er WHERE er."alojamientoId" = a.id)::int as habitaciones,
-        (
-          SELECT COALESCE(SUM(
-            GREATEST(0, er."cantidadDisponible" - (
-              SELECT COUNT(*) 
-              FROM reservas r 
-              WHERE r."espacioId" = er.id 
-                AND r."estadoId" IN ('EST-001', 'EST-002') 
-                AND r."fechaSalida" >= CURRENT_DATE
-            ))
-          ), 0)::int
-          FROM espacios_rentables er 
-          WHERE er."alojamientoId" = a.id AND (er.estado = 'Activo' OR er.estado IS NULL)
-        ) as habitaciones_disponibles,
-        EXISTS (
-          SELECT 1 FROM reservas r
-          JOIN espacios_rentables er ON r."espacioId" = er.id
-          WHERE er."alojamientoId" = a.id 
-            AND r."estadoId" IN ('EST-001', 'EST-002')
-            AND r."fechaSalida" >= CURRENT_DATE
-        ) as esta_reservado,
-        EXISTS (
-          SELECT 1 FROM alojamientos_servicios aser 
-          JOIN servicios s ON s.id = aser."servicioId"
-          WHERE aser."alojamientoId" = a.id AND s.nombre = 'Piscina'
-        ) as "tienePiscina"
-      FROM alojamientos a
-      LEFT JOIN ubicaciones u ON a."ubicacionId" = u.id
-      LEFT JOIN ciudades c ON u."ciudadId" = c.id
-      ${whereClause}
-      ORDER BY a.id ASC
-      LIMIT ${l} OFFSET ${offset}
+      WITH page AS (
+        SELECT a.id, a.nombre, a.descripcion, a."imagenUrl", a.estado, c.nombre AS destino,
+               COUNT(*) OVER()::int AS total_results
+        FROM alojamientos a
+        LEFT JOIN ubicaciones u ON a."ubicacionId" = u.id
+        LEFT JOIN ciudades c ON u."ciudadId" = c.id
+        ${whereClause}
+        ORDER BY a.id ASC
+        LIMIT ${l} OFFSET ${offset}
+      ),
+      rooms AS (
+        SELECT er.id, er."alojamientoId", er."precioPorNoche", er."capacidadAdultos", er."capacidadNinos",
+               er.estado, er."cantidadDisponible",
+               (
+                 SELECT COUNT(*) FROM reservas r
+                 WHERE r."espacioId" = er.id
+                   AND r."estadoId" IN ('EST-001', 'EST-002')
+                   AND r."fechaSalida" >= CURRENT_DATE
+               )::int AS ocupadas
+        FROM espacios_rentables er
+        WHERE er."alojamientoId" IN (SELECT id FROM page)
+      ),
+      rooms_agg AS (
+        SELECT "alojamientoId" AS aid,
+               (array_agg("precioPorNoche" ORDER BY id))[1] AS "precioPorNoche",
+               COUNT(*)::int AS habitaciones,
+               COALESCE(SUM(CASE WHEN estado = 'Activo' OR estado IS NULL
+                                 THEN GREATEST(0, "cantidadDisponible" - ocupadas) ELSE 0 END), 0)::int AS habitaciones_disponibles,
+               BOOL_OR(ocupadas > 0) AS esta_reservado
+        FROM rooms
+        GROUP BY "alojamientoId"
+      )
+      SELECT pg.id, pg.nombre, pg.descripcion, pg."imagenUrl", pg.estado, pg.destino, pg.total_results,
+             ra."precioPorNoche", COALESCE(ra.habitaciones, 0) AS habitaciones,
+             COALESCE(ra.habitaciones_disponibles, 0) AS habitaciones_disponibles,
+             COALESCE(ra.esta_reservado, false) AS esta_reservado,
+             EXISTS (
+               SELECT 1 FROM alojamientos_servicios aser
+               JOIN servicios s ON s.id = aser."servicioId"
+               WHERE aser."alojamientoId" = pg.id AND s.nombre = 'Piscina'
+             ) AS "tienePiscina"
+      FROM page pg
+      LEFT JOIN rooms_agg ra ON ra.aid = pg.id
+      ORDER BY pg.id ASC
     `;
 
     const rows = await this.alojamientoRepository.query(query, params);
+
+    let totalResults = rows.length > 0 ? Number(rows[0].total_results) : 0;
+    if (rows.length === 0 && p > 1) {
+      // Página fuera de rango: recuperar el total real para metadata correcta
+      const countRes = await this.alojamientoRepository.query(
+        `SELECT COUNT(*)::int AS total
+         FROM alojamientos a
+         LEFT JOIN ubicaciones u ON a."ubicacionId" = u.id
+         LEFT JOIN ciudades c ON u."ciudadId" = c.id
+         ${whereClause}`,
+        params,
+      );
+      totalResults = Number(countRes[0]?.total || 0);
+    }
 
     const data = rows.map((item: any) => ({
       id: item.id,
@@ -1066,188 +1095,9 @@ export class AlojamientosService {
   }
 
 
+  /** Única implementación del check-in: ReservasService (validaciones + registro local + push a Booking). */
   async checkInOrder(orderId: string, body?: any): Promise<any> {
-    const order = await this.reservasService.getOrder(orderId);
-
-    // 1. Estado cancelado -> 409 INVALID_STATE_TRANSITION
-    if (order.estadoId === 'EST-003' || order.estado === 'CANCELLED') {
-      throw new ProblemDetailsException(
-        {
-          type: 'https://api.booking-hub.com/errors/invalid-state-transition',
-          title: 'Invalid State Transition',
-          status: HttpStatus.CONFLICT,
-          code: 'INVALID_STATE_TRANSITION',
-          detail: 'No se puede realizar check-in en una reserva cancelada.',
-        },
-        HttpStatus.CONFLICT,
-      );
-    }
-
-    // 2. Ya tiene check-in realizado -> 409 INVALID_STATE_TRANSITION (Segundo check-in)
-    if (
-      order.checkinRealizado === true ||
-      order.estado === 'CHECKED_IN' ||
-      order.estadoNombre === 'Llegada Confirmada' ||
-      order.estado === 'CONFIRMADO_ASISTIDO'
-    ) {
-      throw new ProblemDetailsException(
-        {
-          type: 'https://api.booking-hub.com/errors/invalid-state-transition',
-          title: 'Invalid State Transition',
-          status: HttpStatus.CONFLICT,
-          code: 'INVALID_STATE_TRANSITION',
-          detail: 'La reserva ya cuenta con check-in registrado previamente (estado actual: CHECKED_IN).',
-        },
-        HttpStatus.CONFLICT,
-      );
-    }
-
-    // 3. Solo reservas en estado CONFIRMED pueden hacer check-in
-    if (order.estadoId !== 'EST-002' && order.estado !== 'CONFIRMED') {
-      throw new ProblemDetailsException(
-        {
-          type: 'https://api.booking-hub.com/errors/invalid-state-transition',
-          title: 'Invalid State Transition',
-          status: HttpStatus.CONFLICT,
-          code: 'INVALID_STATE_TRANSITION',
-          detail: 'El check-in solo está permitido para reservas en estado CONFIRMED.',
-        },
-        HttpStatus.CONFLICT,
-      );
-    }
-
-    // 4. Validar fecha y hora en America/Guayaquil (Check-in desde fecha de entrada y >= 14:00, salvo early-checkin)
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Guayaquil',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).formatToParts(new Date());
-
-    const pMap: Record<string, string> = {};
-    for (const p of parts) {
-      pMap[p.type] = p.value;
-    }
-    const hoyGuayaquil = `${pMap.year}-${pMap.month}-${pMap.day}`;
-    const horaGuayaquil = parseInt(pMap.hour, 10);
-
-    const fechaEntradaStr = order.fechaEntrada instanceof Date
-      ? order.fechaEntrada.toISOString().split('T')[0]
-      : String(order.fechaEntrada || '').split('T')[0];
-
-    const earlyCheckinAutorizado = Boolean(
-      order.earlyCheckinAutorizado ||
-      body?.earlyCheckinAutorizado ||
-      body?.autorizado ||
-      body?.early_checkin === true,
-    );
-
-    if (!earlyCheckinAutorizado) {
-      const fechaNoAlcanzada = hoyGuayaquil < fechaEntradaStr;
-      const horaNoAlcanzada = (hoyGuayaquil === fechaEntradaStr && horaGuayaquil < 14);
-
-      if (fechaNoAlcanzada || horaNoAlcanzada) {
-        throw new ProblemDetailsException(
-          {
-            type: 'https://api.booking-hub.com/errors/checkin-time-not-reached',
-            title: 'Check-in Time Not Reached',
-            status: HttpStatus.UNPROCESSABLE_ENTITY,
-            code: 'CHECKIN_TIME_NOT_REACHED',
-            detail: `El check-in solo está permitido desde la fecha de entrada (${fechaEntradaStr}) a partir de las 14:00 (hora Guayaquil), salvo early-checkin aprobado por ADMIN.`,
-            habilitadoDesde: `${fechaEntradaStr}T14:00:00-05:00`,
-          },
-          HttpStatus.UNPROCESSABLE_ENTITY,
-        );
-      }
-    }
-
-    // 5. Actualizar reserva a CHECKED_IN
-    await this.alojamientoRepository.query(
-      `UPDATE reservas 
-       SET "estadoId" = 'EST-002', "checkinRealizado" = true, "checkinHora" = NOW() 
-       WHERE id = $1 OR "ordenId"::text = $1`,
-      [order.id],
-    );
-
-    try {
-      const hisId = `HIS-${Math.floor(1000 + Math.random() * 9000)}`;
-      await this.alojamientoRepository.query(
-        `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
-         VALUES ($1, $2, $3, $3, $4)`,
-        [hisId, order.id, order.estadoId || 'EST-002', 'Check-in confirmado en recepción. Estado: CHECKED_IN.'],
-      );
-    } catch (e: any) {
-      console.warn(`[CHECKIN-HISTORIAL] Advertencia: ${e?.message}`);
-    }
-
-    const externalOrderId = order.external_order_id || order.externalOrderId || order.ordenId || order.id;
-    const clientId = body?.client_id || order.usuarioId || order.clienteIdentificacion || 'CLI-001';
-
-    const checkinNoticePayload = {
-      external_order_id: String(externalOrderId),
-      client_id: String(clientId),
-      estado: 'CHECKED_IN',
-      huespedes_reales: Number(body?.huespedes_reales || order.numeroPersonas || 1),
-      admin_id: body?.admin_id || 'recepcionista-hotel',
-      fecha_checkin: new Date().toISOString(),
-      observaciones: body?.observaciones || 'Huésped presentado en recepción',
-    };
-
-    // Registro transaccional en tabla outbox (booking.evento_outbox)
-    try {
-      const orderUuid = order.ordenId && order.ordenId.length === 36 ? order.ordenId : crypto.randomUUID();
-      const corrUuid = crypto.randomUUID();
-      await this.alojamientoRepository.query(
-        `INSERT INTO booking.evento_outbox (tipo, agregado, agregado_id, correlacion_id, payload, created_at, publicado_en)
-         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
-        [
-          'RESERVA_CHECKIN_CONFIRMADO',
-          'reserva',
-          orderUuid,
-          corrUuid,
-          JSON.stringify(checkinNoticePayload),
-        ],
-      );
-    } catch (e: any) {
-      console.warn(`[OUTBOX-CHECKIN] Advertencia al registrar en outbox: ${e.message}`);
-    }
-
-    // Notificación Push hacia Booking Core API (si está configurada la llave)
-    const apiKey = process.env.BOOKING_API_KEY;
-    if (apiKey) {
-      const bookingCheckinUrl = `https://booking-core-api.azurewebsites.net/api/v2/reservas/${encodeURIComponent(externalOrderId)}/checkin`;
-      try {
-        await fetch(bookingCheckinUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': apiKey,
-          },
-          body: JSON.stringify(checkinNoticePayload),
-        });
-      } catch (err: any) {
-        console.warn(`[BOOKING-CHECKIN-NOTIFY] Aviso al notificar Booking: ${err?.message}`);
-      }
-    }
-
-    return {
-      orderId: order.ordenId || order.id,
-      reservation_id: order.ordenId || order.id,
-      reservationId: order.ordenId || order.id,
-      reservaId: order.id,
-      external_order_id: externalOrderId,
-      externalOrderId: externalOrderId,
-      estado: 'CHECKED_IN',
-      status: 'CHECKED_IN',
-      checkinRealizado: true,
-      habitacionAsignada: `${order.habitacionNombre || 'Suite Deluxe'} - Piso 2`,
-      claveAccesoDigital: `PIN-${Math.floor(1000 + Math.random() * 9000)}#`,
-      checkInHora: new Date().toISOString(),
-      instruccionesAcceso: 'Presente su identificación en la recepción o use su PIN digital en la cerradura.',
-    };
+    return this.reservasService.checkInOrder(orderId, body);
   }
 
   async checkOutOrder(orderId: string, body?: any): Promise<any> {

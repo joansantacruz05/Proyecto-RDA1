@@ -5,6 +5,9 @@ import {
   ForbiddenException,
   ConflictException,
   BadRequestException,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { CrearReservaDto } from './dto/crear-reserva.dto';
@@ -14,9 +17,12 @@ import { InventorySyncService } from '../inventario/inventory-sync.service';
 import { generateEntityId } from '../../common/utils/password-rules';
 import { validarIdentificacion } from '../../common/utils/ecuador-validators';
 import { randomUUID } from 'crypto';
+import { catalogCache } from '../../common/utils/ttl-cache';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 @Injectable()
-export class ReservasService {
+export class ReservasService implements OnModuleInit, OnModuleDestroy {
   // Caché en memoria para previsualizaciones temporales de órdenes (15 min)
   public static previewsCache: Map<string, any> = new Map();
   public static quotesCache: Map<string, any> = new Map();
@@ -26,6 +32,57 @@ export class ReservasService {
     private readonly pricingService: PricingService,
     private readonly inventorySyncService: InventorySyncService,
   ) {}
+
+  private readonly logger = new Logger(ReservasService.name);
+  private checkinWorker?: NodeJS.Timeout;
+
+  /**
+   * Bootstrap idempotente del esquema (seguro con varias instancias):
+   *  - reservas."idempotencyKey" + índice UNIQUE (llave, usuario): la BD misma impide 2 órdenes por llave.
+   *  - índice parcial para el conteo de solapamientos (acelera orders/create y el catálogo).
+   *  - checkin_notificaciones: cola persistente (outbox) de avisos de check-in hacia Booking.
+   */
+  async onModuleInit() {
+    const ddl = [
+      `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "idempotencyKey" UUID`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_reservas_idempotency ON reservas ("idempotencyKey", "usuarioId") WHERE "idempotencyKey" IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS idx_reservas_espacio_fechas ON reservas ("espacioId", "fechaEntrada", "fechaSalida") WHERE "estadoId" IN ('EST-001', 'EST-002')`,
+      `CREATE TABLE IF NOT EXISTS checkin_notificaciones (
+         id BIGSERIAL PRIMARY KEY,
+         reserva_id VARCHAR(50) NOT NULL,
+         external_order_id VARCHAR(100) NOT NULL,
+         payload JSONB NOT NULL,
+         intentos INT NOT NULL DEFAULT 0,
+         ultimo_intento TIMESTAMPTZ,
+         ultimo_error TEXT,
+         http_status INT,
+         publicado_en TIMESTAMPTZ,
+         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+       )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_checkin_notif_reserva ON checkin_notificaciones (reserva_id)`,
+    ];
+    for (const stmt of ddl) {
+      try {
+        await this.dataSource.query(stmt);
+      } catch (err: any) {
+        this.logger.warn(`[BOOTSTRAP] ${err?.message}`);
+      }
+    }
+
+    // Reintentos en segundo plano de avisos de check-in pendientes (no en pruebas).
+    if (process.env.NODE_ENV !== 'test') {
+      this.checkinWorker = setInterval(() => {
+        this.retryPendingCheckinNotifications().catch((e) =>
+          this.logger.warn(`[CHECKIN-RETRY] ${e?.message}`),
+        );
+      }, 30_000);
+      this.checkinWorker.unref();
+    }
+  }
+
+  onModuleDestroy() {
+    if (this.checkinWorker) clearInterval(this.checkinWorker);
+  }
 
   // ═══════════════════════════════════════════════════════════════════════
   //  PREVISUALIZACIÓN DE ÓRDENES (Hub GDS / Web UI)
@@ -195,6 +252,8 @@ export class ReservasService {
     res?: any,
   ): Promise<any> {
     const tStart = performance.now();
+    const rawIdemKey = String(req?.headers?.['idempotency-key'] || req?.idempotencyInfo?.key || '').trim();
+    const idemKey = UUID_RE.test(rawIdemKey) ? rawIdemKey : null;
     const previewId = createRequest.order_preview_id || createRequest.orderPreviewId;
     const cachedPreview = previewId ? ReservasService.previewsCache.get(previewId) : null;
 
@@ -402,7 +461,8 @@ export class ReservasService {
     const valDur = (tValEnd - tStart).toFixed(1);
 
     // 5. Transacción de reserva con concurrencia optimizada (SELECT FOR UPDATE consolidado)
-    return await this.dataSource.transaction(async (manager) => {
+    try {
+    const result = await this.dataSource.transaction(async (manager) => {
       const tLockStart = performance.now();
 
       // 1. Bloqueo exclusivo a nivel de fila (Row-level exclusive lock) para serializar peticiones sobre la habitación
@@ -545,9 +605,9 @@ export class ReservasService {
         `INSERT INTO reservas (
            id, "ordenId", "usuarioId", "espacioId", "estadoId", 
            "fechaEntrada", "fechaSalida", "precioTotal", subtotal, iva, "tasaMunicipal", 
-           moneda, "numeroPersonas", "fechaCreacion", "checkinRealizado", "earlyCheckinAutorizado"
+           moneda, "numeroPersonas", "fechaCreacion", "checkinRealizado", "earlyCheckinAutorizado", "idempotencyKey"
          )
-         VALUES ($1, $2, $3, $4, 'EST-002', $5, $6, $7, $8, $9, $10, 'USD', $11, CURRENT_TIMESTAMP, false, false)`,
+         VALUES ($1, $2, $3, $4, 'EST-002', $5, $6, $7, $8, $9, $10, 'USD', $11, CURRENT_TIMESTAMP, false, false, $12)`,
         [
           reservaId,
           orderId,
@@ -560,6 +620,7 @@ export class ReservasService {
           pricing.iva,
           pricing.tasaMunicipal,
           totalPersonas,
+          idemKey,
         ],
       );
 
@@ -642,7 +703,7 @@ export class ReservasService {
       };
 
       // 6. Guardar la respuesta de idempotencia en la MISMA transacción (Requisito 1)
-      const idempotencyKey = req?.headers?.['idempotency-key'] || req?.idempotencyInfo?.key;
+      const idempotencyKey = idemKey;
       const idempUserId = req?.idempotencyInfo?.userId || String(userIdFromToken || clientIdHeader || 'ANONYMOUS');
       const idempEndpoint = req?.idempotencyInfo?.endpoint || (req?.originalUrl || req?.url || 'DEFAULT').split('?')[0];
 
@@ -670,6 +731,18 @@ export class ReservasService {
 
       return orderResponse;
     });
+    catalogCache.invalidate();
+    return result;
+    } catch (err: any) {
+      // Red de seguridad: si dos peticiones con la misma llave llegaran a insertar a la vez, el índice
+      // UNIQUE rechaza la segunda y se devuelve la orden ya creada (nunca una segunda orden).
+      if (err?.code === '23505' && idemKey && String(err?.constraint || '').includes('uq_reservas_idempotency')) {
+        const existing = await this.recoverOrderByIdempotencyKey(idemKey, { privileged: true });
+        if (res && typeof res.setHeader === 'function') res.setHeader('Idempotent-Replayed', 'true');
+        return existing;
+      }
+      throw err;
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -702,8 +775,7 @@ export class ReservasService {
   }
 
   async getOrder(orderIdOrReservaId: string) {
-    const rows = await this.dataSource.query(
-      `SELECT 
+    const baseSelect = `SELECT
          r.*, er.nombre as "estadoNombre",
          e.nombre as "habitacionNombre", e."precioPorNoche", e.codigo as "habitacionCodigo",
          a.id as "alojamientoId", a.nombre as "alojamientoNombre", a."imagenUrl", a.codigo as "alojamientoCodigo",
@@ -716,13 +788,22 @@ export class ReservasService {
        JOIN alojamientos a ON e."alojamientoId" = a.id
        JOIN usuarios u ON r."usuarioId" = u.id
        LEFT JOIN contratos c ON c."reservaId" = r.id
-       LEFT JOIN pagos p ON p."reservaId" = r.id
-       WHERE r."ordenId"::text = $1 
-          OR r.id = $1 
-          OR r.id = ('RES-' || $1)
-          OR c.terminos ILIKE '%' || $1 || '%'`,
-      [orderIdOrReservaId],
-    );
+       LEFT JOIN pagos p ON p."reservaId" = r.id`;
+
+    const key = String(orderIdOrReservaId || '');
+    // 1) Búsqueda exacta por índice (ordenId UUID / id de reserva)
+    const exactWhere = UUID_RE.test(key)
+      ? `WHERE r."ordenId" = $1::uuid`
+      : `WHERE r.id = $1 OR r.id = ('RES-' || $1)`;
+    let rows = await this.dataSource.query(`${baseSelect} ${exactWhere} LIMIT 1`, [key]);
+
+    // 2) Último recurso: localizador/external id guardado en el texto del contrato
+    if (!rows || rows.length === 0) {
+      rows = await this.dataSource.query(
+        `${baseSelect} WHERE c.terminos ILIKE '%' || $1 || '%' LIMIT 1`,
+        [key],
+      );
+    }
 
     if (!rows || rows.length === 0) {
       throw new NotFoundException('Orden o reserva no encontrada.');
@@ -734,7 +815,14 @@ export class ReservasService {
       orderId: row.ordenId || row.id,
       reservaId: row.ordenId || row.id,
       externalOrderId: row.ordenId || row.id,
-      estado: row.estadoId === 'EST-003' ? 'CANCELLED' : (row.estadoId === 'EST-002' ? 'CONFIRMED' : 'PENDING'),
+      estado:
+        row.estadoId === 'EST-003'
+          ? 'CANCELLED'
+          : row.checkinRealizado === true
+            ? 'CHECKED_IN'
+            : row.estadoId === 'EST-002'
+              ? 'CONFIRMED'
+              : 'PENDING',
       totalPagar: String(Number(row.precioTotal || 0).toFixed(2)),
     };
   }
@@ -896,15 +984,7 @@ export class ReservasService {
 
     await this.dataSource.query(`UPDATE reservas SET "estadoId" = 'EST-003' WHERE id = $1`, [reserva.id]);
 
-    // Restaurar cupo disponible atómicamente en espacios_rentables
-    if (reserva.espacioId) {
-      await this.dataSource.query(
-        `UPDATE espacios_rentables 
-         SET "cantidadDisponible" = "cantidadDisponible" + 1 
-         WHERE id = $1`,
-        [reserva.espacioId],
-      );
-    }
+    catalogCache.invalidate(); // la habitación vuelve a contar como libre (el solapamiento ya excluye EST-003)
 
     await this.dataSource.query(
       `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
@@ -969,46 +1049,86 @@ export class ReservasService {
     return this.getOrder(id);
   }
 
-  async recoverOrderByIdempotencyKey(key: string): Promise<any> {
-    if (!key || key.trim() === '') {
+  /**
+   * Recuperación tras timeout: devuelve ÚNICAMENTE la orden asociada a la Idempotency-Key.
+   *  - Busca primero la respuesta guardada (misma transacción que creó la orden).
+   *  - Respaldo: columna reservas."idempotencyKey" (UNIQUE).
+   *  - Un cliente no privilegiado solo puede recuperar órdenes de su propia identidad.
+   */
+  async recoverOrderByIdempotencyKey(
+    key: string,
+    opts: { privileged?: boolean; callerIds?: string[] } = {},
+  ): Promise<any> {
+    const cleanKey = String(key || '').trim();
+    if (!UUID_RE.test(cleanKey)) {
       throw new ProblemDetailsException(
         {
           type: 'https://api.booking-hub.com/errors/validation-failed',
           title: 'Validation Failed',
           status: HttpStatus.BAD_REQUEST,
           code: 'VALIDATION_FAILED',
-          detail: 'El parámetro idempotency_key es obligatorio para la recuperación.',
+          detail: 'El parámetro idempotency_key es obligatorio y debe ser un UUID válido.',
         },
         HttpStatus.BAD_REQUEST,
       );
     }
 
-    const cleanKey = key.trim();
+    const privileged = opts.privileged === true;
+    const callers = (opts.callerIds || []).filter(Boolean).map(String);
 
-    // 1. Buscar en tabla idempotency_keys
+    const wrap = (order: any) => {
+      const reservationId = order.reservation_id || order.orderId || order.id;
+      const normalized = { ...order, reservation_id: reservationId };
+      return { ...normalized, data: [normalized], orders: [normalized] };
+    };
+
+    // 1. Respuesta guardada junto con la orden
     const rows = await this.dataSource.query(
-      `SELECT llave, estado, status, respuesta 
-       FROM idempotency_keys 
-       WHERE llave::text = $1`,
-      [cleanKey],
+      `SELECT estado, respuesta
+       FROM idempotency_keys
+       WHERE llave = $1::uuid AND ($2::boolean OR "usuarioId" = ANY($3::text[]))
+       ORDER BY "creadoEn" DESC
+       LIMIT 1`,
+      [cleanKey, privileged, callers],
     );
 
-    if (rows && rows.length > 0 && rows[0].respuesta) {
-      const resp = typeof rows[0].respuesta === 'string' ? JSON.parse(rows[0].respuesta) : rows[0].respuesta;
-      resp.reservation_id = resp.reservation_id || resp.orderId || resp.id;
-      return resp;
+    if (rows && rows.length > 0) {
+      const row = rows[0];
+      if (row.estado === 'COMPLETED' && row.respuesta) {
+        const resp = typeof row.respuesta === 'string' ? JSON.parse(row.respuesta) : row.respuesta;
+        return wrap(resp);
+      }
     }
 
-    // 2. Buscar por ordenId o id en reservas
+    // 2. Respaldo por la columna UNIQUE de reservas
     const orderRows = await this.dataSource.query(
-      `SELECT r.id, r."ordenId" FROM reservas r WHERE r."ordenId"::text = $1 OR r.id = $1`,
-      [cleanKey],
+      `SELECT r."ordenId" AS id
+       FROM reservas r
+       WHERE r."idempotencyKey" = $1::uuid AND ($2::boolean OR r."usuarioId" = ANY($3::text[]))
+       LIMIT 1`,
+      [cleanKey, privileged, callers],
     );
-
     if (orderRows && orderRows.length > 0) {
       const order = await this.getOrder(orderRows[0].id);
-      order.reservation_id = order.ordenId || order.id;
-      return order;
+      return wrap({
+        ...order,
+        reservation_id: order.ordenId || order.id,
+        status: order.estado,
+      });
+    }
+
+    // 3. La operación existe pero aún no terminó
+    if (rows && rows.length > 0 && rows[0].estado === 'IN_PROGRESS') {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/idempotency-in-progress',
+          title: 'Idempotency Operation In Progress',
+          status: HttpStatus.CONFLICT,
+          code: 'IDEMPOTENCY_IN_PROGRESS',
+          detail: `La operación con la Idempotency-Key "${cleanKey}" sigue en curso. Reintente en breve.`,
+        },
+        HttpStatus.CONFLICT,
+      );
     }
 
     throw new ProblemDetailsException(
@@ -1017,7 +1137,7 @@ export class ReservasService {
         title: 'Orden no encontrada',
         status: HttpStatus.NOT_FOUND,
         code: 'NOT_FOUND',
-        detail: `No se encontró ninguna orden asociada a la Idempotency-Key "${cleanKey}".`,
+        detail: `No existe ninguna orden asociada a la Idempotency-Key "${cleanKey}". Es seguro reintentar la creación.`,
       },
       HttpStatus.NOT_FOUND,
     );
@@ -1030,61 +1150,62 @@ export class ReservasService {
        JOIN espacios_rentables e ON r."espacioId" = e.id
        JOIN alojamientos a ON e."alojamientoId" = a.id
        JOIN estados_reserva er ON r."estadoId" = er.id
-       WHERE r."estadoId" IN ('EST-001', 'EST-002')
+       WHERE r."estadoId" IN ('EST-001', 'EST-002') AND r."fechaSalida" >= CURRENT_DATE
        ORDER BY r."fechaEntrada" ASC`,
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  CHECK-IN PRESENCIAL (Flujo 2) + AVISO A BOOKING CORE
+  // ═══════════════════════════════════════════════════════════════════════
+
+  private invalidTransition(detail: string): ProblemDetailsException {
+    return new ProblemDetailsException(
+      {
+        type: 'https://api.booking-hub.com/errors/invalid-state-transition',
+        title: 'Invalid State Transition',
+        status: HttpStatus.CONFLICT,
+        code: 'INVALID_STATE_TRANSITION',
+        detail,
+      },
+      HttpStatus.CONFLICT,
     );
   }
 
   async checkInOrder(orderId: string, body?: any): Promise<any> {
     const order = await this.getOrder(orderId);
 
-    // 1. Estado cancelado -> 409 INVALID_STATE_TRANSITION
     if (order.estadoId === 'EST-003' || order.estado === 'CANCELLED') {
-      throw new ProblemDetailsException(
-        {
-          type: 'https://api.booking-hub.com/errors/invalid-state-transition',
-          title: 'Invalid State Transition',
-          status: HttpStatus.CONFLICT,
-          code: 'INVALID_STATE_TRANSITION',
-          detail: 'No se puede realizar check-in en una reserva cancelada.',
-        },
-        HttpStatus.CONFLICT,
-      );
+      throw this.invalidTransition('No se puede realizar check-in en una reserva cancelada.');
+    }
+    if (order.checkinRealizado === true || order.estado === 'CHECKED_IN') {
+      throw this.invalidTransition('La reserva ya cuenta con check-in registrado previamente (estado actual: CHECKED_IN).');
+    }
+    if (order.estadoId !== 'EST-002') {
+      throw this.invalidTransition('El check-in solo está permitido para reservas en estado CONFIRMED.');
     }
 
-    // 2. Ya tiene check-in realizado -> 409 INVALID_STATE_TRANSITION (Segundo check-in)
-    if (
-      order.checkinRealizado === true ||
-      order.estado === 'CHECKED_IN' ||
-      order.estadoNombre === 'Llegada Confirmada'
-    ) {
-      throw new ProblemDetailsException(
-        {
-          type: 'https://api.booking-hub.com/errors/invalid-state-transition',
-          title: 'Invalid State Transition',
-          status: HttpStatus.CONFLICT,
-          code: 'INVALID_STATE_TRANSITION',
-          detail: 'La reserva ya cuenta con check-in registrado previamente (estado actual: CHECKED_IN).',
-        },
-        HttpStatus.CONFLICT,
-      );
+    // Huéspedes reales presentes en recepción (entero >= 1)
+    let huespedesReales = Number(order.numeroPersonas) || 1;
+    const rawGuests = body?.huespedes_reales ?? body?.numero_personas_reales;
+    if (rawGuests !== undefined && rawGuests !== null && rawGuests !== '') {
+      const n = Number(rawGuests);
+      if (!Number.isInteger(n) || n < 1) {
+        throw new ProblemDetailsException(
+          {
+            type: 'https://api.booking-hub.com/errors/validation-failed',
+            title: 'Validation Failed',
+            status: HttpStatus.BAD_REQUEST,
+            code: 'VALIDATION_FAILED',
+            detail: 'huespedes_reales debe ser un entero mayor o igual a 1.',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      huespedesReales = n;
     }
 
-    // 3. Solo reservas en estado CONFIRMED pueden hacer check-in
-    if (order.estadoId !== 'EST-002' && order.estado !== 'CONFIRMED') {
-      throw new ProblemDetailsException(
-        {
-          type: 'https://api.booking-hub.com/errors/invalid-state-transition',
-          title: 'Invalid State Transition',
-          status: HttpStatus.CONFLICT,
-          code: 'INVALID_STATE_TRANSITION',
-          detail: 'El check-in solo está permitido para reservas en estado CONFIRMED.',
-        },
-        HttpStatus.CONFLICT,
-      );
-    }
-
-    // 4. Validar fecha y hora en America/Guayaquil (Check-in desde fecha de entrada y >= 14:00, salvo early-checkin)
+    // Fecha y hora en America/Guayaquil: desde la fecha de entrada y desde las 14:00, salvo early-checkin
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Guayaquil',
       year: 'numeric',
@@ -1094,29 +1215,19 @@ export class ReservasService {
       minute: '2-digit',
       hour12: false,
     }).formatToParts(new Date());
-
     const pMap: Record<string, string> = {};
-    for (const p of parts) {
-      pMap[p.type] = p.value;
-    }
+    for (const p of parts) pMap[p.type] = p.value;
     const hoyGuayaquil = `${pMap.year}-${pMap.month}-${pMap.day}`;
-    const horaGuayaquil = parseInt(pMap.hour, 10);
+    const horaGuayaquil = parseInt(pMap.hour, 10) % 24;
 
     const fechaEntradaStr = order.fechaEntrada instanceof Date
       ? order.fechaEntrada.toISOString().split('T')[0]
       : String(order.fechaEntrada || '').split('T')[0];
 
-    const earlyCheckinAutorizado = Boolean(
-      order.earlyCheckinAutorizado ||
-      body?.earlyCheckinAutorizado ||
-      body?.autorizado ||
-      body?.early_checkin === true,
-    );
-
-    if (!earlyCheckinAutorizado) {
+    // El early-checkin solo lo concede un ADMIN mediante PUT /orders/{id}/early-checkin (flag en BD)
+    if (!order.earlyCheckinAutorizado) {
       const fechaNoAlcanzada = hoyGuayaquil < fechaEntradaStr;
-      const horaNoAlcanzada = (hoyGuayaquil === fechaEntradaStr && horaGuayaquil < 14);
-
+      const horaNoAlcanzada = hoyGuayaquil === fechaEntradaStr && horaGuayaquil < 14;
       if (fechaNoAlcanzada || horaNoAlcanzada) {
         throw new ProblemDetailsException(
           {
@@ -1132,56 +1243,183 @@ export class ReservasService {
       }
     }
 
-    // 5. Actualizar reserva a CHECKED_IN
-    await this.dataSource.query(
-      `UPDATE reservas 
-       SET "estadoId" = 'EST-002', "checkinRealizado" = true, "checkinHora" = NOW() 
-       WHERE id = $1 OR "ordenId"::text = $1`,
+    // Transición ATÓMICA: solo una petición puede pasar de CONFIRMED a CHECKED_IN (la 2.ª recibe 409)
+    const updated = await this.dataSource.query(
+      `UPDATE reservas
+       SET "checkinRealizado" = true, "checkinHora" = NOW()
+       WHERE id = $1 AND "estadoId" = 'EST-002' AND COALESCE("checkinRealizado", false) = false
+       RETURNING id`,
       [order.id],
     );
-
-    try {
-      const hisId = `HIS-${Math.floor(1000 + Math.random() * 9000)}`;
-      await this.dataSource.query(
-        `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
-         VALUES ($1, $2, $3, $3, $4)`,
-        [hisId, order.id, order.estadoId || 'EST-002', 'Check-in confirmado en recepción. Estado: CHECKED_IN.'],
-      );
-    } catch (e: any) {
-      // Ignorar si historial ya existe
+    if (!updated || updated.length === 0) {
+      throw this.invalidTransition('La reserva ya cuenta con check-in registrado previamente (estado actual: CHECKED_IN).');
     }
 
-    const externalOrderId = order.external_order_id || order.externalOrderId || order.ordenId || order.id;
+    try {
+      await this.dataSource.query(
+        `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
+         VALUES ($1, $2, 'EST-002', 'EST-002', $3)`,
+        [generateEntityId('HIS'), order.id, `Check-in confirmado en recepción. Estado: CHECKED_IN. Huéspedes reales: ${huespedesReales}.`],
+      );
+    } catch (e: any) {
+      this.logger.warn(`[CHECKIN-HISTORIAL] ${e?.message}`);
+    }
+
+    // Cola persistente + primer intento inmediato hacia Booking Core
+    const externalOrderId = String(order.ordenId || order.id);
+    const payload = {
+      external_order_id: externalOrderId,
+      estado: 'CONFIRMADO_ASISTIDO',
+      huespedes_reales: huespedesReales,
+    };
+
+    let sync: { estado: string; detalle?: string; httpStatus?: number } = { estado: 'PENDIENTE' };
+    try {
+      const queued = await this.dataSource.query(
+        `INSERT INTO checkin_notificaciones (reserva_id, external_order_id, payload)
+         VALUES ($1, $2, $3::jsonb)
+         ON CONFLICT (reserva_id) DO UPDATE SET payload = EXCLUDED.payload
+         RETURNING id`,
+        [order.id, externalOrderId, JSON.stringify(payload)],
+      );
+      sync = await this.dispatchCheckinNotification(queued[0].id);
+    } catch (e: any) {
+      this.logger.warn(`[CHECKIN-NOTIFY] ${e?.message}`);
+      sync = { estado: 'PENDIENTE', detalle: e?.message };
+    }
+
+    // Registro en el outbox compartido (compatibilidad con el panel y con Booking)
+    try {
+      await this.dataSource.query(
+        `INSERT INTO booking.evento_outbox (tipo, agregado, agregado_id, correlacion_id, payload, created_at, publicado_en)
+         VALUES ($1, $2, $3, $4, $5, NOW(), $6)`,
+        [
+          'RESERVA_CHECKIN_CONFIRMADO',
+          'reserva',
+          UUID_RE.test(String(order.ordenId)) ? order.ordenId : randomUUID(),
+          randomUUID(),
+          JSON.stringify(payload),
+          sync.estado === 'ENVIADO' ? new Date() : null,
+        ],
+      );
+    } catch (e: any) {
+      this.logger.warn(`[OUTBOX-CHECKIN] ${e?.message}`);
+    }
+
+    catalogCache.invalidate();
 
     return {
       orderId: order.ordenId || order.id,
       reservation_id: order.ordenId || order.id,
+      reservationId: order.ordenId || order.id,
+      reservaId: order.id,
       external_order_id: externalOrderId,
+      externalOrderId,
       estado: 'CHECKED_IN',
       status: 'CHECKED_IN',
       checkinRealizado: true,
-      checkinHora: new Date().toISOString(),
-      mensaje: 'Check-in confirmado exitosamente en recepción.',
+      huespedes_reales: huespedesReales,
+      habitacionAsignada: `${order.habitacionNombre || 'Suite Deluxe'} - Piso 2`,
+      checkInHora: new Date().toISOString(),
+      instruccionesAcceso: 'Presente su identificación en la recepción o use su PIN digital en la cerradura.',
+      sincronizacionBooking: sync,
     };
+  }
+
+  /**
+   * POST {BOOKING_CORE_URL}/api/v1/reservas/{external_order_id}/checkin
+   * Headers: X-API-Key  ·  Body: { external_order_id, estado: "CONFIRMADO_ASISTIDO", huespedes_reales }
+   * Un fallo NUNCA revierte el check-in local (el huésped ya está en recepción): queda PENDIENTE y se reintenta.
+   */
+  private async dispatchCheckinNotification(
+    notifId: string | number,
+  ): Promise<{ estado: string; detalle?: string; httpStatus?: number }> {
+    const rows = await this.dataSource.query(
+      `SELECT id, external_order_id, payload, intentos, publicado_en FROM checkin_notificaciones WHERE id = $1`,
+      [notifId],
+    );
+    const n = rows?.[0];
+    if (!n) return { estado: 'PENDIENTE', detalle: 'Notificación no encontrada' };
+    if (n.publicado_en) return { estado: 'ENVIADO' };
+
+    const apiKey = process.env.BOOKING_API_KEY || process.env.BOOKING_CORE_API_KEY;
+    if (!apiKey) {
+      await this.dataSource.query(
+        `UPDATE checkin_notificaciones SET ultimo_error = $2 WHERE id = $1`,
+        [n.id, 'BOOKING_API_KEY no configurada en el servidor'],
+      );
+      return { estado: 'PENDIENTE', detalle: 'BOOKING_API_KEY no configurada; el aviso queda en cola' };
+    }
+
+    const base = (process.env.BOOKING_CORE_URL || 'https://booking-core-api.azurewebsites.net').replace(/\/+$/, '');
+    const url = `${base}/api/v1/reservas/${encodeURIComponent(n.external_order_id)}/checkin`;
+    const payload = typeof n.payload === 'string' ? JSON.parse(n.payload) : n.payload;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      // 2xx = aceptado; 409 = Booking ya tenía el check-in registrado (idempotente)
+      const ok = resp.ok || resp.status === 409;
+      const errText = ok ? null : (await resp.text().catch(() => '')).slice(0, 500) || `HTTP ${resp.status}`;
+      await this.dataSource.query(
+        `UPDATE checkin_notificaciones
+         SET intentos = intentos + 1, ultimo_intento = NOW(), http_status = $2, ultimo_error = $3,
+             publicado_en = CASE WHEN $4::boolean THEN NOW() ELSE NULL END
+         WHERE id = $1`,
+        [n.id, resp.status, errText, ok],
+      );
+      return ok
+        ? { estado: 'ENVIADO', httpStatus: resp.status }
+        : { estado: 'PENDIENTE', httpStatus: resp.status, detalle: errText || undefined };
+    } catch (err: any) {
+      const msg = err?.name === 'AbortError' ? 'Timeout (8 s) al contactar Booking Core' : String(err?.message || err);
+      await this.dataSource.query(
+        `UPDATE checkin_notificaciones SET intentos = intentos + 1, ultimo_intento = NOW(), ultimo_error = $2 WHERE id = $1`,
+        [n.id, msg.slice(0, 500)],
+      );
+      return { estado: 'PENDIENTE', detalle: msg };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** Reintenta avisos pendientes con backoff lineal (máx. 10 intentos). Seguro con varias instancias. */
+  private async retryPendingCheckinNotifications(): Promise<void> {
+    if (!(process.env.BOOKING_API_KEY || process.env.BOOKING_CORE_API_KEY)) return;
+    const claimed = await this.dataSource.query(
+      `UPDATE checkin_notificaciones
+       SET ultimo_intento = NOW()
+       WHERE id IN (
+         SELECT id FROM checkin_notificaciones
+         WHERE publicado_en IS NULL AND intentos < 10
+           AND (ultimo_intento IS NULL OR ultimo_intento < NOW() - (LEAST(intentos, 6) + 1) * INTERVAL '30 seconds')
+         ORDER BY id
+         LIMIT 20
+         FOR UPDATE SKIP LOCKED
+       )
+       RETURNING id`,
+    );
+    for (const row of claimed || []) {
+      await this.dispatchCheckinNotification(row.id);
+    }
   }
 
   async checkOutOrder(orderId: string, body?: any): Promise<any> {
     const order = await this.getOrder(orderId);
     await this.dataSource.query(
       `UPDATE reservas 
-       SET "checkinRealizado" = false 
+       SET "checkinRealizado" = false,
+           "fechaSalida" = LEAST("fechaSalida", CURRENT_DATE - INTERVAL '1 day')
        WHERE id = $1 OR "ordenId"::text = $1`,
       [order.id],
     );
-
-    if (order.espacioId) {
-      await this.dataSource.query(
-        `UPDATE espacios_rentables 
-         SET "cantidadDisponible" = "cantidadDisponible" + 1 
-         WHERE id = $1`,
-        [order.espacioId],
-      );
-    }
+    catalogCache.invalidate();
 
     return {
       orderId: order.ordenId || order.id,
