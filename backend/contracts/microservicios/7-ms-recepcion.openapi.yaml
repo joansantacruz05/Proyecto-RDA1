@@ -1,0 +1,179 @@
+openapi: 3.0.3
+info:
+  title: MS Recepción, Check-in y Contratos (ms_reception)
+  version: 2.2.0
+  description: |
+    Contrato OpenAPI para el microservicio de Recepción Hotelera, Check-in Digital (14:00),
+    Check-out (11:00), Liberación Inmediata de Cupos y Contratos Digitales de Arrendamiento Temporal.
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Entorno local / API Gateway
+  - url: https://posada-ec-alojamientos.azurewebsites.net/api/v1
+    description: Servidor Cloud de Producción
+paths:
+  /orders/{orderId}/checkin:
+    post:
+      summary: Confirmar llegada de huésped y realizar Check-in (ventana legal desde 14:00)
+      operationId: checkInOrder
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: RES-7B094E23
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                documentoVerificado:
+                  type: boolean
+                  default: true
+                observaciones:
+                  type: string
+      responses:
+        '200':
+          description: Check-in confirmado exitosamente y clave digital emitida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckInResponse'
+        '409':
+          description: La reserva no está en estado CONFIRMED o check-in ya fue realizado
+        '422':
+          description: Aún no se alcanza la hora legal de check-in (14:00 hora Ecuador)
+
+  /orders/{orderId}/check-out:
+    post:
+      summary: Registrar salida del huésped y liberar la propiedad para el catálogo público
+      operationId: checkOutOrder
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Check-out completado y habitación liberada para nuevas reservas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckOutResponse'
+
+  /orders/{orderId}/early-checkin:
+    put:
+      summary: Autorizar ingreso temprano antes de las 14:00 (Exclusivo Administrador)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - horaPermitida
+              properties:
+                horaPermitida:
+                  type: string
+                  example: "10:30:00"
+                motivo:
+                  type: string
+      responses:
+        '200':
+          description: Early check-in autorizado
+
+  /orders/{orderId}/contrato:
+    get:
+      summary: Descargar o consultar contrato digital de arrendamiento temporal
+      operationId: getContrato
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cláusulas y datos del contrato legal de hospedaje
+    post:
+      summary: Firma electrónica simple del contrato de hospedaje por el huésped
+      operationId: firmarContrato
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - nombreFirma
+                - aceptaTerminos
+              properties:
+                nombreFirma:
+                  type: string
+                  example: Joan Santacruz
+                aceptaTerminos:
+                  type: boolean
+                  example: true
+      responses:
+        '200':
+          description: Contrato firmado digitalmente
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    CheckInResponse:
+      type: object
+      properties:
+        orderId:
+          type: string
+        checkInHora:
+          type: string
+          format: date-time
+        claveDigitalHabitacion:
+          type: string
+          example: "5921#"
+        habitacionAsignada:
+          type: string
+          example: "Villa Colonial Río Tomebamba (Piso 2)"
+        mensaje:
+          type: string
+          example: "Check-in confirmado. ¡Bienvenido a LuxeStays!"
+
+    CheckOutResponse:
+      type: object
+      properties:
+        orderId:
+          type: string
+        checkOutHora:
+          type: string
+          format: date-time
+        claveDigitalRevocada:
+          type: boolean
+          example: true
+        consumosAdicionales:
+          type: string
+          example: "0.00"
+        mensaje:
+          type: string
+          example: "Check-out completado. El alojamiento vuelve a estar en línea."

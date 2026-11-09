@@ -1,0 +1,245 @@
+openapi: 3.0.3
+info:
+  title: MS Órdenes y Saga de Compra (ms_orders)
+  version: 2.2.0
+  description: |
+    Contrato OpenAPI para el microservicio de Reservas, Checkout, Orquestación Saga,
+    Idempotencia estricta RFC 7807 (Idempotency-Key) y Transactional Outbox.
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Entorno local / API Gateway
+  - url: https://posada-ec-alojamientos.azurewebsites.net/api/v1
+    description: Servidor Cloud de Producción
+paths:
+  /alojamientos/orders/create:
+    post:
+      summary: Crear orden de reserva con transacción ACID y bloqueo de stock
+      operationId: createOrder
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Clave UUID v4 obligatoria para garantizar idempotencia en reintentos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreateRequest'
+      responses:
+        '201':
+          description: Orden de reserva confirmada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderCreateResponse'
+        '409':
+          description: Habitación sin stock suficiente (OUT_OF_STOCK) o colisión de concurrencia
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          description: Error de validación de negocio (fechas, ocupantes, documento)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /alojamientos/orders/{orderId}:
+    get:
+      summary: Consultar detalle técnico y financiero de una orden de reserva
+      operationId: getOrder
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detalle de la orden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetail'
+
+  /alojamientos/orders/{orderId}/cancel:
+    post:
+      summary: Cancelar reserva o ejecutar compensación LIFO de la Saga
+      operationId: cancelOrder
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                motivo:
+                  type: string
+                solicitadoPor:
+                  type: string
+                  enum: [CLIENTE, SAGA_ORCHESTRATOR, ADMIN]
+      responses:
+        '200':
+          description: Reserva cancelada exitosamente y stock restituido
+
+  /alojamientos/eventos:
+    get:
+      summary: Feed Outbox de eventos para el Booking Hub (CloudEvents 1.0)
+      operationId: listOutboxEvents
+      parameters:
+        - name: after
+          in: query
+          schema:
+            type: integer
+          description: Secuencia entera para lectura incremental sin saltos
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Lista de eventos outbox sin PII
+
+components:
+  schemas:
+    OrderCreateRequest:
+      type: object
+      required:
+        - alojamientoId
+        - habitacionId
+        - fechaEntrada
+        - fechaSalida
+        - totalPagar
+        - huespedTitular
+      properties:
+        alojamientoId:
+          type: string
+          example: ALO-002
+        habitacionId:
+          type: string
+          example: ESP-002
+        fechaEntrada:
+          type: string
+          format: date
+          example: "2026-11-09"
+        fechaSalida:
+          type: string
+          format: date
+          example: "2026-11-11"
+        totalPagar:
+          type: string
+          example: "280.00"
+        ocupantes:
+          type: object
+          properties:
+            adultos:
+              type: integer
+              example: 2
+            ninos:
+              type: integer
+              example: 0
+        huespedTitular:
+          type: object
+          required:
+            - nombreCompleto
+            - email
+            - documento
+          properties:
+            nombreCompleto:
+              type: string
+              example: Joan Santacruz
+            email:
+              type: string
+              example: sjoan2019@gmail.com
+            telefono:
+              type: string
+              example: "0991234567"
+            documento:
+              type: object
+              properties:
+                tipo:
+                  type: string
+                  enum: [CEDULA, RUC, PASAPORTE]
+                  example: CEDULA
+                numero:
+                  type: string
+                  example: "1710034065"
+
+    OrderCreateResponse:
+      type: object
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        externalOrderId:
+          type: string
+          example: ORD-HTL-8842
+        codigoReserva:
+          type: string
+          example: BK-HOTEL-9912
+        estado:
+          type: string
+          example: CONFIRMED
+        totalPagar:
+          type: string
+          example: "280.00"
+        desgloseFiscal:
+          type: object
+          properties:
+            subtotal:
+              type: string
+              example: "240.00"
+            ivaPorcentaje:
+              type: number
+              example: 15
+            ivaValor:
+              type: string
+              example: "36.00"
+            tasaMunicipal:
+              type: string
+              example: "4.00"
+
+    OrderDetail:
+      type: object
+      properties:
+        orderId:
+          type: string
+        estado:
+          type: string
+        totalPagar:
+          type: string
+        fechaEntrada:
+          type: string
+        fechaSalida:
+          type: string
+
+    ProblemDetails:
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+          example: OUT_OF_STOCK
+        detail:
+          type: string

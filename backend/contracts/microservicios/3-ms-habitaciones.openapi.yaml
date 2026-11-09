@@ -1,0 +1,172 @@
+openapi: 3.0.3
+info:
+  title: MS Habitaciones y Espacios Rentables (ms_rooms)
+  version: 2.2.0
+  description: |
+    Contrato OpenAPI para el microservicio de Habitaciones, Tipos de Habitación,
+    Capacidades, Fotos y Espacios Rentables de LuxeStays.
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Entorno local / API Gateway
+  - url: https://posada-ec-alojamientos.azurewebsites.net/api/v1
+    description: Servidor Cloud de Producción
+paths:
+  /alojamientos/{id}/habitaciones:
+    get:
+      summary: Listar habitaciones y suites disponibles para un alojamiento
+      operationId: getHabitacionesByAlojamiento
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: ALO-002
+      responses:
+        '200':
+          description: Lista de habitaciones configuradas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HabitacionDetalle'
+
+  /admin/alojamientos/{id}/habitaciones:
+    get:
+      summary: Consultar habitaciones para el panel de administración
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de habitaciones
+    post:
+      summary: Crear una nueva habitación para un alojamiento
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearHabitacionDto'
+      responses:
+        '201':
+          description: Habitación creada exitosamente
+
+  /admin/habitaciones/{habId}:
+    put:
+      summary: Actualizar datos de una habitación (precio, cupos, fotos, estado)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: habId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearHabitacionDto'
+      responses:
+        '200':
+          description: Habitación actualizada
+    delete:
+      summary: Desactivar o eliminar una habitación
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: habId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Habitación eliminada
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    HabitacionDetalle:
+      type: object
+      properties:
+        id:
+          type: string
+          example: ESP-002
+        alojamientoId:
+          type: string
+          example: ALO-002
+        codigo:
+          type: string
+          example: VILLA_COLONIAL
+        nombre:
+          type: string
+          example: Habitación / Suite de Villa Colonial Río Tomebamba
+        descripcion:
+          type: string
+        precioPorNoche:
+          type: string
+          example: "120.00"
+        capacidadAdultos:
+          type: integer
+          example: 6
+        capacidadNinos:
+          type: integer
+          example: 3
+        cantidadDisponible:
+          type: integer
+          example: 3
+        estado:
+          type: string
+          enum: [Activo, Inactivo]
+        imagenesUrls:
+          type: string
+
+    CrearHabitacionDto:
+      type: object
+      required:
+        - nombre
+        - precioPorNoche
+      properties:
+        nombre:
+          type: string
+          example: Master Suite con Vista Panorámica
+        precioPorNoche:
+          type: number
+          example: 120.00
+        capacidadAdultos:
+          type: integer
+          example: 2
+        capacidadNinos:
+          type: integer
+          example: 1
+        cantidadDisponible:
+          type: integer
+          example: 3
+        imagenesUrls:
+          type: string
+        estado:
+          type: string
+          enum: [Activo, Inactivo]
+          default: Activo

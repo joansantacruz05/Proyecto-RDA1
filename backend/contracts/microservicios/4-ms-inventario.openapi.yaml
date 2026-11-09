@@ -1,0 +1,138 @@
+openapi: 3.0.3
+info:
+  title: MS Inventario y Disponibilidad (ms_inventory)
+  version: 2.2.0
+  description: |
+    Contrato OpenAPI & Protocol Buffers para el microservicio de Inventario Diario,
+    Disponibilidad de Fechas, Restricciones ARI y Sincronización gRPC (puerto 50051)
+    con el Booking Hub central.
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Entorno local / API Gateway
+  - url: https://posada-ec-alojamientos.azurewebsites.net/api/v1
+    description: Servidor Cloud de Producción
+paths:
+  /alojamientos/{id}/availability:
+    get:
+      summary: Consultar disponibilidad y cotización de tarifas en tiempo real
+      operationId: getAvailability
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: ALO-002
+        - name: checkin
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-11-09"
+        - name: checkout
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-11-11"
+        - name: adults
+          in: query
+          schema:
+            type: integer
+            default: 2
+        - name: rooms
+          in: query
+          schema:
+            type: integer
+            default: 1
+      responses:
+        '200':
+          description: Opciones de habitaciones disponibles con desglose fiscal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityResponse'
+
+  /alojamientos/{id}/inventario:
+    get:
+      summary: Matriz diaria de tarifas, cupos y restricciones (Modelo ARI)
+      operationId: getInventorySnapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: desde
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: hasta
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Matriz de calendario para reconciliación
+
+components:
+  schemas:
+    AvailabilityResponse:
+      type: object
+      properties:
+        alojamientoId:
+          type: string
+          example: ALO-002
+        checkin:
+          type: string
+          example: "2026-11-09"
+        checkout:
+          type: string
+          example: "2026-11-11"
+        noches:
+          type: integer
+          example: 2
+        opciones:
+          type: array
+          items:
+            $ref: '#/components/schemas/AvailabilityOption'
+
+    AvailabilityOption:
+      type: object
+      properties:
+        tipoHabitacionCodigo:
+          type: string
+          example: VILLA_COLONIAL
+        nombre:
+          type: string
+          example: Habitación / Suite de Villa Colonial Río Tomebamba
+        estaDisponible:
+          type: boolean
+          example: true
+        habitacionesRemanentes:
+          type: integer
+          example: 2
+        precioNoche:
+          type: string
+          example: "120.00"
+        precioTotalEstancia:
+          type: string
+          example: "240.00"
+        regimen:
+          type: string
+          example: SOLO_HABITACION
+        planTarifaCodigo:
+          type: string
+          example: FLEX_BB
+
+  x-grpc-contract:
+    proto_file: proto/inventory.proto
+    port: 50051
+    service: inventory.InventoryStockService
+    methods:
+      - PushStockUpdate (StockUpdateMessage) -> (StockUpdateAck)
+      - StreamInventoryChanges (stream StockChangeEvent) -> (StreamSummary)

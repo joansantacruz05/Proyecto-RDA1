@@ -1,0 +1,43 @@
+openapi: 3.0.3
+info:
+  title: API Gateway & Borde Unificado (ms_gateway)
+  version: 2.2.0
+  description: |
+    Punto de entrada unificado (/api/v2 y /api/v1) para la SPA LuxeStays y el Booking Hub.
+    Centraliza rate limiting, trazabilidad distribuida (X-Correlation-ID), CORS multi-origen,
+    enrutamiento hacia los microservicios y Circuit Breaker / Kill-Switch.
+servers:
+  - url: http://localhost:3000/api/v2
+    description: API Gateway local NestJS
+  - url: https://posada-ec-alojamientos.azurewebsites.net/api/v1
+    description: Pasarela activa en la nube
+paths:
+  /health:
+    get:
+      summary: Health check semáforo del Gateway y microservicios conectados
+      responses:
+        '200':
+          description: Sistema completamente operativo (UP)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  database:
+                    type: string
+                    example: connected
+                  grpc:
+                    type: string
+                    example: listening:50051
+        '503':
+          description: Kill-Switch activado o base de datos no disponible (DOWN)
+
+  /alojamientos/health:
+    get:
+      summary: Healthcheck oficial del nodo de Alojamientos para el ESB
+      responses:
+        '200':
+          description: Nodo saludable

@@ -1,0 +1,272 @@
+openapi: 3.0.3
+info:
+  title: MS Identidad y Usuarios (ms_identidad)
+  version: 2.2.0
+  description: |
+    Contrato OpenAPI para el microservicio de Identidad, Autenticación (JWT/BCrypt)
+    y Administración de Usuarios (RBAC) de LuxeStays.
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Entorno local / API Gateway
+  - url: https://posada-ec-alojamientos.azurewebsites.net/api/v1
+    description: Servidor Cloud de Producción
+paths:
+  /auth/register:
+    post:
+      summary: Registro de nuevos usuarios / huéspedes
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDto'
+      responses:
+        '201':
+          description: Usuario creado exitosamente con credenciales y sesión emitida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/ProblemDetails400'
+        '409':
+          description: El correo electrónico ya está registrado en el sistema
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /auth/login:
+    post:
+      summary: Inicio de sesión de usuarios y administradores
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginDto'
+      responses:
+        '200':
+          description: Autenticación exitosa, retorna token JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Credenciales incorrectas
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /auth/perfil:
+    get:
+      summary: Obtener perfil del usuario autenticado
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Datos del usuario actual
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioPerfil'
+        '401':
+          $ref: '#/components/responses/ProblemDetails401'
+    patch:
+      summary: Actualizar perfil del usuario actual
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre:
+                  type: string
+                telefono:
+                  type: string
+                edad:
+                  type: integer
+                direccion:
+                  type: string
+                pais:
+                  type: string
+      responses:
+        '200':
+          description: Perfil actualizado correctamente
+
+  /admin/usuarios:
+    get:
+      summary: Listar todos los usuarios registrados (Rol ADMIN)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Lista de usuarios
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UsuarioAdmin'
+    post:
+      summary: Crear nuevo usuario desde el panel de administración
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearUsuarioAdminDto'
+      responses:
+        '201':
+          description: Usuario creado exitosamente por administrador
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    RegisterDto:
+      type: object
+      required:
+        - nombre
+        - correo
+        - contrasena
+      properties:
+        nombre:
+          type: string
+          example: Joan Santacruz
+        correo:
+          type: string
+          format: email
+          example: usuario@luxestays.ec
+        contrasena:
+          type: string
+          format: password
+          minLength: 6
+          example: Password2026*
+        telefono:
+          type: string
+          example: "0991234567"
+        identificacion:
+          type: string
+          example: "1710034065"
+
+    LoginDto:
+      type: object
+      required:
+        - correo
+        - contrasena
+      properties:
+        correo:
+          type: string
+          format: email
+          example: admin@luxestays.com
+        contrasena:
+          type: string
+          format: password
+          example: Admin2026*
+
+    AuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        usuario:
+          $ref: '#/components/schemas/UsuarioPerfil'
+
+    UsuarioPerfil:
+      type: object
+      properties:
+        id:
+          type: string
+          example: USU-001
+        nombre:
+          type: string
+          example: Joan Santacruz
+        correo:
+          type: string
+          example: sjoan2019@gmail.com
+        rol:
+          type: string
+          enum: [Admin, Cliente, Anfitrion]
+          example: Admin
+
+    UsuarioAdmin:
+      type: object
+      properties:
+        id:
+          type: string
+        nombre:
+          type: string
+        correo:
+          type: string
+        rol:
+          type: string
+        telefono:
+          type: string
+        edad:
+          type: integer
+        creadoEn:
+          type: string
+
+    CrearUsuarioAdminDto:
+      type: object
+      required:
+        - nombre
+        - correo
+        - contrasena
+        - rol
+      properties:
+        nombre:
+          type: string
+        correo:
+          type: string
+        contrasena:
+          type: string
+        rol:
+          type: string
+          enum: [Admin, Cliente, Anfitrion]
+        telefono:
+          type: string
+        edad:
+          type: integer
+
+    ProblemDetails:
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+        detail:
+          type: string
+
+  responses:
+    ProblemDetails400:
+      description: Petición inválida o error de validación
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    ProblemDetails401:
+      description: No autorizado o token expirado
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'

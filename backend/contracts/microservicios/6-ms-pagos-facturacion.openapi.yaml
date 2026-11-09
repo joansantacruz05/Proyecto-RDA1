@@ -1,0 +1,133 @@
+openapi: 3.0.3
+info:
+  title: MS Tarifación, Pagos y Facturación SRI (ms_pricing)
+  version: 2.2.0
+  description: |
+    Contrato OpenAPI para el microservicio de Pasarela de Pagos, Cálculo Fiscal
+    (IVA Ecuador 15%, Tasa Municipal $2/noche), Validación de Cédula/RUC con Módulo 10
+    y Emisión de Facturas Electrónicas SRI autorizadas.
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Entorno local / API Gateway
+  - url: https://posada-ec-alojamientos.azurewebsites.net/api/v1
+    description: Servidor Cloud de Producción
+paths:
+  /pagos:
+    post:
+      summary: Procesar cobro de reserva y emitir factura electrónica SRI secuencial
+      operationId: procesarPago
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcesarPagoDto'
+      responses:
+        '200':
+          description: Pago liquidado y factura SRI emitida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagoResponse'
+        '400':
+          description: Cédula o RUC ecuatoriano no supera validación de Módulo 10
+        '403':
+          description: No autorizado para liquidar esta orden
+
+  /pagos/metodos:
+    get:
+      summary: Listar métodos de pago admitidos (Tarjeta, Transferencia, Efectivo en Hotel, PayPal)
+      operationId: getMetodosPago
+      responses:
+        '200':
+          description: Métodos de pago activos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MetodoPagoItem'
+
+  /admin/facturas:
+    get:
+      summary: Listar historial de facturas electrónicas SRI autorizadas (Rol ADMIN)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Listado contable de facturación
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ProcesarPagoDto:
+      type: object
+      required:
+        - reservaId
+        - metodoPagoId
+      properties:
+        reservaId:
+          type: string
+          example: RES-7B094E23
+        metodoPagoId:
+          type: string
+          example: efectivo
+        requiereFactura:
+          type: boolean
+          default: true
+        factura:
+          type: object
+          required:
+            - identificacion
+            - nombre
+          properties:
+            identificacion:
+              type: string
+              example: "1710034065"
+            nombre:
+              type: string
+              example: Joan Santacruz
+            direccion:
+              type: string
+              example: Av. República del Salvador 1084, Quito
+
+    PagoResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: PAG-4363B5F3
+        estado:
+          type: string
+          example: Completado
+        monto:
+          type: number
+          example: 280.00
+        numeroFactura:
+          type: string
+          example: 001-001-000004921
+        autorizacionSri:
+          type: string
+          example: "0911202601179214732100120010010000049211234567819"
+        fechaEmision:
+          type: string
+          format: date-time
+
+    MetodoPagoItem:
+      type: object
+      properties:
+        id:
+          type: string
+          example: tarjeta_credito
+        nombre:
+          type: string
+          example: Tarjeta de Crédito
+        descripcion:
+          type: string
+        icono:
+          type: string

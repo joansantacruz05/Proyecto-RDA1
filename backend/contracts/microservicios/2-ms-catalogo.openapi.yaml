@@ -1,0 +1,303 @@
+openapi: 3.0.3
+info:
+  title: MS Catálogo de Alojamientos (ms_catalog)
+  version: 2.2.0
+  description: |
+    Contrato OpenAPI para el microservicio de Catálogo de Hospedajes, Búsqueda Geográfica,
+    Filtros, Fotos, Calificaciones y Administración de Propiedades.
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Entorno local / API Gateway
+  - url: https://posada-ec-alojamientos.azurewebsites.net/api/v1
+    description: Servidor Cloud de Producción
+paths:
+  /alojamientos:
+    get:
+      summary: Catálogo público paginado con filtros dinámicos
+      operationId: getAlojamientos
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 9
+        - name: ciudad
+          in: query
+          schema:
+            type: string
+        - name: estrellas
+          in: query
+          schema:
+            type: integer
+        - name: minPrecio
+          in: query
+          schema:
+            type: number
+        - name: maxPrecio
+          in: query
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Lista paginada de alojamientos disponibles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlojamientoPaginadoResponse'
+
+  /alojamientos/{id}:
+    get:
+      summary: Detalle completo de un alojamiento por ID o código
+      operationId: getAlojamientoById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: ALO-002
+      responses:
+        '200':
+          description: Ficha de detalle de la propiedad
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlojamientoDetalle'
+        '404':
+          description: Alojamiento no encontrado
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /ciudades:
+    get:
+      summary: Lista oficial de ciudades y destinos turísticos del Ecuador
+      operationId: getCiudades
+      responses:
+        '200':
+          description: Listado de ciudades
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CiudadDto'
+
+  /admin/alojamientos:
+    get:
+      summary: Lista completa de alojamientos para el panel de administración
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Alojamientos administrativos con métricas
+    post:
+      summary: Crear nuevo alojamiento con ubicación y habitaciones
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrearAlojamientoDto'
+      responses:
+        '201':
+          description: Alojamiento creado exitosamente
+
+  /admin/alojamientos/{id}:
+    patch:
+      summary: Actualizar estado (En Línea/Pausado), fotos y liberar cupos
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                estado:
+                  type: string
+                  enum: [Activo, Inactivo, En Mantenimiento]
+                liberarReservas:
+                  type: boolean
+                nombre:
+                  type: string
+                descripcion:
+                  type: string
+                imagenUrl:
+                  type: string
+                precioPorNoche:
+                  type: number
+      responses:
+        '200':
+          description: Alojamiento actualizado correctamente
+    delete:
+      summary: Eliminar o desactivar un alojamiento
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Alojamiento eliminado
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    AlojamientoItem:
+      type: object
+      properties:
+        id:
+          type: string
+          example: ALO-002
+        codigo:
+          type: string
+          example: VIL_CUE_002
+        nombre:
+          type: string
+          example: Villa Colonial Río Tomebamba
+        descripcion:
+          type: string
+        destino:
+          type: string
+          example: Cuenca
+        ciudad:
+          type: string
+          example: Cuenca
+        precioPorNoche:
+          type: string
+          example: "120.00"
+        estrellas:
+          type: integer
+          example: 5
+        tienePiscina:
+          type: boolean
+        permitePaquete:
+          type: boolean
+        habitacionesDisponibles:
+          type: integer
+          example: 3
+        imagenUrl:
+          type: string
+
+    AlojamientoPaginadoResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlojamientoItem'
+        metadata:
+          type: object
+          properties:
+            total_results:
+              type: integer
+            page:
+              type: integer
+            limit:
+              type: integer
+            total_pages:
+              type: integer
+            has_next:
+              type: boolean
+
+    AlojamientoDetalle:
+      type: object
+      properties:
+        id:
+          type: string
+        codigo:
+          type: string
+        nombre:
+          type: string
+        descripcion:
+          type: string
+        estado:
+          type: string
+          enum: [Activo, Inactivo, En Mantenimiento]
+        estaReservado:
+          type: boolean
+        imagenUrl:
+          type: string
+        politicaCancelacion:
+          type: string
+        horaCheckIn:
+          type: string
+          example: "14:00:00"
+        horaCheckOut:
+          type: string
+          example: "11:00:00"
+
+    CiudadDto:
+      type: object
+      properties:
+        id:
+          type: string
+          example: CIU-003
+        nombre:
+          type: string
+          example: Cuenca
+
+    CrearAlojamientoDto:
+      type: object
+      required:
+        - nombre
+        - destino
+      properties:
+        nombre:
+          type: string
+        descripcion:
+          type: string
+        destino:
+          type: string
+        precioPorNoche:
+          type: number
+        capacidadAdultos:
+          type: integer
+        capacidadNinos:
+          type: integer
+        habitaciones:
+          type: integer
+        imagenUrl:
+          type: string
+        estado:
+          type: string
+        liberarReservas:
+          type: boolean
+
+    ProblemDetails:
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+        detail:
+          type: string
