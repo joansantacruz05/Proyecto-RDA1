@@ -35,9 +35,11 @@ export class ProblemDetailsFilter implements ExceptionFilter {
           title: raw.title,
           status: status,
           code: raw.code as ProblemErrorCode,
+          ...raw,
         };
         if (raw.detail) payload.detail = raw.detail;
         if (raw.invalidParams) payload.invalidParams = raw.invalidParams;
+        if (raw.habilitadoDesde) payload.habilitadoDesde = raw.habilitadoDesde;
       } else {
         // Map standard NestJS exceptions to ProblemDetails
         let title = 'An error occurred';
@@ -54,7 +56,10 @@ export class ProblemDetailsFilter implements ExceptionFilter {
             const msg = (exceptionResponse as any).message;
             if (Array.isArray(msg)) {
               detail = msg.join('; ');
-              invalidParams = msg.map((m: string) => ({ name: 'field', reason: m }));
+              invalidParams = msg.map((m: string) => {
+                const match = m.match(/property\s+([^\s]+)/i);
+                return { name: match ? match[1] : 'field', reason: m };
+              });
             } else {
               detail = String(msg);
             }
@@ -96,6 +101,8 @@ export class ProblemDetailsFilter implements ExceptionFilter {
             code = 'PRICE_MISMATCH';
           } else if (detail && detail.toLowerCase().includes('cotizacion')) {
             code = 'QUOTE_EXPIRED';
+          } else if (detail && detail.toLowerCase().includes('in_progress')) {
+            code = 'IDEMPOTENCY_IN_PROGRESS';
           }
         } else if (status === HttpStatus.UNPROCESSABLE_ENTITY) {
           title = 'Unprocessable Entity';
@@ -175,12 +182,18 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     // Set application/problem+json content-type
     response.setHeader('Content-Type', 'application/problem+json');
 
-    // 409 and 429 require Retry-After header per hub contract
+    // Headers especiales para 409 y 429
     if (status === HttpStatus.CONFLICT || status === HttpStatus.TOO_MANY_REQUESTS) {
-      response.setHeader('Retry-After', '60');
+      if (!response.getHeader('Retry-After')) {
+        if (payload.code === 'IDEMPOTENCY_IN_PROGRESS') {
+          response.setHeader('Retry-After', '1');
+        } else {
+          response.setHeader('Retry-After', '1');
+        }
+      }
     }
 
-    // Deliver strictly the ProblemDetails fields without extra properties
+    // Deliver strictly the ProblemDetails fields
     response.status(status).json(payload);
   }
 }

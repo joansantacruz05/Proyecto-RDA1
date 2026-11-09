@@ -16,7 +16,9 @@ export type ProblemErrorCode =
   | 'INVALID_DOCUMENT'
   | 'IDEMPOTENCY_KEY_REUSED'
   | 'IDEMPOTENCY_KEY_REUSE_WITH_DIFFERENT_PAYLOAD'
+  | 'IDEMPOTENCY_IN_PROGRESS'
   | 'CHECKIN_TIME_NOT_REACHED'
+  | 'INVALID_STATE_TRANSITION'
   | 'RESTRICTION_VIOLATED'
   | 'UNSUPPORTED_CURRENCY'
   | 'DISCOUNT_EXCEEDS_CONTRACT'
@@ -35,6 +37,8 @@ export interface ProblemDetailsPayload {
   code: ProblemErrorCode;
   detail?: string;
   invalidParams?: Array<{ name: string; reason: string }>;
+  habilitadoDesde?: string;
+  [key: string]: any;
 }
 
 export class ProblemDetailsException extends HttpException {

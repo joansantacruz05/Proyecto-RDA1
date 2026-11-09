@@ -177,3 +177,4 @@ components:
         mensaje:
           type: string
           example: "Check-out completado. El alojamiento vuelve a estar en línea."
+

@@ -170,3 +170,4 @@ components:
           type: string
           enum: [Activo, Inactivo]
           default: Activo
+

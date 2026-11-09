@@ -129,6 +129,13 @@ async function bootstrap() {
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders:
       'Content-Type,Accept,Authorization,Idempotency-Key,X-Correlation-ID,X-Device-Fingerprint,X-Client-Id,x-client-id,X-Requested-With',
+    exposedHeaders: [
+      'Retry-After',
+      'Idempotent-Replayed',
+      'Server-Timing',
+      'X-Correlation-ID',
+      'Content-Type',
+    ],
   });
 
   // ── Filtro Global ProblemDetails y Tubería de Validación ─────────────────

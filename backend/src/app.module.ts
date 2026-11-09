@@ -20,7 +20,7 @@ import { RolesGuard } from './modules/auth/guards/roles.guard';
     // Carga de variables de entorno globales
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: ['.env', 'backend/.env'],
     }),
 
     // Throttler para control de tasa general (100 reqs/min por defecto)
@@ -35,21 +35,25 @@ import { RolesGuard } from './modules/auth/guards/roles.guard';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        url: configService.getOrThrow<string>('DATABASE_URL'),
-        autoLoadEntities: true,
-        synchronize: false,
-        ssl: {
-          rejectUnauthorized: false,
-        },
-        extra: {
-          max: 10,
-          connectionTimeoutMillis: 10000,
-        },
-        retryAttempts: 3,
-        retryDelay: 3000,
-      }),
+      useFactory: (configService: ConfigService) => {
+        const dbUrl = configService.getOrThrow<string>('DATABASE_URL');
+        const isLocal = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1');
+        return {
+          type: 'postgres',
+          url: dbUrl,
+          autoLoadEntities: true,
+          synchronize: false,
+          ssl: isLocal ? false : {
+            rejectUnauthorized: false,
+          },
+          extra: {
+            max: 10,
+            connectionTimeoutMillis: 10000,
+          },
+          retryAttempts: 3,
+          retryDelay: 3000,
+        };
+      },
     }),
 
     // Módulos Compartidos

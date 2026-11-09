@@ -136,3 +136,4 @@ components:
     methods:
       - PushStockUpdate (StockUpdateMessage) -> (StockUpdateAck)
       - StreamInventoryChanges (stream StockChangeEvent) -> (StreamSummary)
+

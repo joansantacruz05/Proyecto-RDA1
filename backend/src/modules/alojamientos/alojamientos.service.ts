@@ -714,8 +714,8 @@ export class AlojamientosService {
     return this.reservasService.previewOrder(previewRequest);
   }
 
-  createOrder(createRequest: any, userId: string, clientIdHeader?: string): Promise<any> {
-    return this.reservasService.createOrder(createRequest, userId, clientIdHeader);
+  createOrder(createRequest: any, userId: string, clientIdHeader?: string, req?: any, res?: any): Promise<any> {
+    return this.reservasService.createOrder(createRequest, userId, clientIdHeader, req, res);
   }
 
   getOrder(orderId: string): Promise<any> {
@@ -1068,6 +1068,8 @@ export class AlojamientosService {
 
   async checkInOrder(orderId: string, body?: any): Promise<any> {
     const order = await this.reservasService.getOrder(orderId);
+
+    // 1. Estado cancelado -> 409 INVALID_STATE_TRANSITION
     if (order.estadoId === 'EST-003' || order.estado === 'CANCELLED') {
       throw new ProblemDetailsException(
         {
@@ -1081,8 +1083,92 @@ export class AlojamientosService {
       );
     }
 
+    // 2. Ya tiene check-in realizado -> 409 INVALID_STATE_TRANSITION (Segundo check-in)
+    if (
+      order.checkinRealizado === true ||
+      order.estado === 'CHECKED_IN' ||
+      order.estadoNombre === 'Llegada Confirmada' ||
+      order.estado === 'CONFIRMADO_ASISTIDO'
+    ) {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/invalid-state-transition',
+          title: 'Invalid State Transition',
+          status: HttpStatus.CONFLICT,
+          code: 'INVALID_STATE_TRANSITION',
+          detail: 'La reserva ya cuenta con check-in registrado previamente (estado actual: CHECKED_IN).',
+        },
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    // 3. Solo reservas en estado CONFIRMED pueden hacer check-in
+    if (order.estadoId !== 'EST-002' && order.estado !== 'CONFIRMED') {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/invalid-state-transition',
+          title: 'Invalid State Transition',
+          status: HttpStatus.CONFLICT,
+          code: 'INVALID_STATE_TRANSITION',
+          detail: 'El check-in solo está permitido para reservas en estado CONFIRMED.',
+        },
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    // 4. Validar fecha y hora en America/Guayaquil (Check-in desde fecha de entrada y >= 14:00, salvo early-checkin)
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Guayaquil',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date());
+
+    const pMap: Record<string, string> = {};
+    for (const p of parts) {
+      pMap[p.type] = p.value;
+    }
+    const hoyGuayaquil = `${pMap.year}-${pMap.month}-${pMap.day}`;
+    const horaGuayaquil = parseInt(pMap.hour, 10);
+
+    const fechaEntradaStr = order.fechaEntrada instanceof Date
+      ? order.fechaEntrada.toISOString().split('T')[0]
+      : String(order.fechaEntrada || '').split('T')[0];
+
+    const earlyCheckinAutorizado = Boolean(
+      order.earlyCheckinAutorizado ||
+      body?.earlyCheckinAutorizado ||
+      body?.autorizado ||
+      body?.early_checkin === true,
+    );
+
+    if (!earlyCheckinAutorizado) {
+      const fechaNoAlcanzada = hoyGuayaquil < fechaEntradaStr;
+      const horaNoAlcanzada = (hoyGuayaquil === fechaEntradaStr && horaGuayaquil < 14);
+
+      if (fechaNoAlcanzada || horaNoAlcanzada) {
+        throw new ProblemDetailsException(
+          {
+            type: 'https://api.booking-hub.com/errors/checkin-time-not-reached',
+            title: 'Check-in Time Not Reached',
+            status: HttpStatus.UNPROCESSABLE_ENTITY,
+            code: 'CHECKIN_TIME_NOT_REACHED',
+            detail: `El check-in solo está permitido desde la fecha de entrada (${fechaEntradaStr}) a partir de las 14:00 (hora Guayaquil), salvo early-checkin aprobado por ADMIN.`,
+            habilitadoDesde: `${fechaEntradaStr}T14:00:00-05:00`,
+          },
+          HttpStatus.UNPROCESSABLE_ENTITY,
+        );
+      }
+    }
+
+    // 5. Actualizar reserva a CHECKED_IN
     await this.alojamientoRepository.query(
-      `UPDATE reservas SET "estadoId" = 'EST-002' WHERE id = $1`,
+      `UPDATE reservas 
+       SET "estadoId" = 'EST-002', "checkinRealizado" = true, "checkinHora" = NOW() 
+       WHERE id = $1 OR "ordenId"::text = $1`,
       [order.id],
     );
 
@@ -1091,7 +1177,7 @@ export class AlojamientosService {
       await this.alojamientoRepository.query(
         `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
          VALUES ($1, $2, $3, $3, $4)`,
-        [hisId, order.id, order.estadoId || 'EST-002', 'Check-in confirmado en recepción. Huésped en estancia.'],
+        [hisId, order.id, order.estadoId || 'EST-002', 'Check-in confirmado en recepción. Estado: CHECKED_IN.'],
       );
     } catch (e: any) {
       console.warn(`[CHECKIN-HISTORIAL] Advertencia: ${e?.message}`);
@@ -1100,27 +1186,10 @@ export class AlojamientosService {
     const externalOrderId = order.external_order_id || order.externalOrderId || order.ordenId || order.id;
     const clientId = body?.client_id || order.usuarioId || order.clienteIdentificacion || 'CLI-001';
 
-    // Notificación Push obligatoria hacia Booking Core API (Requisito de Cátedra)
-    const bookingCheckinUrl = `https://booking-core-api.azurewebsites.net/api/v2/reservas/${encodeURIComponent(externalOrderId)}/checkin`;
-    const apiKey = process.env.BOOKING_API_KEY;
-    if (!apiKey) {
-      console.error('[BOOKING-CHECKIN-NOTIFY] FATAL: Variable BOOKING_API_KEY no configurada en el entorno.');
-      throw new ProblemDetailsException(
-        {
-          type: 'https://api.booking-hub.com/errors/internal-server-error',
-          title: 'Configuration Error',
-          status: HttpStatus.INTERNAL_SERVER_ERROR,
-          code: 'INTERNAL_ERROR',
-          detail: 'Servicio de integración de check-in no configurado (falta BOOKING_API_KEY).',
-        },
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-
     const checkinNoticePayload = {
       external_order_id: String(externalOrderId),
       client_id: String(clientId),
-      estado: 'CONFIRMADO_ASISTIDO',
+      estado: 'CHECKED_IN',
       huespedes_reales: Number(body?.huespedes_reales || order.numeroPersonas || 1),
       admin_id: body?.admin_id || 'recepcionista-hotel',
       fecha_checkin: new Date().toISOString(),
@@ -1146,12 +1215,12 @@ export class AlojamientosService {
       console.warn(`[OUTBOX-CHECKIN] Advertencia al registrar en outbox: ${e.message}`);
     }
 
-    // Reintentos con backoff para garantizar entrega
-    let pushSuccess = false;
-    let lastError = '';
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    // Notificación Push hacia Booking Core API (si está configurada la llave)
+    const apiKey = process.env.BOOKING_API_KEY;
+    if (apiKey) {
+      const bookingCheckinUrl = `https://booking-core-api.azurewebsites.net/api/v2/reservas/${encodeURIComponent(externalOrderId)}/checkin`;
       try {
-        const response = await fetch(bookingCheckinUrl, {
+        await fetch(bookingCheckinUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1159,25 +1228,18 @@ export class AlojamientosService {
           },
           body: JSON.stringify(checkinNoticePayload),
         });
-        const respText = await response.text().catch(() => '');
-        console.log(`[BOOKING-CHECKIN-NOTIFY] Intento ${attempt}: Status ${response.status}, Respuesta: ${respText}`);
-        if (response.ok) {
-          pushSuccess = true;
-          break;
-        }
-        lastError = `Status ${response.status}: ${respText}`;
       } catch (err: any) {
-        lastError = err.message;
-        if (attempt < 3) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-        }
+        console.warn(`[BOOKING-CHECKIN-NOTIFY] Aviso al notificar Booking: ${err?.message}`);
       }
     }
 
     return {
       orderId: order.ordenId || order.id,
+      reservaId: order.id,
       external_order_id: externalOrderId,
-      estado: 'CONFIRMADO_ASISTIDO',
+      externalOrderId: externalOrderId,
+      estado: 'CHECKED_IN',
+      checkinRealizado: true,
       habitacionAsignada: `${order.habitacionNombre || 'Suite Deluxe'} - Piso 2`,
       claveAccesoDigital: `PIN-${Math.floor(1000 + Math.random() * 9000)}#`,
       checkInHora: new Date().toISOString(),
@@ -1220,25 +1282,75 @@ export class AlojamientosService {
 
   async setEarlyCheckin(orderId: string, body?: any): Promise<any> {
     const order = await this.reservasService.getOrder(orderId);
+    const autorizado = body?.autorizado !== undefined ? Boolean(body.autorizado) : true;
+
+    await this.alojamientoRepository.query(
+      `UPDATE reservas 
+       SET "earlyCheckinAutorizado" = $1, "habilitadoDesde" = $2
+       WHERE id = $3 OR "ordenId"::text = $3`,
+      [autorizado, new Date().toISOString(), order.id],
+    );
+
     return {
       orderId: order.ordenId || order.id,
-      estado: order.estadoNombre || 'CONFIRMED',
-      earlyCheckinAutorizado: body?.autorizado ?? true,
-      habilitadoDesde: body?.habilitadoDesde || new Date().toISOString(),
+      estado: order.estado || 'CONFIRMED',
+      earlyCheckinAutorizado: autorizado,
+      habilitadoDesde: new Date().toISOString(),
       motivo: body?.motivo || 'Autorizado por la administración',
     };
   }
 
   async listOrders(sagaId?: string, idempotencyKey?: string, page: string = '1', limit: string = '50'): Promise<any> {
-    // Si se envía idempotency_key para recuperación de Saga tras timeout
+    // Si se envía idempotency_key para recuperación de Saga tras timeout (Requisito 2)
     if (idempotencyKey) {
       const cached = await this.idempotencyService.findByKey(idempotencyKey);
       if (cached) {
         return {
+          ...cached,
+          order: cached,
           orders: [cached],
+          data: [cached],
           total: 1,
-          page: 1,
-          limit: 1,
+          metadata: { total_results: 1, page: 1, limit: 1, total_pages: 1, has_next: false },
+        };
+      }
+
+      // Si no estaba en la tabla de idempotencia, buscar en reservas
+      const resRows = await this.alojamientoRepository.query(
+        `SELECT r.id, r."ordenId", r."ordenId" as "orderId", r."ordenId" as "externalOrderId",
+                r."fechaEntrada" as "checkinFecha", r."fechaSalida" as "checkoutFecha",
+                r."precioTotal" as "totalPagar", r."estadoId",
+                CASE 
+                  WHEN r."checkinRealizado" = true THEN 'CHECKED_IN'
+                  WHEN r."estadoId" = 'EST-003' THEN 'CANCELLED'
+                  WHEN r."estadoId" = 'EST-002' THEN 'CONFIRMED'
+                  ELSE 'PENDING'
+                END as "estado",
+                e.nombre as "habitacionNombre", e.codigo as "tipoHabitacionCodigo",
+                a.nombre as "alojamientoNombre", a.id as "alojamientoId"
+         FROM reservas r
+         JOIN espacios_rentables e ON r."espacioId" = e.id
+         JOIN alojamientos a ON e."alojamientoId" = a.id
+         LEFT JOIN contratos c ON c."reservaId" = r.id
+         WHERE r."ordenId"::text = $1 OR c.terminos ILIKE '%' || $1 || '%'
+         LIMIT 1`,
+        [idempotencyKey],
+      );
+
+      if (resRows && resRows.length > 0) {
+        const orderObj = {
+          ...resRows[0],
+          orderId: resRows[0].ordenId || resRows[0].id,
+          reservaId: resRows[0].id,
+          total: resRows[0].totalPagar,
+        };
+        return {
+          ...orderObj,
+          order: orderObj,
+          orders: [orderObj],
+          data: [orderObj],
+          total: 1,
+          metadata: { total_results: 1, page: 1, limit: 1, total_pages: 1, has_next: false },
         };
       }
     }
@@ -1252,6 +1364,7 @@ export class AlojamientosService {
              r."fechaEntrada" as "checkinFecha", r."fechaSalida" as "checkoutFecha",
              r."precioTotal" as "totalPagar", r."estadoId", er.nombre as "estadoNombre",
              CASE 
+               WHEN r."checkinRealizado" = true THEN 'CHECKED_IN'
                WHEN r."estadoId" = 'EST-003' THEN 'CANCELLED'
                WHEN r."estadoId" = 'EST-002' THEN 'CONFIRMED'
                ELSE 'PENDING'

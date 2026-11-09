@@ -23,3 +23,4 @@ Este directorio contiene los **contratos formales e independientes** (API-First,
 ### Contrato Maestro Consolidado
 Para la integración con el ESB central de la cátedra se mantiene además el contrato maestro unificado:
 - **Contrato General OpenAPI v2.2.0:** [`../alojamientos-openapi-v2.yaml`](../alojamientos-openapi-v2.yaml)
+

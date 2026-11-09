@@ -4,8 +4,8 @@ import {
   ExecutionContext,
   CallHandler,
 } from '@nestjs/common';
-import { Observable, of } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { Observable, of, throwError } from 'rxjs';
+import { tap, catchError } from 'rxjs/operators';
 import { Response, Request } from 'express';
 import { IdempotencyService } from '../services/idempotency.service';
 
@@ -20,24 +20,25 @@ export class IdempotencyInterceptor implements NestInterceptor {
 
     const idempotencyKey = (req.headers['idempotency-key'] as string | undefined)?.trim();
 
-    // If no key is provided, let it proceed (IdempotencyKeyGuard will reject if mandatory)
+    // Si no se provee llave, permitir ejecución normal
     if (!idempotencyKey) {
       return next.handle();
     }
 
-    const userId = (req as any).user?.sub || 'ANONYMOUS';
-    const endpoint = req.originalUrl || req.url || 'DEFAULT';
+    const userId = (req as any).user?.sub || (req as any).user?.id || req.headers['x-client-id'] || 'ANONYMOUS';
+    // Endpoint canónico sin parámetros query
+    const endpoint = (req.originalUrl || req.url || 'DEFAULT').split('?')[0];
 
-    // Check if key is already stored and validate body hash
-    const check = await this.idempotencyService.validateAndGetCached(
+    // Reclamo atómico de la llave
+    const check = await this.idempotencyService.claimKey(
       idempotencyKey,
       req.body,
-      userId,
+      String(userId),
       endpoint,
     );
 
     if (check.isCached) {
-      // Replay stored response with Idempotent-Replayed header
+      // Replay stored response con cabecera Idempotent-Replayed: true
       res.setHeader('Idempotent-Replayed', 'true');
       if (check.statusCode) {
         res.status(check.statusCode);
@@ -45,18 +46,30 @@ export class IdempotencyInterceptor implements NestInterceptor {
       return of(check.response);
     }
 
-    // Otherwise execute handler and save result
+    // Adjuntar metadatos de idempotencia a la request para uso en la transacción
+    (req as any).idempotencyInfo = {
+      key: idempotencyKey,
+      userId: String(userId),
+      endpoint,
+      hash: check.hash,
+    };
+
     return next.handle().pipe(
       tap(async (responseBody) => {
-        const statusCode = res.statusCode || 200;
-        await this.idempotencyService.saveKey(
+        const statusCode = res.statusCode || 201;
+        // Completar la llave si no fue completada en la transacción interna
+        await this.idempotencyService.completeKey(
           idempotencyKey,
-          check.hash || this.idempotencyService.computeHash(req.body),
+          String(userId),
+          endpoint,
           statusCode,
           responseBody,
-          userId,
-          endpoint,
         );
+      }),
+      catchError((err) => {
+        // En caso de excepción, liberar el reclamo IN_PROGRESS para permitir reintentos válidos
+        this.idempotencyService.releaseClaim(idempotencyKey, String(userId), endpoint);
+        return throwError(() => err);
       }),
     );
   }

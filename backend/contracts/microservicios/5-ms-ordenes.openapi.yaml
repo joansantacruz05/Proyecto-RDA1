@@ -243,3 +243,4 @@ components:
           example: OUT_OF_STOCK
         detail:
           type: string
+

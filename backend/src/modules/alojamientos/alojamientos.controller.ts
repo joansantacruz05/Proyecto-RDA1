@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Delete, Body, Param, Headers, Put, Patch, Query,
-  UseGuards, UseInterceptors, HttpCode, HttpStatus, Header, Req
+  UseGuards, UseInterceptors, HttpCode, HttpStatus, Header, Req, Res
 } from '@nestjs/common';
 import {
   ApiTags, ApiOperation, ApiResponse, ApiParam,
@@ -14,6 +14,9 @@ import { ScopesGuard } from '../../common/guards/scopes.guard';
 import { Scopes } from '../../common/decorators/scopes.decorator';
 import { CrearAlojamientoDto } from './dto/crear-alojamiento.dto';
 import { ActualizarAlojamientoDto } from './dto/actualizar-alojamiento.dto';
+import { CreateOrderDto } from '../reservas/dto/create-order.dto';
+import { ModifyOrderDto } from '../reservas/dto/modify-order.dto';
+import { CancelOrderDto } from '../reservas/dto/cancel-order.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../usuarios/entities/usuario.entity';
@@ -425,11 +428,12 @@ export class AlojamientosController {
   createOrder(
     @Headers('Idempotency-Key') idempotencyKey: string,
     @Headers('X-Client-Id') clientIdHeader: string,
-    @Body() createRequest: any,
+    @Body() createRequest: CreateOrderDto,
     @Req() req: any,
+    @Res({ passthrough: true }) res: any,
   ) {
     const userId = clientIdHeader || req.user?.sub || req.user?.id || 'NODE_SYSTEM_HUB';
-    return this.alojamientosService.createOrder(createRequest, userId, clientIdHeader);
+    return this.alojamientosService.createOrder(createRequest, userId, clientIdHeader, req, res);
   }
 
   @Get(['orders', 'alojamientos/orders', 'alojamientos/reservas', 'alojamientos/reservations'])
@@ -464,7 +468,7 @@ export class AlojamientosController {
   modifyOrder(
     @Headers('Idempotency-Key') idempotencyKey: string,
     @Param('orderId') orderId: string,
-    @Body() modifyRequest: any,
+    @Body() modifyRequest: ModifyOrderDto,
   ) {
     return this.alojamientosService.modifyOrder(orderId, modifyRequest);
   }
@@ -481,7 +485,7 @@ export class AlojamientosController {
   cancelOrder(
     @Headers('Idempotency-Key') idempotencyKey: string,
     @Param('orderId') orderId: string,
-    @Body() cancelRequest?: any,
+    @Body() cancelRequest?: CancelOrderDto,
     @Req() req?: any,
   ) {
     const userId = req?.user?.sub || req?.user?.id || 'NODE_SYSTEM_HUB';

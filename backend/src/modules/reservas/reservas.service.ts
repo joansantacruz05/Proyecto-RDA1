@@ -364,7 +364,14 @@ export class ReservasService {
   //  CREAR ORDEN VÍA CONTRATO HUB (/orders/create)
   // ═══════════════════════════════════════════════════════════════════════
 
-  async createOrder(createRequest: any, userIdFromToken: string, clientIdHeader?: string): Promise<any> {
+  async createOrder(
+    createRequest: any,
+    userIdFromToken: string,
+    clientIdHeader?: string,
+    req?: any,
+    res?: any,
+  ): Promise<any> {
+    const tStart = performance.now();
     const previewId = createRequest.order_preview_id || createRequest.orderPreviewId;
     const cachedPreview = previewId ? ReservasService.previewsCache.get(previewId) : null;
 
@@ -402,18 +409,55 @@ export class ReservasService {
       1,
     );
 
-    const ocupantes = createRequest.ocupantes || {
-      adultos: createRequest.guests?.number_of_adults || createRequest.numeroPersonas || 1,
-      ninos: createRequest.guests?.number_of_children || 0,
-    };
+    const ocupantes = createRequest.ocupantes || createRequest.guests;
+
+    // Validación estricta de Adultos (>= 1, sin fallback implícito '|| 1')
+    const totalAdultos = ocupantes?.adultos !== undefined
+      ? Number(ocupantes.adultos)
+      : (ocupantes?.number_of_adults !== undefined
+          ? Number(ocupantes.number_of_adults)
+          : (createRequest.numeroPersonas !== undefined ? Number(createRequest.numeroPersonas) : NaN));
+
+    if (isNaN(totalAdultos) || totalAdultos < 1) {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/validation-failed',
+          title: 'Validation Failed',
+          status: HttpStatus.BAD_REQUEST,
+          code: 'VALIDATION_FAILED',
+          detail: 'El número de adultos es obligatorio y debe ser mayor o igual a 1 (no se permite omisión ni default "|| 1").',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const totalNinos = Number(ocupantes?.ninos || ocupantes?.number_of_children || 0);
 
     const huespedTitular = createRequest.huespedTitular || {
-      nombreCompleto: createRequest.customer?.name || `${createRequest.customer?.first_name || 'Huésped'} ${createRequest.customer?.last_name || 'Booking'}`.trim(),
+      nombreCompleto:
+        createRequest.customer?.name ||
+        createRequest.customer_contact?.full_name ||
+        `${createRequest.customer?.first_name || 'Huésped'} ${createRequest.customer?.last_name || 'Booking'}`.trim(),
       tipoDocumento: 'CEDULA',
-      identificacion: createRequest.customer?.identificacion || '1710034065',
-      email: createRequest.customer?.email || `${userIdFromToken}@booking-hub.com`,
-      telefono: createRequest.customer?.phone || '+593991234567',
+      identificacion: createRequest.customer?.identificacion || createRequest.customer_contact?.identificacion || '1710034065',
+      email: createRequest.customer?.email || createRequest.customer_contact?.email || `${userIdFromToken}@booking-hub.com`,
+      telefono: createRequest.customer?.phone || createRequest.customer_contact?.phone || '+593991234567',
     };
+
+    // Validación de correo electrónico
+    const guestEmail = huespedTitular?.email || createRequest.customer_contact?.email || createRequest.customer?.email;
+    if (!guestEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/validation-failed',
+          title: 'Validation Failed',
+          status: HttpStatus.BAD_REQUEST,
+          code: 'VALIDATION_FAILED',
+          detail: 'El correo electrónico del huésped titular es obligatorio y debe ser una dirección válida.',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
 
     const currency = createRequest.currency || 'USD';
     const totalPagar = createRequest.totalPagar !== undefined ? createRequest.totalPagar : createRequest.total;
@@ -435,7 +479,7 @@ export class ReservasService {
       );
     }
 
-    // 2. Validar Fechas
+    // 2. Validar Fechas (hoy en America/Guayaquil, sin new Date de solo fecha)
     if (!checkin || !checkout) {
       throw new ProblemDetailsException(
         {
@@ -449,18 +493,45 @@ export class ReservasService {
       );
     }
 
-    const dIn = new Date(checkin);
-    const dOut = new Date(checkout);
-    if (isNaN(dIn.getTime()) || isNaN(dOut.getTime()) || dOut <= dIn) {
+    const checkinClean = String(checkin).split('T')[0];
+    const checkoutClean = String(checkout).split('T')[0];
+
+    // Obtener fecha actual en America/Guayaquil mediante formato ISO YYYY-MM-DD
+    const partsGuayaquil = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Guayaquil',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date());
+    const pMap: Record<string, string> = {};
+    for (const p of partsGuayaquil) pMap[p.type] = p.value;
+    const hoyGuayaquil = `${pMap.year}-${pMap.month}-${pMap.day}`;
+
+    // Fechas no pasadas
+    if (checkinClean < hoyGuayaquil) {
       throw new ProblemDetailsException(
         {
           type: 'https://api.booking-hub.com/errors/validation-failed',
-          title: 'Invalid Dates',
-          status: HttpStatus.UNPROCESSABLE_ENTITY,
-          code: 'RESTRICTION_VIOLATED',
-          detail: 'La fecha de fin debe ser posterior a la fecha de inicio.',
+          title: 'Validation Failed',
+          status: HttpStatus.BAD_REQUEST,
+          code: 'VALIDATION_FAILED',
+          detail: `La fecha de check-in (${checkinClean}) no puede ser una fecha pasada (fecha actual en America/Guayaquil: ${hoyGuayaquil}).`,
         },
-        HttpStatus.UNPROCESSABLE_ENTITY,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Salida posterior a entrada
+    if (checkoutClean <= checkinClean) {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/validation-failed',
+          title: 'Validation Failed',
+          status: HttpStatus.BAD_REQUEST,
+          code: 'VALIDATION_FAILED',
+          detail: 'La fecha de check-out debe ser estrictamente posterior a la fecha de check-in.',
+        },
+        HttpStatus.BAD_REQUEST,
       );
     }
 
@@ -498,21 +569,41 @@ export class ReservasService {
       }
     }
 
-    // 5. Transacción de reserva con concurrencia (SELECT FOR UPDATE)
+    const tValEnd = performance.now();
+    const valDur = (tValEnd - tStart).toFixed(1);
+
+    // 5. Transacción de reserva con concurrencia optimizada (SELECT FOR UPDATE consolidado)
     return await this.dataSource.transaction(async (manager) => {
-      // Buscar el espacio rentable
+      const tLockStart = performance.now();
+
+      // Consulta CTE consolidada: busca espacio rentable, bloquea la fila y calcula disponibilidad en UN SOLO viaje a la BD
       const espacios = await manager.query(
-        `SELECT e.*, a.id as "alojamientoId", a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo", a."politicaCancelacion"
-         FROM espacios_rentables e
-         JOIN alojamientos a ON a.id = e."alojamientoId"
-         WHERE (a.id = $1 OR a.codigo = $1 OR e."alojamientoId" = $1 OR $1 = '' OR $1 IS NULL)
-           AND (e.codigo = $2 OR e.id = $2 OR $2 = '' OR $2 IS NULL)
-           AND (e.estado = 'Activo' OR e.estado IS NULL)
-         ORDER BY (CASE WHEN e.codigo = $2 THEN 0 ELSE 1 END)
-         LIMIT 1
-         FOR UPDATE OF e`,
-        [accommodationId || '', tipoHabitacionCodigo || ''],
+        `WITH hab_info AS (
+           SELECT e.*, a.id as "alojamientoId", a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo", a."politicaCancelacion",
+             (
+               e."cantidadDisponible" - (
+                 SELECT COUNT(*) 
+                 FROM reservas r 
+                 WHERE r."espacioId" = e.id 
+                   AND r."estadoId" IN ('EST-001', 'EST-002') 
+                   AND r."fechaEntrada" < $4 AND r."fechaSalida" > $3
+               )
+             ) as remanentes
+           FROM espacios_rentables e
+           JOIN alojamientos a ON a.id = e."alojamientoId"
+           WHERE (a.id = $1 OR a.codigo = $1 OR e."alojamientoId" = $1 OR $1 = '' OR $1 IS NULL)
+             AND (e.codigo = $2 OR e.id = $2 OR $2 = '' OR $2 IS NULL)
+             AND (e.estado = 'Activo' OR e.estado IS NULL)
+           ORDER BY (CASE WHEN e.codigo = $2 THEN 0 ELSE 1 END)
+           LIMIT 1
+           FOR UPDATE OF e
+         )
+         SELECT * FROM hab_info;`,
+        [accommodationId || '', tipoHabitacionCodigo || '', checkinClean, checkoutClean],
       );
+
+      const tLockEnd = performance.now();
+      const lockDur = (tLockEnd - tLockStart).toFixed(1);
 
       if (!espacios || espacios.length === 0) {
         throw new ProblemDetailsException(
@@ -530,8 +621,6 @@ export class ReservasService {
       const espacio = espacios[0];
 
       // Validar Capacidad
-      const totalAdultos = Number(ocupantes?.adultos || 1);
-      const totalNinos = Number(ocupantes?.ninos || 0);
       const totalPersonas = totalAdultos + totalNinos;
       const capacidadMax = (Number(espacio.capacidadAdultos || 2) + Number(espacio.capacidadNinos || 0)) * cantidadHabitaciones;
 
@@ -549,22 +638,7 @@ export class ReservasService {
       }
 
       // Validar Concurrencia y Stock
-      const availCheck = await manager.query(
-        `SELECT (
-           e."cantidadDisponible" - (
-             SELECT COUNT(*) 
-             FROM reservas r 
-             WHERE r."espacioId" = e.id 
-               AND r."estadoId" IN ('EST-001', 'EST-002') 
-               AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2
-           )
-         ) as disponibles
-         FROM espacios_rentables e
-         WHERE e.id = $1`,
-        [espacio.id, checkin, checkout],
-      );
-
-      const disponibles = Number(availCheck[0]?.disponibles ?? espacio.cantidadDisponible);
+      const disponibles = Number(espacio.remanentes ?? espacio.cantidadDisponible);
       if (disponibles < cantidadHabitaciones) {
         throw new ProblemDetailsException(
           {
@@ -581,8 +655,8 @@ export class ReservasService {
       // Cotizar tarifa oficial
       const pricing = this.pricingService.calculatePrice(
         Number(espacio.precioPorNoche),
-        checkin,
-        checkout,
+        checkinClean,
+        checkoutClean,
         cantidadHabitaciones,
       );
 
@@ -603,6 +677,8 @@ export class ReservasService {
         }
       }
 
+      const tInsertStart = performance.now();
+
       // Asegurar existencia del cliente en 'usuarios' y 'clientes'
       const clientId =
         (userIdFromToken && userIdFromToken !== 'NODE_SYSTEM_HUB' ? userIdFromToken : null) ||
@@ -611,7 +687,6 @@ export class ReservasService {
         createRequest.clienteId ||
         `CLI-${Math.floor(100000 + Math.random() * 900000)}`;
       const guestName = huespedTitular?.nombreCompleto || 'Huésped Booking';
-      const guestEmail = huespedTitular?.email || `${clientId}@booking-hub.com`;
       const guestPhone = huespedTitular?.telefono || '+593991234567';
       const guestDoc = huespedTitular?.identificacion || '1710034065';
 
@@ -642,16 +717,16 @@ export class ReservasService {
         `INSERT INTO reservas (
            id, "ordenId", "usuarioId", "espacioId", "estadoId", 
            "fechaEntrada", "fechaSalida", "precioTotal", subtotal, iva, "tasaMunicipal", 
-           moneda, "numeroPersonas", "fechaCreacion"
+           moneda, "numeroPersonas", "fechaCreacion", "checkinRealizado", "earlyCheckinAutorizado"
          )
-         VALUES ($1, $2, $3, $4, 'EST-002', $5, $6, $7, $8, $9, $10, 'USD', $11, CURRENT_TIMESTAMP)`,
+         VALUES ($1, $2, $3, $4, 'EST-002', $5, $6, $7, $8, $9, $10, 'USD', $11, CURRENT_TIMESTAMP, false, false)`,
         [
           reservaId,
           orderId,
           clientId,
           espacio.id,
-          checkin,
-          checkout,
+          checkinClean,
+          checkoutClean,
           pricing.total,
           pricing.subtotal,
           pricing.iva,
@@ -676,14 +751,20 @@ export class ReservasService {
         [generateEntityId('HIS'), reservaId, `Orden creada vía GDS Hub (Ref: ${paymentRef}, External: ${externalOrderId})`],
       );
 
+      const tInsertEnd = performance.now();
+      const insertDur = (tInsertEnd - tInsertStart).toFixed(1);
+
       // Encolar actualización de stock en tiempo real hacia Booking
-      await this.inventorySyncService.enqueueStockUpdate(manager, espacio.id, checkin, checkout, 'ORDER_CREATED');
+      const tOutboxStart = performance.now();
+      await this.inventorySyncService.enqueueStockUpdate(manager, espacio.id, checkinClean, checkoutClean, 'ORDER_CREATED');
+      const tOutboxEnd = performance.now();
+      const outboxDur = (tOutboxEnd - tOutboxStart).toFixed(1);
 
       if (previewId) {
         ReservasService.previewsCache.delete(previewId);
       }
 
-      return {
+      const orderResponse = {
         orderId: orderId,
         reservaId: reservaId,
         external_order_id: externalOrderId,
@@ -701,10 +782,10 @@ export class ReservasService {
           ninos: totalNinos,
         },
         regimen: createRequest.regimenSeleccionado || 'SOLO_HABITACION',
-        checkinFecha: checkin,
-        checkoutFecha: checkout,
+        checkinFecha: checkinClean,
+        checkoutFecha: checkoutClean,
         noches: pricing.nights,
-        checkinHabilitadoDesde: `${checkin}T14:00:00-05:00`,
+        checkinHabilitadoDesde: `${checkinClean}T14:00:00-05:00`,
         earlyCheckinAutorizado: false,
         cotizacionId: cotizacionId || randomUUID(),
         huespedTitular: {
@@ -727,6 +808,35 @@ export class ReservasService {
         habitacionAsignada: `${espacio.nombre} (Piso 2)`,
         createdAt: new Date().toISOString(),
       };
+
+      // 6. Guardar la respuesta de idempotencia en la MISMA transacción (Requisito 1)
+      const idempotencyKey = req?.headers?.['idempotency-key'] || req?.idempotencyInfo?.key;
+      const idempUserId = req?.idempotencyInfo?.userId || String(userIdFromToken || clientIdHeader || 'ANONYMOUS');
+      const idempEndpoint = req?.idempotencyInfo?.endpoint || (req?.originalUrl || req?.url || 'DEFAULT').split('?')[0];
+
+      let idempDur = '0.0';
+      if (idempotencyKey) {
+        const tIdempStart = performance.now();
+        await manager.query(
+          `UPDATE idempotency_keys
+           SET estado = 'COMPLETED', status = 201, respuesta = $4
+           WHERE llave = $1::uuid AND "usuarioId" = $2 AND endpoint = $3;`,
+          [idempotencyKey, idempUserId, idempEndpoint, JSON.stringify(orderResponse)],
+        );
+        const tIdempEnd = performance.now();
+        idempDur = (tIdempEnd - tIdempStart).toFixed(1);
+      }
+
+      // Medición por pasos con Server-Timing (Requisito 5)
+      const tTotal = (performance.now() - tStart).toFixed(1);
+      const serverTiming = `val;dur=${valDur};desc="Validation", lock;dur=${lockDur};desc="DB Lock & Stock", insert;dur=${insertDur};desc="Order Insert", outbox;dur=${outboxDur};desc="Outbox", idemp;dur=${idempDur};desc="Atomic Idempotency", total;dur=${tTotal};desc="Total"`;
+
+      if (res && typeof res.setHeader === 'function') {
+        res.setHeader('Server-Timing', serverTiming);
+      }
+      (orderResponse as any).serverTiming = serverTiming;
+
+      return orderResponse;
     });
   }
 
