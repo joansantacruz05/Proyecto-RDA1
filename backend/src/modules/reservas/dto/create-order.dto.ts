@@ -259,6 +259,32 @@ export class CreateOrderDto {
   customer?: CustomerContactDto;
 
   @IsOptional()
+  @IsString()
+  nombreCliente?: string;
+
+  @IsOptional()
+  @IsEmail({}, { message: 'El correo electrónico del cliente debe tener un formato válido' })
+  emailCliente?: string;
+
+  @IsOptional()
+  @IsString()
+  telefonoCliente?: string;
+
+  @IsOptional()
+  @IsString()
+  identificacionCliente?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1, { message: 'adultos debe ser mayor o igual a 1' })
+  adultos?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0, { message: 'ninos debe ser mayor o igual a 0' })
+  ninos?: number;
+
+  @IsOptional()
   totalPagar?: number | string;
 
   @IsOptional()

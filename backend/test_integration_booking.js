@@ -104,6 +104,12 @@ async function runAllTests() {
 
   try {
     app = await NestFactory.create(AppModule, { logger: ['error', 'warn'] });
+    app.use((req, res, next) => {
+      if (req.url.startsWith('/api/v2/')) {
+        req.url = req.url.replace(/^\/api\/v2\//, '/api/v1/');
+      }
+      next();
+    });
     app.setGlobalPrefix('api/v1', {
       exclude: ['/', 'health', 'api/v1/health'],
     });
@@ -117,11 +123,13 @@ async function runAllTests() {
       }),
     );
     await app.listen(PORT);
-    console.log(`✓ Servidor de prueba escuchando en http://127.0.0.1:${PORT}/api/v1`);
+    console.log(`✓ Servidor de prueba escuchando en http://127.0.0.1:${PORT}/api/v1 y /api/v2`);
   } catch (err) {
     console.error('FATAL: Error al iniciar la aplicación de pruebas:', err);
     process.exit(1);
   }
+
+  const baseV2Url = `http://127.0.0.1:${PORT}/api/v2`;
 
   const tokenBook = generateTestToken('booking-user-1', 'Cliente', 'alojamientos:read alojamientos:book alojamientos:cancel');
   const tokenAdmin = generateTestToken('admin-user-1', 'ADMIN', 'alojamientos:read alojamientos:book alojamientos:cancel alojamientos:webhooks');
@@ -417,7 +425,11 @@ async function runAllTests() {
     const inConc = addDaysGuayaquil(randomOffset6A);
     const outConc = addDaysGuayaquil(randomOffset6A + 2);
 
-    // Asegurar que solo hay 1 habitación disponible para esa fecha
+    // Asegurar que la habitación tiene exactamente 1 cupo disponible en base de datos
+    const { DataSource } = require('typeorm');
+    const ds = app.get(DataSource);
+    await ds.query(`UPDATE espacios_rentables SET "cantidadDisponible" = 1 WHERE id = 'HAB-CONC-ULTIMA' OR codigo = 'HAB-CONC-ULTIMA'`);
+
     // Ejecutamos 10 peticiones paralelas con Promise.all
     const promises6A = Array.from({ length: 10 }).map((_, i) => {
       const concKey = crypto.randomUUID();
@@ -533,6 +545,143 @@ async function runAllTests() {
       '6B. Las 9 peticiones concurrentes colisionadas recibieron 409 IN_PROGRESS o Idempotent-Replayed',
       `In-progress: ${inProgressConflicts.length}, Replayed: ${replayedOrders.length}`
     );
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // FALLA 7: CRITERIOS DE ACEPTACIÓN BOOKING /api/v2/reservas
+    // ──────────────────────────────────────────────────────────────────────────
+    console.log('\n--- 7. Criterios de Aceptación Booking: /api/v2/reservas ---');
+
+    // 7A. Validaciones en /api/v2/reservas (fechas pasadas, 0 adultos, correo inválido -> 400)
+    console.log('   [7A] Validaciones en POST /api/v2/reservas...');
+    const resV2Past = await fetch(`${baseV2Url}/reservas`, {
+      method: 'POST',
+      headers: { ...headersAuth, 'Idempotency-Key': crypto.randomUUID() },
+      body: JSON.stringify({
+        ...body1,
+        fechaInicio: '2020-01-01',
+        fechaFin: '2020-01-05',
+      }),
+    });
+    assert(resV2Past.status === 400, '7A. POST /api/v2/reservas con fecha pasada responde 400', `Status: ${resV2Past.status}`);
+
+    const resV2Adults = await fetch(`${baseV2Url}/reservas`, {
+      method: 'POST',
+      headers: { ...headersAuth, 'Idempotency-Key': crypto.randomUUID() },
+      body: JSON.stringify({
+        ...body1,
+        ocupantes: { adultos: 0, ninos: 1 },
+      }),
+    });
+    assert(resV2Adults.status === 400, '7A. POST /api/v2/reservas con 0 adultos responde 400', `Status: ${resV2Adults.status}`);
+
+    const resV2Email = await fetch(`${baseV2Url}/reservas`, {
+      method: 'POST',
+      headers: { ...headersAuth, 'Idempotency-Key': crypto.randomUUID() },
+      body: JSON.stringify({
+        ...body1,
+        huespedTitular: { ...body1.huespedTitular, email: 'correo-invalido' },
+      }),
+    });
+    assert(resV2Email.status === 400, '7A. POST /api/v2/reservas con correo inválido responde 400', `Status: ${resV2Email.status}`);
+
+    // 7B. Doble POST con misma Idempotency-Key -> 1 sola orden y devuelve reservation_id idéntico
+    console.log('\n   [7B] Doble POST con misma Idempotency-Key en /api/v2/reservas...');
+    const v2Key = crypto.randomUUID();
+    const v2DateIn = addDaysGuayaquil(200);
+    const v2DateOut = addDaysGuayaquil(202);
+    const v2Body = {
+      alojamientoId,
+      tipoHabitacionCodigo: 'ESP-001',
+      fechaInicio: v2DateIn,
+      fechaFin: v2DateOut,
+      ocupantes: { adultos: 2, ninos: 0 },
+      huespedTitular: {
+        nombreCompleto: 'Booking Tester',
+        email: 'booking.tester@booking-core.com',
+        identificacion: '1710034065',
+        telefono: '+593991234567',
+      },
+    };
+
+    const resV2Post1 = await fetch(`${baseV2Url}/reservas`, {
+      method: 'POST',
+      headers: { ...headersAuth, 'Idempotency-Key': v2Key },
+      body: JSON.stringify(v2Body),
+    });
+    const dataV2Post1 = await resV2Post1.json();
+    assert(resV2Post1.status === 201, '7B. Primer POST /api/v2/reservas responde 201 Created', `Status: ${resV2Post1.status}`);
+    assert(Boolean(dataV2Post1.reservation_id), '7B. Primer POST devuelve reservation_id');
+
+    const resV2Post2 = await fetch(`${baseV2Url}/reservas`, {
+      method: 'POST',
+      headers: { ...headersAuth, 'Idempotency-Key': v2Key },
+      body: JSON.stringify(v2Body),
+    });
+    const dataV2Post2 = await resV2Post2.json();
+    assert(resV2Post2.status === 200 || resV2Post2.status === 201, '7B. Segundo POST /api/v2/reservas con misma clave devuelve éxito', `Status: ${resV2Post2.status}`);
+    assert(
+      dataV2Post2.reservation_id === dataV2Post1.reservation_id,
+      '7B. Segundo POST devuelve exactamente el mismo reservation_id previo',
+      `Original: ${dataV2Post1.reservation_id}, Reintento: ${dataV2Post2.reservation_id}`
+    );
+
+    // 7C. Recuperación vía GET /api/v2/reservas?idempotency_key=<k>
+    console.log('\n   [7C] Recuperación vía GET /api/v2/reservas?idempotency_key=...');
+    const resV2Get = await fetch(`${baseV2Url}/reservas?idempotency_key=${v2Key}`, {
+      headers: headersAuth,
+    });
+    const dataV2Get = await resV2Get.json();
+    assert(resV2Get.status === 200, '7C. GET /api/v2/reservas?idempotency_key=... responde 200 OK', `Status: ${resV2Get.status}`);
+    assert(
+      dataV2Get.reservation_id === dataV2Post1.reservation_id,
+      '7C. GET devuelve únicamente la orden creada con esa clave',
+      `Recovered reservation_id: ${dataV2Get.reservation_id}`
+    );
+
+    // 7D. Carrera por la última habitación (available_rooms = 1): 2 reservas concurrentes sobre /api/v2/reservas
+    console.log('\n   [7D] Carrera por la última habitación (available_rooms = 1): 2 POST concurrentes...');
+    await ds.query(`UPDATE espacios_rentables SET "cantidadDisponible" = 1 WHERE id = 'HAB-CONC-ULTIMA' OR codigo = 'HAB-CONC-ULTIMA'`);
+    const offset7D = 850 + Math.floor(Math.random() * 500);
+    const in7D = addDaysGuayaquil(offset7D);
+    const out7D = addDaysGuayaquil(offset7D + 2);
+
+    const promises7D = [1, 2].map((i) => {
+      const key = crypto.randomUUID();
+      return fetch(`${baseV2Url}/reservas`, {
+        method: 'POST',
+        headers: {
+          ...headersAuth,
+          'Idempotency-Key': key,
+          'X-Client-Id': `CLI-RACE-${i}`,
+        },
+        body: JSON.stringify({
+          alojamientoId,
+          tipoHabitacionCodigo: 'HAB-CONC-ULTIMA',
+          fechaInicio: in7D,
+          fechaFin: out7D,
+          ocupantes: { adultos: 2, ninos: 0 },
+          huespedTitular: {
+            nombreCompleto: `Huésped Carrera ${i}`,
+            email: `carrera${i}@booking-race.com`,
+            identificacion: '1710034065',
+            telefono: '+593991234567',
+          },
+        }),
+      }).then(async (r) => ({
+        index: i,
+        status: r.status,
+        body: await r.json(),
+      }));
+    });
+
+    const results7D = await Promise.all(promises7D);
+    const c201 = results7D.filter((r) => r.status === 201).length;
+    const c409 = results7D.filter((r) => r.status === 409 && r.body.code === 'OUT_OF_STOCK').length;
+    console.log(`      - Exitosas (201 Created): ${c201}`);
+    console.log(`      - Rechazadas (409 OUT_OF_STOCK): ${c409}`);
+
+    assert(c201 === 1, '7D. Exactamente 1 reserva confirmada con 201 Created', `Confirmadas: ${c201}`);
+    assert(c409 === 1, '7D. Exactamente 1 reserva rechazada con 409 OUT_OF_STOCK', `Rechazadas: ${c409}`);
 
   } catch (err) {
     console.error('Error durante la ejecución de las pruebas:', err);

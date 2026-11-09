@@ -507,6 +507,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       });
 
       saveCheckedInId(checkinModalReserva.id, checkinModalReserva.ordenId);
+      queryClient.setQueryData<ReservaAdminItem[]>(['adminReservasTodas'], (old) => {
+        if (!old) return old;
+        return old.map((r) =>
+          r.id === checkinModalReserva.id || r.ordenId === checkinModalReserva.ordenId
+            ? { ...r, checkinRealizado: true, estadoNombre: 'Llegada Confirmada' }
+            : r,
+        );
+      });
       showToast(`Check-in confirmado para ${checkinModalReserva.clienteNombre || checkinModalReserva.usuarioNombre || 'huésped'}. Sincronizado vía outbox.`);
       setCheckinModalReserva(null);
       refetchReservas();

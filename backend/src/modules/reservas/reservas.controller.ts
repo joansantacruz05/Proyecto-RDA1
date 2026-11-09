@@ -1,28 +1,67 @@
-import { Controller, Get, Post, Body, Param, Req, UseGuards, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  Headers,
+  Req,
+  Res,
+  UseGuards,
+  UseInterceptors,
+  HttpStatus,
+  HttpCode,
+} from '@nestjs/common';
 import { ReservasService } from './reservas.service';
-import { CrearReservaDto } from './dto/crear-reserva.dto';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { CreateOrderDto } from './dto/create-order.dto';
+import { ApiTags, ApiOperation, ApiHeader, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { IdempotencyKeyGuard } from '../../common/guards/idempotency-key.guard';
+import { IdempotencyInterceptor } from '../../common/interceptors/idempotency.interceptor';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../usuarios/entities/usuario.entity';
 import { ProblemDetailsException } from '../../common/exceptions/problem-details.exception';
 
 @ApiTags('Reservas')
-@Controller('reservas')
+@Controller(['reservas', 'alojamientos/reservas'])
 export class ReservasController {
   constructor(private readonly reservasService: ReservasService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Crear una nueva reserva' })
-  create(@Body() crearReservaDto: CrearReservaDto, @Req() req: any) {
-    const userId = req.user?.sub || req.user?.id;
-    return this.reservasService.create(crearReservaDto, userId);
+  @HttpCode(HttpStatus.CREATED)
+  @UseGuards(JwtAuthGuard, IdempotencyKeyGuard)
+  @UseInterceptors(IdempotencyInterceptor)
+  @ApiOperation({ summary: 'Crear una nueva reserva u orden de compra síncrona' })
+  @ApiHeader({ name: 'Idempotency-Key', required: true, description: 'UUID v4' })
+  @ApiResponse({ status: 201, description: 'Reserva confirmada exitosamente' })
+  @ApiResponse({ status: 409, description: 'Sin habitaciones disponibles (OUT_OF_STOCK) o Idempotencia en curso' })
+  @ApiResponse({ status: 422, description: 'Idempotency-Key reusada con cuerpo diferente' })
+  create(
+    @Headers('Idempotency-Key') idempotencyKey: string,
+    @Headers('X-Client-Id') clientIdHeader: string,
+    @Body() createOrderDto: CreateOrderDto,
+    @Req() req: any,
+    @Res({ passthrough: true }) res: any,
+  ) {
+    const userId = clientIdHeader || req.user?.sub || req.user?.id || 'NODE_SYSTEM_HUB';
+    return this.reservasService.createOrder(createOrderDto, userId, clientIdHeader, req, res);
   }
 
   @Get()
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Obtener todas las reservas (Admin)' })
-  findAll() {
+  @ApiOperation({ summary: 'Obtener reservas o recuperar orden por idempotency_key' })
+  async findAll(
+    @Query('idempotency_key') idempotencyKey?: string,
+    @Req() req?: any,
+  ) {
+    if (idempotencyKey) {
+      return this.reservasService.recoverOrderByIdempotencyKey(idempotencyKey);
+    }
+    const userRole = (req?.user?.rol || req?.user?.role || '').toLowerCase();
+    const isAdmin = userRole.includes('admin') || req?.user?.id === 'NODE_SYSTEM_HUB';
+    if (!isAdmin) {
+      return this.reservasService.findPublicActiveReservations();
+    }
     return this.reservasService.findAll();
   }
 
@@ -93,6 +132,45 @@ export class ReservasController {
     return order;
   }
 
+  @Post([':id/check-in', ':id/checkin'])
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Confirmar check-in de una reserva' })
+  checkIn(@Param('id') id: string, @Body() body?: any) {
+    return this.reservasService.checkInOrder(id, body);
+  }
+
+  @Post([':id/check-out', ':id/checkout'])
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Confirmar check-out de una reserva' })
+  checkOut(@Param('id') id: string, @Body() body?: any) {
+    return this.reservasService.checkOutOrder(id, body);
+  }
+
+  @Post(':id/modify')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, IdempotencyKeyGuard)
+  @UseInterceptors(IdempotencyInterceptor)
+  @ApiOperation({ summary: 'Modificar una reserva' })
+  modify(@Param('id') id: string, @Body() body: any) {
+    return this.reservasService.modifyOrder(id, body);
+  }
+
+  @Post([':id/cancel', ':id/cancelar'])
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, IdempotencyKeyGuard)
+  @UseInterceptors(IdempotencyInterceptor)
+  @ApiOperation({ summary: 'Cancelar una reserva' })
+  cancelarReserva(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body() body?: { motivo?: string; reason?: string },
+  ) {
+    const userId = req.user?.sub || req.user?.id;
+    const userRol = req.user?.rol || req.user?.role;
+    const reason = body?.motivo || body?.reason;
+    return this.reservasService.cancelarReserva(id, userId, userRol, reason);
+  }
+
   @Post(':id/calificar')
   @ApiOperation({ summary: 'Calificar una reserva' })
   rateReserva(
@@ -109,18 +187,6 @@ export class ReservasController {
   firmarContrato(@Param('id') id: string, @Req() req: any) {
     const userId = req.user?.sub || req.user?.id;
     return this.reservasService.firmarContrato(id, userId);
-  }
-
-  @Post(':id/cancelar')
-  @ApiOperation({ summary: 'Cancelar una reserva' })
-  cancelarReserva(
-    @Param('id') id: string,
-    @Req() req: any,
-    @Body() body?: { motivo?: string },
-  ) {
-    const userId = req.user?.sub || req.user?.id;
-    const userRol = req.user?.rol || req.user?.role;
-    return this.reservasService.cancelarReserva(id, userId, userRol, body?.motivo);
   }
 
   @Post(':id/aprobar')

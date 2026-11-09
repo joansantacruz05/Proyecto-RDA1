@@ -1235,10 +1235,13 @@ export class AlojamientosService {
 
     return {
       orderId: order.ordenId || order.id,
+      reservation_id: order.ordenId || order.id,
+      reservationId: order.ordenId || order.id,
       reservaId: order.id,
       external_order_id: externalOrderId,
       externalOrderId: externalOrderId,
       estado: 'CHECKED_IN',
+      status: 'CHECKED_IN',
       checkinRealizado: true,
       habitacionAsignada: `${order.habitacionNombre || 'Suite Deluxe'} - Piso 2`,
       claveAccesoDigital: `PIN-${Math.floor(1000 + Math.random() * 9000)}#`,

@@ -179,185 +179,8 @@ export class ReservasService {
   //  CREAR RESERVA / ORDEN TRANSACCIONAL
   // ═══════════════════════════════════════════════════════════════════════
 
-  async create(crearReservaDto: any, userId?: string) {
-    let espacioId = crearReservaDto.espacioId || crearReservaDto.productId;
-    const fechaInicio = crearReservaDto.fechaInicio || crearReservaDto.checkin;
-    const fechaFin = crearReservaDto.fechaFin || crearReservaDto.checkout;
-    const numeroPersonas = Number(crearReservaDto.numeroPersonas || 1);
-
-    return await this.dataSource.transaction(async (manager) => {
-      // 0. Si no hay espacioId pero sí alojamientoId, buscar primera habitación activa
-      if (!espacioId && crearReservaDto.alojamientoId) {
-        const habRows = await manager.query(
-          `SELECT id FROM espacios_rentables WHERE "alojamientoId" = $1 AND estado = 'Activo' ORDER BY "precioPorNoche" ASC LIMIT 1`,
-          [crearReservaDto.alojamientoId],
-        );
-        if (habRows && habRows.length > 0) {
-          espacioId = habRows[0].id;
-        }
-      }
-
-      // 1. Bloquear y verificar espacio
-      const espacios = await manager.query(
-        `SELECT e.*, a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo"
-         FROM espacios_rentables e
-         JOIN alojamientos a ON a.id = e."alojamientoId"
-         WHERE (e.id = $1 OR e.id = $2 OR e.codigo = $3) AND e.estado = 'Activo'
-         FOR UPDATE OF e`,
-        [espacioId, `HAB-${espacioId}`, espacioId],
-      );
-
-      if (!espacios || espacios.length === 0) {
-        throw new NotFoundException('La habitación solicitada no existe o no se encuentra activa.');
-      }
-
-      const espacio = espacios[0];
-
-      // 2. Validar capacidad
-      const maxCap = Number(espacio.capacidadAdultos || 1) + Number(espacio.capacidadNinos || 0);
-      if (numeroPersonas > maxCap) {
-        throw new BadRequestException(
-          `El número de personas (${numeroPersonas}) excede la capacidad de la habitación (${maxCap}).`,
-        );
-      }
-
-      // 3. Validar disponibilidad por solapamiento con la consulta de bloqueo
-      const availabilityCheck = await manager.query(
-        `SELECT (
-           e."cantidadDisponible" - (
-             SELECT COUNT(*) 
-             FROM reservas r 
-             WHERE r."espacioId" = e.id 
-               AND r."estadoId" IN ('EST-001', 'EST-002') 
-               AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2
-           )
-         ) as disponibles
-         FROM espacios_rentables e
-         WHERE e.id = $1`,
-        [espacio.id, fechaInicio, fechaFin],
-      );
-
-      const disponibles = Number(availabilityCheck[0]?.disponibles || 0);
-      if (disponibles <= 0) {
-        throw new ProblemDetailsException(
-          {
-            type: 'https://api.booking-hub.com/errors/room-no-longer-available',
-            title: 'Sin habitaciones disponibles',
-            status: HttpStatus.CONFLICT,
-            code: 'OUT_OF_STOCK',
-            detail: 'Sin habitaciones disponibles para las fechas solicitadas.',
-          },
-          HttpStatus.CONFLICT,
-        );
-      }
-
-      // 4. Resolver titular de la reserva
-      let finalUserId = userId;
-      if (!finalUserId) {
-        if (crearReservaDto.emailCliente) {
-          const userRows = await manager.query(
-            `SELECT id FROM usuarios WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))`,
-            [crearReservaDto.emailCliente],
-          );
-          if (userRows && userRows.length > 0) {
-            finalUserId = userRows[0].id;
-          } else {
-            finalUserId = generateEntityId('USR');
-            await manager.query(
-              `INSERT INTO usuarios (id, "nombreCompleto", email, contrasena, "rolId")
-               VALUES ($1, $2, $3, 'EXTERNAL_GUEST_USER', 'ROL-002')
-               ON CONFLICT (id) DO NOTHING`,
-              [finalUserId, crearReservaDto.nombreCliente || 'Cliente', crearReservaDto.emailCliente],
-            );
-          }
-        } else {
-          finalUserId = 'USR-001';
-        }
-      } else {
-        // Garantizar existencia del usuario (ej. si viene de X-Client-Id o integrador externo)
-        await manager.query(
-          `INSERT INTO usuarios (id, "nombreCompleto", email, contrasena)
-           VALUES ($1, $2, $3, 'EXTERNAL_GUEST_USER')
-           ON CONFLICT (id) DO NOTHING`,
-          [
-            finalUserId,
-            crearReservaDto.nombreCliente || 'Huésped Booking',
-            crearReservaDto.emailCliente || `${finalUserId}@booking-hub.com`,
-          ],
-        );
-      }
-
-      // 5. Calcular precio exacto en el servidor
-      const pricing = this.pricingService.calculatePrice(
-        Number(espacio.precioPorNoche),
-        fechaInicio,
-        fechaFin,
-        1,
-      );
-
-      const reservaId = generateEntityId('RES');
-      const ordenId = randomUUID();
-
-      // 6. Insertar reserva en estado EST-001 (Pendiente)
-      await manager.query(
-        `INSERT INTO reservas (
-           id, "ordenId", "usuarioId", "espacioId", "estadoId", 
-           "fechaEntrada", "fechaSalida", "precioTotal", subtotal, iva, "tasaMunicipal", 
-           moneda, "numeroPersonas", "fechaCreacion"
-         )
-         VALUES ($1, $2, $3, $4, 'EST-001', $5, $6, $7, $8, $9, $10, 'USD', $11, CURRENT_TIMESTAMP)`,
-        [
-          reservaId,
-          ordenId,
-          finalUserId,
-          espacio.id,
-          fechaInicio,
-          fechaFin,
-          pricing.total,
-          pricing.subtotal,
-          pricing.iva,
-          pricing.tasaMunicipal,
-          numeroPersonas,
-        ],
-      );
-
-      // 6. Generar contrato legal
-      const contratoId = generateEntityId('CON');
-      const terminos = `Contrato de Arrendamiento Temporal · LuxeStays.\n\nCódigo de Reserva: ${reservaId}\nIdentificador de Orden: ${ordenId}\nPropiedad: ${espacio.alojamientoNombre}\nHabitación: ${espacio.nombre}\nPeríodo: ${fechaInicio} a ${fechaFin} (${pricing.nights} noches)\nSubtotal: $${pricing.subtotalStr} USD\nIVA (15%): $${pricing.ivaStr} USD\nTasa Municipal: $${pricing.tasaMunicipalStr} USD\nTotal a Pagar: $${pricing.totalStr} USD.\n\nEl cliente se compromete a respetar las normas de convivencia del establecimiento y la política de check-in (14:00) y check-out (11:00).`;
-
-      await manager.query(
-        `INSERT INTO contratos (id, "reservaId", terminos, firmado)
-         VALUES ($1, $2, $3, false)`,
-        [contratoId, reservaId, terminos],
-      );
-
-      // 7. Registrar en historial de reservas
-      await manager.query(
-        `INSERT INTO historial_reservas (id, "reservaId", "estadoNuevoId", notas)
-         VALUES ($1, $2, 'EST-001', 'Reserva creada exitosamente pendiente de pago')`,
-        [generateEntityId('HIS'), reservaId],
-      );
-
-      // 8. Encolar actualización de stock en tiempo real hacia Booking
-      await this.inventorySyncService.enqueueStockUpdate(manager, espacio.id, fechaInicio, fechaFin, 'ORDER_CREATED');
-
-      return {
-        id: reservaId,
-        ordenId,
-        externalOrderId: ordenId,
-        status: 'success',
-        estadoId: 'EST-001',
-        alojamientoNombre: espacio.alojamientoNombre,
-        habitacionNombre: espacio.nombre,
-        fechaEntrada: fechaInicio,
-        fechaSalida: fechaFin,
-        noches: pricing.nights,
-        subtotal: pricing.subtotalStr,
-        iva: pricing.ivaStr,
-        tasaMunicipal: pricing.tasaMunicipalStr,
-        total: pricing.totalStr,
-      };
-    });
+  async create(crearReservaDto: any, userId?: string, clientIdHeader?: string, req?: any, res?: any) {
+    return this.createOrder(crearReservaDto, userId || 'NODE_SYSTEM_HUB', clientIdHeader, req, res);
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -414,9 +237,11 @@ export class ReservasService {
     // Validación estricta de Adultos (>= 1, sin fallback implícito '|| 1')
     const totalAdultos = ocupantes?.adultos !== undefined
       ? Number(ocupantes.adultos)
-      : (ocupantes?.number_of_adults !== undefined
-          ? Number(ocupantes.number_of_adults)
-          : (createRequest.numeroPersonas !== undefined ? Number(createRequest.numeroPersonas) : NaN));
+      : (createRequest.adultos !== undefined
+          ? Number(createRequest.adultos)
+          : (ocupantes?.number_of_adults !== undefined
+              ? Number(ocupantes.number_of_adults)
+              : (createRequest.numeroPersonas !== undefined ? Number(createRequest.numeroPersonas) : NaN)));
 
     if (isNaN(totalAdultos) || totalAdultos < 1) {
       throw new ProblemDetailsException(
@@ -445,7 +270,11 @@ export class ReservasService {
     };
 
     // Validación de correo electrónico
-    const guestEmail = huespedTitular?.email || createRequest.customer_contact?.email || createRequest.customer?.email;
+    const guestEmail =
+      createRequest.emailCliente ||
+      huespedTitular?.email ||
+      createRequest.customer_contact?.email ||
+      createRequest.customer?.email;
     if (!guestEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
       throw new ProblemDetailsException(
         {
@@ -576,30 +405,18 @@ export class ReservasService {
     return await this.dataSource.transaction(async (manager) => {
       const tLockStart = performance.now();
 
-      // Consulta CTE consolidada: busca espacio rentable, bloquea la fila y calcula disponibilidad en UN SOLO viaje a la BD
+      // 1. Bloqueo exclusivo a nivel de fila (Row-level exclusive lock) para serializar peticiones sobre la habitación
       const espacios = await manager.query(
-        `WITH hab_info AS (
-           SELECT e.*, a.id as "alojamientoId", a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo", a."politicaCancelacion",
-             (
-               e."cantidadDisponible" - (
-                 SELECT COUNT(*) 
-                 FROM reservas r 
-                 WHERE r."espacioId" = e.id 
-                   AND r."estadoId" IN ('EST-001', 'EST-002') 
-                   AND r."fechaEntrada" < $4 AND r."fechaSalida" > $3
-               )
-             ) as remanentes
-           FROM espacios_rentables e
-           JOIN alojamientos a ON a.id = e."alojamientoId"
-           WHERE (a.id = $1 OR a.codigo = $1 OR e."alojamientoId" = $1 OR $1 = '' OR $1 IS NULL)
-             AND (e.codigo = $2 OR e.id = $2 OR $2 = '' OR $2 IS NULL)
-             AND (e.estado = 'Activo' OR e.estado IS NULL)
-           ORDER BY (CASE WHEN e.codigo = $2 THEN 0 ELSE 1 END)
-           LIMIT 1
-           FOR UPDATE OF e
-         )
-         SELECT * FROM hab_info;`,
-        [accommodationId || '', tipoHabitacionCodigo || '', checkinClean, checkoutClean],
+        `SELECT e.*, a.id as "alojamientoId", a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo", a."politicaCancelacion"
+         FROM espacios_rentables e
+         JOIN alojamientos a ON a.id = e."alojamientoId"
+         WHERE (a.id = $1 OR a.codigo = $1 OR e."alojamientoId" = $1 OR $1 = '' OR $1 IS NULL)
+           AND (e.codigo = $2 OR e.id = $2 OR $2 = '' OR $2 IS NULL)
+           AND (e.estado = 'Activo' OR e.estado IS NULL)
+         ORDER BY (CASE WHEN e.codigo = $2 THEN 0 ELSE 1 END)
+         LIMIT 1
+         FOR UPDATE OF e;`,
+        [accommodationId || '', tipoHabitacionCodigo || ''],
       );
 
       const tLockEnd = performance.now();
@@ -620,7 +437,7 @@ export class ReservasService {
 
       const espacio = espacios[0];
 
-      // Validar Capacidad
+      // 2. Validar Capacidad
       const totalPersonas = totalAdultos + totalNinos;
       const capacidadMax = (Number(espacio.capacidadAdultos || 2) + Number(espacio.capacidadNinos || 0)) * cantidadHabitaciones;
 
@@ -637,8 +454,19 @@ export class ReservasService {
         );
       }
 
-      // Validar Concurrencia y Stock
-      const disponibles = Number(espacio.remanentes ?? espacio.cantidadDisponible);
+      // 3. Bajo el bloqueo exclusivo FOR UPDATE, contar reservas activas concurrentes para las fechas solicitadas
+      const overlapCountRes = await manager.query(
+        `SELECT COUNT(*)::int as ocupadas
+         FROM reservas r
+         WHERE r."espacioId" = $1
+           AND r."estadoId" IN ('EST-001', 'EST-002')
+           AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2`,
+        [espacio.id, checkinClean, checkoutClean],
+      );
+
+      const ocupadas = Number(overlapCountRes[0]?.ocupadas || 0);
+      const disponibles = Number(espacio.cantidadDisponible) - ocupadas;
+
       if (disponibles < cantidadHabitaciones) {
         throw new ProblemDetailsException(
           {
@@ -765,12 +593,16 @@ export class ReservasService {
       }
 
       const orderResponse = {
+        reservation_id: orderId,
+        reservationId: orderId,
         orderId: orderId,
+        id: orderId,
         reservaId: reservaId,
         external_order_id: externalOrderId,
         externalOrderId: externalOrderId,
         codigoReserva: codigoReserva,
         estado: 'CONFIRMED',
+        status: 'CONFIRMED',
         saga_id: sagaId || randomUUID(),
         alojamientoId: espacio.alojamientoId,
         alojamientoNombre: espacio.alojamientoNombre,
@@ -914,6 +746,7 @@ export class ReservasService {
         r.subtotal, r.iva, r."tasaMunicipal", r."numeroPersonas", r.calificacion,
         r."estadoId",
         CASE 
+          WHEN COALESCE(r."checkinRealizado", false) = true THEN 'Llegada Confirmada'
           WHEN EXISTS(
             SELECT 1 FROM booking.evento_outbox eo 
             WHERE (eo.agregado_id = r."ordenId"::text OR eo.agregado_id = r.id::text)
@@ -929,7 +762,8 @@ export class ReservasService {
         u."nombreCompleto" as "clienteNombre", u.email as "clienteEmail",
         p.id as "pagoId", p.estado as "estadoPago", p.monto as "pagoMonto",
         (
-          EXISTS(
+          COALESCE(r."checkinRealizado", false) = true
+          OR EXISTS(
             SELECT 1 FROM booking.evento_outbox eo 
             WHERE (eo.agregado_id = r."ordenId"::text OR eo.agregado_id = r.id::text)
               AND eo.tipo = 'RESERVA_CHECKIN_CONFIRMADO'
@@ -1062,6 +896,16 @@ export class ReservasService {
 
     await this.dataSource.query(`UPDATE reservas SET "estadoId" = 'EST-003' WHERE id = $1`, [reserva.id]);
 
+    // Restaurar cupo disponible atómicamente en espacios_rentables
+    if (reserva.espacioId) {
+      await this.dataSource.query(
+        `UPDATE espacios_rentables 
+         SET "cantidadDisponible" = "cantidadDisponible" + 1 
+         WHERE id = $1`,
+        [reserva.espacioId],
+      );
+    }
+
     await this.dataSource.query(
       `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
        VALUES ($1, $2, $3, 'EST-003', $4)`,
@@ -1123,6 +967,230 @@ export class ReservasService {
 
   async findOne(id: string) {
     return this.getOrder(id);
+  }
+
+  async recoverOrderByIdempotencyKey(key: string): Promise<any> {
+    if (!key || key.trim() === '') {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/validation-failed',
+          title: 'Validation Failed',
+          status: HttpStatus.BAD_REQUEST,
+          code: 'VALIDATION_FAILED',
+          detail: 'El parámetro idempotency_key es obligatorio para la recuperación.',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const cleanKey = key.trim();
+
+    // 1. Buscar en tabla idempotency_keys
+    const rows = await this.dataSource.query(
+      `SELECT llave, estado, status, respuesta 
+       FROM idempotency_keys 
+       WHERE llave::text = $1`,
+      [cleanKey],
+    );
+
+    if (rows && rows.length > 0 && rows[0].respuesta) {
+      const resp = typeof rows[0].respuesta === 'string' ? JSON.parse(rows[0].respuesta) : rows[0].respuesta;
+      resp.reservation_id = resp.reservation_id || resp.orderId || resp.id;
+      return resp;
+    }
+
+    // 2. Buscar por ordenId o id en reservas
+    const orderRows = await this.dataSource.query(
+      `SELECT r.id, r."ordenId" FROM reservas r WHERE r."ordenId"::text = $1 OR r.id = $1`,
+      [cleanKey],
+    );
+
+    if (orderRows && orderRows.length > 0) {
+      const order = await this.getOrder(orderRows[0].id);
+      order.reservation_id = order.ordenId || order.id;
+      return order;
+    }
+
+    throw new ProblemDetailsException(
+      {
+        type: 'https://api.booking-hub.com/errors/not-found',
+        title: 'Orden no encontrada',
+        status: HttpStatus.NOT_FOUND,
+        code: 'NOT_FOUND',
+        detail: `No se encontró ninguna orden asociada a la Idempotency-Key "${cleanKey}".`,
+      },
+      HttpStatus.NOT_FOUND,
+    );
+  }
+
+  async findPublicActiveReservations(): Promise<any[]> {
+    return await this.dataSource.query(
+      `SELECT r.id, r."ordenId", r."espacioId", e."alojamientoId", a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo", e.nombre as "habitacionNombre", r."fechaEntrada", r."fechaSalida", r."estadoId", er.nombre as "estadoNombre"
+       FROM reservas r
+       JOIN espacios_rentables e ON r."espacioId" = e.id
+       JOIN alojamientos a ON e."alojamientoId" = a.id
+       JOIN estados_reserva er ON r."estadoId" = er.id
+       WHERE r."estadoId" IN ('EST-001', 'EST-002')
+       ORDER BY r."fechaEntrada" ASC`,
+    );
+  }
+
+  async checkInOrder(orderId: string, body?: any): Promise<any> {
+    const order = await this.getOrder(orderId);
+
+    // 1. Estado cancelado -> 409 INVALID_STATE_TRANSITION
+    if (order.estadoId === 'EST-003' || order.estado === 'CANCELLED') {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/invalid-state-transition',
+          title: 'Invalid State Transition',
+          status: HttpStatus.CONFLICT,
+          code: 'INVALID_STATE_TRANSITION',
+          detail: 'No se puede realizar check-in en una reserva cancelada.',
+        },
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    // 2. Ya tiene check-in realizado -> 409 INVALID_STATE_TRANSITION (Segundo check-in)
+    if (
+      order.checkinRealizado === true ||
+      order.estado === 'CHECKED_IN' ||
+      order.estadoNombre === 'Llegada Confirmada'
+    ) {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/invalid-state-transition',
+          title: 'Invalid State Transition',
+          status: HttpStatus.CONFLICT,
+          code: 'INVALID_STATE_TRANSITION',
+          detail: 'La reserva ya cuenta con check-in registrado previamente (estado actual: CHECKED_IN).',
+        },
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    // 3. Solo reservas en estado CONFIRMED pueden hacer check-in
+    if (order.estadoId !== 'EST-002' && order.estado !== 'CONFIRMED') {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/invalid-state-transition',
+          title: 'Invalid State Transition',
+          status: HttpStatus.CONFLICT,
+          code: 'INVALID_STATE_TRANSITION',
+          detail: 'El check-in solo está permitido para reservas en estado CONFIRMED.',
+        },
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    // 4. Validar fecha y hora en America/Guayaquil (Check-in desde fecha de entrada y >= 14:00, salvo early-checkin)
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Guayaquil',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date());
+
+    const pMap: Record<string, string> = {};
+    for (const p of parts) {
+      pMap[p.type] = p.value;
+    }
+    const hoyGuayaquil = `${pMap.year}-${pMap.month}-${pMap.day}`;
+    const horaGuayaquil = parseInt(pMap.hour, 10);
+
+    const fechaEntradaStr = order.fechaEntrada instanceof Date
+      ? order.fechaEntrada.toISOString().split('T')[0]
+      : String(order.fechaEntrada || '').split('T')[0];
+
+    const earlyCheckinAutorizado = Boolean(
+      order.earlyCheckinAutorizado ||
+      body?.earlyCheckinAutorizado ||
+      body?.autorizado ||
+      body?.early_checkin === true,
+    );
+
+    if (!earlyCheckinAutorizado) {
+      const fechaNoAlcanzada = hoyGuayaquil < fechaEntradaStr;
+      const horaNoAlcanzada = (hoyGuayaquil === fechaEntradaStr && horaGuayaquil < 14);
+
+      if (fechaNoAlcanzada || horaNoAlcanzada) {
+        throw new ProblemDetailsException(
+          {
+            type: 'https://api.booking-hub.com/errors/checkin-time-not-reached',
+            title: 'Check-in Time Not Reached',
+            status: HttpStatus.UNPROCESSABLE_ENTITY,
+            code: 'CHECKIN_TIME_NOT_REACHED',
+            detail: `El check-in solo está permitido desde la fecha de entrada (${fechaEntradaStr}) a partir de las 14:00 (hora Guayaquil), salvo early-checkin aprobado por ADMIN.`,
+            habilitadoDesde: `${fechaEntradaStr}T14:00:00-05:00`,
+          },
+          HttpStatus.UNPROCESSABLE_ENTITY,
+        );
+      }
+    }
+
+    // 5. Actualizar reserva a CHECKED_IN
+    await this.dataSource.query(
+      `UPDATE reservas 
+       SET "estadoId" = 'EST-002', "checkinRealizado" = true, "checkinHora" = NOW() 
+       WHERE id = $1 OR "ordenId"::text = $1`,
+      [order.id],
+    );
+
+    try {
+      const hisId = `HIS-${Math.floor(1000 + Math.random() * 9000)}`;
+      await this.dataSource.query(
+        `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
+         VALUES ($1, $2, $3, $3, $4)`,
+        [hisId, order.id, order.estadoId || 'EST-002', 'Check-in confirmado en recepción. Estado: CHECKED_IN.'],
+      );
+    } catch (e: any) {
+      // Ignorar si historial ya existe
+    }
+
+    const externalOrderId = order.external_order_id || order.externalOrderId || order.ordenId || order.id;
+
+    return {
+      orderId: order.ordenId || order.id,
+      reservation_id: order.ordenId || order.id,
+      external_order_id: externalOrderId,
+      estado: 'CHECKED_IN',
+      status: 'CHECKED_IN',
+      checkinRealizado: true,
+      checkinHora: new Date().toISOString(),
+      mensaje: 'Check-in confirmado exitosamente en recepción.',
+    };
+  }
+
+  async checkOutOrder(orderId: string, body?: any): Promise<any> {
+    const order = await this.getOrder(orderId);
+    await this.dataSource.query(
+      `UPDATE reservas 
+       SET "checkinRealizado" = false 
+       WHERE id = $1 OR "ordenId"::text = $1`,
+      [order.id],
+    );
+
+    if (order.espacioId) {
+      await this.dataSource.query(
+        `UPDATE espacios_rentables 
+         SET "cantidadDisponible" = "cantidadDisponible" + 1 
+         WHERE id = $1`,
+        [order.espacioId],
+      );
+    }
+
+    return {
+      orderId: order.ordenId || order.id,
+      reservation_id: order.ordenId || order.id,
+      estado: 'CHECKED_OUT',
+      status: 'CHECKED_OUT',
+      checkinRealizado: false,
+      mensaje: 'Check-out completado exitosamente y propiedad liberada para el catálogo.',
+    };
   }
 
   async findByEmail(email: string) {

@@ -195,7 +195,10 @@ export function checkIsAlojamientoReserved(params: CheckIsAlojamientoReservedPar
     const resCode = (res.alojamientoCodigo || '').toLowerCase().trim();
     const resHab = (res.habitacionNombre || '').toLowerCase().trim();
 
+    const resAloId = (res.alojamientoId || '').toLowerCase().trim();
+
     const matchesProp =
+      (idNorm && resAloId && (idNorm === resAloId || idNorm.includes(resAloId) || resAloId.includes(idNorm))) ||
       (nameNorm && resName && (nameNorm.includes(resName) || resName.includes(nameNorm))) ||
       (codeNorm && resCode && (codeNorm === resCode || codeNorm.includes(resCode))) ||
       (idNorm && (resName.includes(idNorm) || resCode.includes(idNorm))) ||
