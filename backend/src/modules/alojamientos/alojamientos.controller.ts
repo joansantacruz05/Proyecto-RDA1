@@ -183,6 +183,58 @@ export class AlojamientosController {
   }
 
   @Public()
+  @Get(['availability', 'alojamientos/availability'])
+  @ApiTags('Disponibilidad y Precios')
+  @ApiOperation({ summary: 'Consultar disponibilidad indicativa por GET (query params)' })
+  @ApiResponse({ status: 200, description: 'Disponibilidad y detalles del precio' })
+  @ApiResponse({ status: 400, description: 'Petición inválida' })
+  @HttpCode(HttpStatus.OK)
+  availabilityGet(
+    @Query('alojamientoId') alojamientoId?: string,
+    @Query('accommodation') accommodation?: string,
+    @Query('accommodation_id') accommodationId?: string,
+    @Query('hotel_id') hotelId?: string,
+    @Query('id') id?: string,
+    @Query('checkin') checkin?: string,
+    @Query('checkout') checkout?: string,
+    @Query('fechaInicio') fechaInicio?: string,
+    @Query('fechaFin') fechaFin?: string,
+    @Query('tipoHabitacion') tipoHabitacion?: string,
+    @Query('tipoHabitacionCodigo') tipoHabitacionCodigo?: string,
+    @Query('product_id') productId?: string,
+    @Query('adults') adults?: string,
+    @Query('rooms') rooms?: string,
+    @Query('cantidadHabitaciones') cantidadHabitaciones?: string,
+  ) {
+    const accId = alojamientoId || accommodation || accommodationId || hotelId || id;
+    const chkIn = checkin || fechaInicio;
+    const chkOut = checkout || fechaFin;
+    const roomCode = tipoHabitacion || tipoHabitacionCodigo || productId;
+    const numRooms = rooms ? parseInt(rooms, 10) : (cantidadHabitaciones ? parseInt(cantidadHabitaciones, 10) : 1);
+    const numAdults = adults ? parseInt(adults, 10) : 1;
+
+    if (accId) {
+      return this.alojamientosService.getPropertyAvailability(
+        accId,
+        chkIn,
+        chkOut,
+        numAdults,
+        numRooms,
+        roomCode,
+      );
+    }
+
+    return this.alojamientosService.checkAvailability({
+      alojamientoId: accId,
+      checkin: chkIn,
+      checkout: chkOut,
+      tipoHabitacionCodigo: roomCode,
+      cantidadHabitaciones: numRooms,
+      adults: numAdults,
+    });
+  }
+
+  @Public()
   @Post(['availability', 'alojamientos/availability'])
   @ApiTags('Disponibilidad y Precios')
   @ApiOperation({ summary: 'Consultar disponibilidad y precio de un alojamiento' })

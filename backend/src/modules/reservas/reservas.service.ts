@@ -50,6 +50,15 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "idempotencyKey" UUID`,
       `CREATE UNIQUE INDEX IF NOT EXISTS uq_reservas_idempotency ON reservas ("idempotencyKey", "usuarioId") WHERE "idempotencyKey" IS NOT NULL`,
       `CREATE INDEX IF NOT EXISTS idx_reservas_espacio_fechas ON reservas ("espacioId", "fechaEntrada", "fechaSalida") WHERE "estadoId" IN ('EST-001', 'EST-002')`,
+      `UPDATE reservas SET "espacioId" = 'ESP-001' WHERE "espacioId" IN ('HAB-001-A', 'HAB-001-B')`,
+      `UPDATE reservas SET "espacioId" = 'ESP-002' WHERE "espacioId" IN ('HAB-002-A', 'HAB-002-B')`,
+      `UPDATE reservas SET "espacioId" = 'ESP-003' WHERE "espacioId" IN ('HAB-003-A', 'HAB-003-B')`,
+      `UPDATE reservas SET "espacioId" = 'ESP-004' WHERE "espacioId" IN ('HAB-004-A', 'HAB-004-B')`,
+      `UPDATE reservas SET "espacioId" = 'ESP-005' WHERE "espacioId" IN ('HAB-005-A', 'HAB-005-B')`,
+      `DELETE FROM espacios_rentables WHERE id LIKE 'HAB-00%'`,
+      `UPDATE espacios_rentables SET codigo = 'SUITE_DELUXE' WHERE id LIKE 'ESP-%' AND (codigo IS NULL OR codigo != 'SUITE_DELUXE')`,
+      `UPDATE espacios_rentables SET "cantidadDisponible" = 3 WHERE id LIKE 'ESP-%' AND "cantidadDisponible" != 3`,
+      `CREATE INDEX IF NOT EXISTS idx_reservas_fechas_estado ON reservas ("espacioId", "estadoId", "fechaEntrada", "fechaSalida")`,
       `CREATE TABLE IF NOT EXISTS checkin_notificaciones (
          id BIGSERIAL PRIMARY KEY,
          reserva_id VARCHAR(50) NOT NULL,
@@ -153,16 +162,26 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     // 3. Verificar disponibilidad por solapamiento de fechas
     const availabilityQuery = await this.dataSource.query(
       `SELECT (
-         e."cantidadDisponible" - (
-           SELECT COUNT(*) 
-           FROM reservas r 
-           WHERE r."espacioId" = e.id 
-             AND r."estadoId" IN ('EST-001', 'EST-002') 
-             AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2
+         e."cantidadDisponible" - GREATEST(
+           (
+             SELECT COUNT(*) 
+             FROM reservas r 
+             WHERE r."espacioId" = e.id 
+               AND r."estadoId" IN ('EST-001', 'EST-002') 
+               AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2
+           ),
+           (
+             SELECT COUNT(*)
+             FROM reservas r2
+             JOIN espacios_rentables er2 ON er2.id = r2."espacioId"
+             WHERE er2."alojamientoId" = e."alojamientoId"
+               AND r2."estadoId" IN ('EST-001', 'EST-002')
+               AND r2."fechaEntrada" < $3 AND r2."fechaSalida" > $2
+           )
          )
        ) as disponibles
        FROM espacios_rentables e
-       WHERE e.id = $1 AND e.estado = 'Activo'`,
+       WHERE e.id = $1 AND (e.estado = 'Activo' OR e.estado IS NULL)`,
       [espacio.id, checkin, checkout],
     );
 
@@ -468,15 +487,24 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     const result = await this.dataSource.transaction(async (manager) => {
       const tLockStart = performance.now();
 
-      // 1. Bloqueo exclusivo a nivel de fila (Row-level exclusive lock) para serializar peticiones sobre la habitación
+      // 1. Bloqueo exclusivo a nivel de fila sobre el alojamiento y la habitación (serializa peticiones concurrentes)
+      if (accommodationId) {
+        await manager.query(
+          `SELECT id FROM alojamientos WHERE (id = $1 OR codigo = $1 OR id = ('ALO-' || $1)) FOR UPDATE`,
+          [accommodationId],
+        );
+      }
+
       const espacios = await manager.query(
         `SELECT e.*, a.id as "alojamientoId", a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo", a."politicaCancelacion"
-         FROM espacios_rentables e
-         JOIN alojamientos a ON a.id = e."alojamientoId"
-         WHERE (a.id = $1 OR a.codigo = $1 OR e."alojamientoId" = $1 OR $1 = '' OR $1 IS NULL)
-           AND (e.codigo = $2 OR e.id = $2 OR $2 = '' OR $2 IS NULL)
+         FROM alojamientos a
+         JOIN espacios_rentables e ON e."alojamientoId" = a.id
+         WHERE (a.id = $1 OR a.codigo = $1 OR a.id = ('ALO-' || $1) OR $1 = '' OR $1 IS NULL)
            AND (e.estado = 'Activo' OR e.estado IS NULL)
-         ORDER BY (CASE WHEN e.codigo = $2 THEN 0 ELSE 1 END)
+         ORDER BY 
+           (CASE WHEN e.codigo = $2 OR e.id = $2 THEN 0 ELSE 1 END),
+           (CASE WHEN e.codigo = 'SUITE_DELUXE' THEN 0 ELSE 1 END),
+           e.id
          LIMIT 1
          FOR UPDATE OF e;`,
         [accommodationId || '', tipoHabitacionCodigo || ''],
@@ -518,17 +546,23 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       }
 
       // 3. Bajo el bloqueo exclusivo FOR UPDATE, contar reservas activas concurrentes para las fechas solicitadas
+      // Contar tanto las reservas sobre el espacio como todas las reservas sobre el mismo alojamiento
       const overlapCountRes = await manager.query(
-        `SELECT COUNT(*)::int as ocupadas
+        `SELECT 
+           COUNT(*)::int as ocupadas_hotel,
+           COUNT(*) FILTER (WHERE r."espacioId" = $2)::int as ocupadas_espacio
          FROM reservas r
-         WHERE r."espacioId" = $1
+         JOIN espacios_rentables er ON er.id = r."espacioId"
+         WHERE er."alojamientoId" = $1
            AND r."estadoId" IN ('EST-001', 'EST-002')
-           AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2`,
-        [espacio.id, checkinClean, checkoutClean],
+           AND r."fechaEntrada" < $4 AND r."fechaSalida" > $3`,
+        [espacio.alojamientoId, espacio.id, checkinClean, checkoutClean],
       );
 
-      const ocupadas = Number(overlapCountRes[0]?.ocupadas || 0);
-      const disponibles = Number(espacio.cantidadDisponible) - ocupadas;
+      const ocupadasHotel = Number(overlapCountRes[0]?.ocupadas_hotel || 0);
+      const ocupadasEspacio = Number(overlapCountRes[0]?.ocupadas_espacio || 0);
+      const totalEspacio = Number(espacio.cantidadDisponible || 1);
+      const disponibles = Math.max(0, totalEspacio - Math.max(ocupadasEspacio, ocupadasHotel));
 
       if (disponibles < cantidadHabitaciones) {
         throw new ProblemDetailsException(

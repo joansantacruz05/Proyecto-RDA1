@@ -367,7 +367,19 @@ export class AlojamientosService {
     query += ` ORDER BY e.nombre`;
     const spaces = await this.alojamientoRepository.query(query, params);
 
-    // Una sola consulta con la ocupación por habitación (evita N+1 viajes a la BD)
+    // Conteo global de reservas activas del alojamiento para el rango de fechas
+    const ocupacionHotelRes = await this.alojamientoRepository.query(
+      `SELECT COUNT(*)::int as ocupadas_hotel
+       FROM reservas r
+       JOIN espacios_rentables er ON er.id = r."espacioId"
+       WHERE er."alojamientoId" = $1
+         AND r."estadoId" IN ('EST-001', 'EST-002')
+         AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2`,
+      [accommodation.id, checkin, checkout],
+    );
+    const ocupadasHotel = Number(ocupacionHotelRes[0]?.ocupadas_hotel || 0);
+
+    // Consulta con la ocupación por habitación (evita N+1 viajes a la BD)
     const ocupacionRows = spaces.length
       ? await this.alojamientoRepository.query(
           `SELECT r."espacioId" AS id, COUNT(*)::int AS ocupadas
@@ -385,7 +397,9 @@ export class AlojamientosService {
 
     const opciones: any[] = [];
     for (const sp of spaces) {
-      const disponibles = Math.max(0, Number(sp.cantidadDisponible ?? 0) - (ocupadasPorEspacio.get(String(sp.id)) || 0));
+      const ocEsp = ocupadasPorEspacio.get(String(sp.id)) || 0;
+      const ocEfectivas = Math.max(ocEsp, ocupadasHotel);
+      const disponibles = Math.max(0, Number(sp.cantidadDisponible ?? 0) - ocEfectivas);
       const precioNocheNum = Number(sp.precioPorNoche || 0);
       const precioTotalNum = Math.round(precioNocheNum * noches * rooms * 100) / 100;
 
@@ -483,15 +497,25 @@ export class AlojamientosService {
       nights = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
     }
 
-    // Validar disponibilidad
+    // Validar disponibilidad contando todas las reservas activas sobre el inventario
     const availCheck = await this.alojamientoRepository.query(
       `SELECT (
-         e."cantidadDisponible" - (
-           SELECT COUNT(*) 
-           FROM reservas r 
-           WHERE r."espacioId" = e.id 
-             AND r."estadoId" IN ('EST-001', 'EST-002') 
-             AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2
+         e."cantidadDisponible" - GREATEST(
+           (
+             SELECT COUNT(*) 
+             FROM reservas r 
+             WHERE r."espacioId" = e.id 
+               AND r."estadoId" IN ('EST-001', 'EST-002') 
+               AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2
+           ),
+           (
+             SELECT COUNT(*)
+             FROM reservas r2
+             JOIN espacios_rentables er2 ON er2.id = r2."espacioId"
+             WHERE er2."alojamientoId" = e."alojamientoId"
+               AND r2."estadoId" IN ('EST-001', 'EST-002')
+               AND r2."fechaEntrada" < $3 AND r2."fechaSalida" > $2
+           )
          )
        ) as disponibles
        FROM espacios_rentables e
@@ -499,7 +523,7 @@ export class AlojamientosService {
       [room.id, checkin || '2026-11-01', checkout || '2026-11-02'],
     );
 
-    const disponibles = Math.max(0, Number(availCheck[0]?.disponibles ?? room.cantidadDisponible));
+    const disponibles = Math.max(0, Number(availCheck[0]?.disponibles ?? 0));
     if (disponibles < cantidadHabitaciones) {
       throw new ProblemDetailsException(
         {
@@ -800,8 +824,18 @@ export class AlojamientosService {
       `SELECT e.id, e.nombre, e.codigo, e."cantidadDisponible", e."precioPorNoche", a.nombre as "alojamientoNombre"
        FROM espacios_rentables e
        JOIN alojamientos a ON a.id = e."alojamientoId"
-       WHERE (a.id = $1 OR a.codigo = $1 OR e."alojamientoId" = $1) AND e.estado = 'Activo'`,
+       WHERE (a.id = $1 OR a.codigo = $1 OR e."alojamientoId" = $1) AND (e.estado = 'Activo' OR e.estado IS NULL)`,
       [alojamientoId],
+    );
+
+    const activeReservations = await this.alojamientoRepository.query(
+      `SELECT r."espacioId", r."fechaEntrada"::text as "fechaEntrada", r."fechaSalida"::text as "fechaSalida"
+       FROM reservas r
+       JOIN espacios_rentables er ON er.id = r."espacioId"
+       WHERE (er."alojamientoId" = $1 OR er."alojamientoId" = ('ALO-' || $1))
+         AND r."estadoId" IN ('EST-001', 'EST-002')
+         AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2`,
+      [alojamientoId, fechaDesde, fechaHasta],
     );
 
     const noches: any[] = [];
@@ -811,15 +845,27 @@ export class AlojamientosService {
     while (curr <= end) {
       const dateStr = curr.toISOString().split('T')[0];
       for (const r of rooms) {
+        const occupied = activeReservations.filter((res: any) => {
+          const rIn = String(res.fechaEntrada).split('T')[0];
+          const rOut = String(res.fechaSalida).split('T')[0];
+          return (res.espacioId === r.id || rooms.length === 1) && rIn <= dateStr && rOut > dateStr;
+        }).length;
+        const total = Number(r.cantidadDisponible || 1);
+        const disponibles = Math.max(0, total - occupied);
+
         noches.push({
           fecha: dateStr,
           tipoHabitacion: r.codigo || r.nombre,
+          tipoHabitacionCodigo: r.codigo || 'SUITE_DELUXE',
           habitacionId: r.id,
-          disponibles: Number(r.cantidadDisponible || 1),
-          total: Number(r.cantidadDisponible || 1),
+          habitacionesTotales: total,
+          reservadas: occupied,
+          bloqueadas: 0,
+          disponibles,
+          total,
           precioPorNoche: String(Number(r.precioPorNoche || 50).toFixed(2)),
           moneda: 'USD',
-          ventaCerrada: false,
+          ventaCerrada: disponibles <= 0,
           cerradoALlegada: false,
           cerradoASalida: false,
         });
