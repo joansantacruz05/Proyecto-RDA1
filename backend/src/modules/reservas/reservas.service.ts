@@ -1342,7 +1342,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     if (!n) return { estado: 'PENDIENTE', detalle: 'Notificación no encontrada' };
     if (n.publicado_en) return { estado: 'ENVIADO' };
 
-    const apiKey = process.env.BOOKING_API_KEY || process.env.BOOKING_CORE_API_KEY;
+    const apiKey = process.env.BOOKING_API_KEY || process.env.BOOKING_CORE_API_KEY || process.env.API_KEY;
     if (!apiKey) {
       await this.dataSource.query(
         `UPDATE checkin_notificaciones SET ultimo_error = $2 WHERE id = $1`,
@@ -1391,7 +1391,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
 
   /** Reintenta avisos pendientes con backoff lineal (máx. 10 intentos). Seguro con varias instancias. */
   private async retryPendingCheckinNotifications(): Promise<void> {
-    if (!(process.env.BOOKING_API_KEY || process.env.BOOKING_CORE_API_KEY)) return;
+    if (!(process.env.BOOKING_API_KEY || process.env.BOOKING_CORE_API_KEY || process.env.API_KEY)) return;
     const claimed = await this.dataSource.query(
       `UPDATE checkin_notificaciones
        SET ultimo_intento = NOW()
