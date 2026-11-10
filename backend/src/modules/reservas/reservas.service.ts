@@ -44,6 +44,9 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
    */
   async onModuleInit() {
     const ddl = [
+      `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "checkinRealizado" BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "checkinHora" TIMESTAMPTZ`,
+      `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "earlyCheckinAutorizado" BOOLEAN NOT NULL DEFAULT false`,
       `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "idempotencyKey" UUID`,
       `CREATE UNIQUE INDEX IF NOT EXISTS uq_reservas_idempotency ON reservas ("idempotencyKey", "usuarioId") WHERE "idempotencyKey" IS NOT NULL`,
       `CREATE INDEX IF NOT EXISTS idx_reservas_espacio_fechas ON reservas ("espacioId", "fechaEntrada", "fechaSalida") WHERE "estadoId" IN ('EST-001', 'EST-002')`,
