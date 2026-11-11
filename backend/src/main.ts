@@ -64,7 +64,19 @@ async function bootstrap() {
     }
     // Si viene directamente sin /api/v1/ ni excluded routes
     const cleanPath = req.url.split('?')[0];
-    const excludedPrefixes = ['/api/v1', '/health', '/alojamientos/health', '/docs', '/swagger', '/metrics'];
+    const excludedPrefixes = [
+      '/api/v1',
+      '/api/docs',
+      '/api/docs-json',
+      '/api/docs-yaml',
+      '/health',
+      '/alojamientos/health',
+      '/docs',
+      '/docs-json',
+      '/docs-yaml',
+      '/swagger',
+      '/metrics',
+    ];
     if (cleanPath !== '/' && !excludedPrefixes.some((p) => cleanPath === p || cleanPath.startsWith(p + '/'))) {
       req.url = '/api/v1' + (req.url.startsWith('/') ? req.url : '/' + req.url);
     }
@@ -194,6 +206,7 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
+  SwaggerModule.setup('docs', app, document);
 
   // ── Inicio del Servidor HTTP Escuchando en todas las interfaces ──────────
   const port = parseInt(process.env.PORT || '3000', 10);

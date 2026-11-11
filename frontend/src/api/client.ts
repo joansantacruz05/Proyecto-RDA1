@@ -10,11 +10,8 @@ export const API_BASE_URL: string = (() => {
     }
     return AZURE_API_URL;
   }
-  // Si en Vercel/Render o en la configuración apunta al host inactivo de Render que retorna 404
+  // Si en Vercel o en alguna variable externa aún está guardada la URL antigua de Render, usar siempre Azure
   if (url.includes('proyecto-rda1.onrender.com') || url.includes('onrender.com')) {
-    console.warn(
-      '⚠️ VITE_API_URL apunta a Render (inactivo/404). Conectando automáticamente al backend activo de Azure (posada-ec-alojamientos.azurewebsites.net)...'
-    );
     return AZURE_API_URL;
   }
   return url.replace(/\/+$/, '');
