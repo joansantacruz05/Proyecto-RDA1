@@ -53,7 +53,11 @@ export interface AlojamientoItem {
   moneda?: string;
   amenities?: string[];
   activo?: boolean;
+  estado?: string;
   habitacionesDisponibles?: number;
+  numHabitaciones?: number;
+  numCamas?: number;
+  tipoCamas?: string;
   estaReservado?: boolean;
   tienePiscina?: boolean;
   permitePaquete?: boolean;
@@ -67,6 +71,9 @@ export interface HabitacionDetalle {
   capacidadAdultos?: number;
   capacidadNinos?: number;
   capacidad?: number;
+  numHabitaciones?: number;
+  numCamas?: number;
+  tipoCamas?: string;
   precioPorNoche: number | string;
   cantidadDisponible?: number;
   tipoHabitacion?: string;
@@ -74,6 +81,7 @@ export interface HabitacionDetalle {
   descripcion?: string;
   amenities?: string[];
   estado?: string;
+  enLimpiezaDesde?: string | null;
 }
 
 export interface AlojamientoDetalle {
@@ -91,6 +99,10 @@ export interface AlojamientoDetalle {
   horaCheckOut?: string;
   estrellas?: number;
   estado?: string;
+  enLimpiezaDesde?: string | null;
+  numHabitaciones?: number;
+  numCamas?: number;
+  tipoCamas?: string;
   estaReservado?: boolean;
   habitaciones?: HabitacionDetalle[];
 }
@@ -275,6 +287,12 @@ export interface ReservaUsuarioItem {
   checkinRealizado?: boolean;
   checkoutRealizado?: boolean;
   checkoutHora?: string;
+  limpiezaCompletada?: boolean;
+  alojamientoEstado?: string;
+  habitacionEstado?: string;
+  numHabitaciones?: number;
+  numCamas?: number;
+  tipoCamas?: string;
   notasRecepcion?: string;
 }
 
@@ -293,8 +311,12 @@ export interface HabitacionAdmin {
   capacidadAdultos: number;
   capacidadNinos: number;
   cantidadDisponible: number;
+  numHabitaciones?: number;
+  numCamas?: number;
+  tipoCamas?: string;
   imagenesUrls?: string;
   estado?: string;
+  enLimpiezaDesde?: string | null;
 }
 
 export interface ReservaAdminItem {
@@ -304,9 +326,14 @@ export interface ReservaAdminItem {
   alojamientoId?: string;
   alojamientoCodigo?: string;
   alojamientoNombre: string;
+  alojamientoEstado?: string;
   espacioId?: string;
   espacioOriginalId?: string;
   habitacionNombre: string;
+  habitacionEstado?: string;
+  numHabitaciones?: number;
+  numCamas?: number;
+  tipoCamas?: string;
   precioPorNoche?: number | string;
   capacidadAdultos?: number;
   capacidadNinos?: number;
@@ -337,6 +364,7 @@ export interface ReservaAdminItem {
   checkinRealizado?: boolean;
   checkoutRealizado?: boolean;
   checkoutHora?: string;
+  limpiezaCompletada?: boolean;
 }
 
 export interface DashboardStats {

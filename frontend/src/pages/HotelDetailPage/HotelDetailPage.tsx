@@ -13,7 +13,7 @@ import { Skeleton } from '../../components/ui/Skeleton/Skeleton';
 import { Button } from '../../components/ui/Button/Button';
 import { api } from '../../api/client';
 import { AlojamientoDetalle, HabitacionDetalle } from '../../api/types';
-import { checkIsAlojamientoReserved, ReservaItemLike } from '../../utils/accommodationStatus';
+import { checkIsAlojamientoReserved, isAlojamientoInCleaning, ReservaItemLike } from '../../utils/accommodationStatus';
 import { InteractiveMap } from '../../components/map/InteractiveMap';
 import {
   buildGoogleMapsUrl,
@@ -103,6 +103,12 @@ export const HotelDetailPage: React.FC = () => {
   const defaultPrice = hotelRooms[0]?.precioPorNoche
     ? Number(hotelRooms[0].precioPorNoche)
     : 120;
+  const isHotelCleaning = isAlojamientoInCleaning({
+    alojamientoId: hotel.id,
+    alojamientoNombre: hotel.nombre,
+    estado: hotel.estado,
+  });
+
   const isHotelReserved = checkIsAlojamientoReserved({
     alojamientoId: hotel.id,
     alojamientoNombre: hotel.nombre,
@@ -121,8 +127,30 @@ export const HotelDetailPage: React.FC = () => {
         <span>Volver a todos los alojamientos</span>
       </Link>
 
-      {/* Alerta de Alojamiento Reservado */}
-      {isHotelReserved && (
+      {/* Alerta de Limpieza o Alojamiento Reservado */}
+      {isHotelCleaning ? (
+        <div
+          style={{
+            background: '#FFFBEB',
+            border: '1px solid #FDE68A',
+            borderRadius: '12px',
+            padding: '14px 20px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            color: '#92400E',
+          }}
+        >
+          <Sparkles size={22} color="#D97706" />
+          <div>
+            <strong style={{ fontSize: '15px' }}>En Proceso de Limpieza y Acondicionamiento</strong>
+            <p style={{ margin: '2px 0 0', fontSize: '13px', color: '#B45309' }}>
+              Este alojamiento concluyó su último check-out y está siendo preparado por nuestro equipo de limpieza antes de volver a estar en línea.
+            </p>
+          </div>
+        </div>
+      ) : isHotelReserved ? (
         <div
           style={{
             background: '#FEF2F2',
@@ -144,7 +172,7 @@ export const HotelDetailPage: React.FC = () => {
             </p>
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Cabecera del Alojamiento */}
       <div className={styles.headerSection}>
@@ -212,6 +240,7 @@ export const HotelDetailPage: React.FC = () => {
                     habitacion={room}
                     isSelected={selectedHabitacion?.id === room.id}
                     isHotelReserved={isHotelReserved}
+                    isHotelCleaning={isHotelCleaning}
                     onSelect={(hab) => setSelectedHabitacion(hab)}
                   />
                 ))}

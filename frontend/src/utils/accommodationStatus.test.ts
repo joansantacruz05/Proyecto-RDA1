@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   checkIsAlojamientoReserved,
+  isAlojamientoInCleaning,
   liberarAlojamiento,
   markAlojamientoReserved,
+  setAlojamientoEnLimpieza,
 } from './accommodationStatus';
 
 describe('accommodationStatus', () => {
@@ -55,6 +57,50 @@ describe('accommodationStatus', () => {
       });
       liberarAlojamiento('ALO-002', null);
     }).not.toThrow();
+  });
+
+  it('bloquea reservas en estado En Limpieza y vuelve a habilitar tras liberarAlojamiento', () => {
+    setAlojamientoEnLimpieza('ALO-003', 'Hotel Patio Andaluz');
+    expect(isAlojamientoInCleaning({ alojamientoId: 'ALO-003', alojamientoNombre: 'Hotel Patio Andaluz', estado: 'En Limpieza' })).toBe(true);
+    expect(
+      checkIsAlojamientoReserved({
+        alojamientoId: 'ALO-003',
+        alojamientoNombre: 'Hotel Patio Andaluz',
+        estado: 'En Limpieza',
+        habitacionesDisponibles: 3,
+      }),
+    ).toBe(true);
+
+    liberarAlojamiento('ALO-003', 'Hotel Patio Andaluz');
+    expect(isAlojamientoInCleaning({ alojamientoId: 'ALO-003', alojamientoNombre: 'Hotel Patio Andaluz', estado: 'Activo' })).toBe(false);
+    expect(
+      checkIsAlojamientoReserved({
+        alojamientoId: 'ALO-003',
+        alojamientoNombre: 'Hotel Patio Andaluz',
+        estado: 'Activo',
+        habitacionesDisponibles: 3,
+      }),
+    ).toBe(false);
+  });
+
+  it('ignora reservas ya finalizadas en EST-004 o EST-005 cuando el alojamiento ya está Activo', () => {
+    const reservedAfterClean = checkIsAlojamientoReserved({
+      alojamientoId: 'ALO-004',
+      alojamientoNombre: 'Casa Gangotena',
+      estado: 'Activo',
+      habitacionesDisponibles: 2,
+      activeReservas: [
+        {
+          id: 'RES-FIN-1',
+          alojamientoId: 'ALO-004',
+          alojamientoNombre: 'Casa Gangotena',
+          estadoId: 'EST-005',
+          estadoNombre: 'Finalizada',
+          checkoutRealizado: true,
+        },
+      ],
+    });
+    expect(reservedAfterClean).toBe(false);
   });
 });
 

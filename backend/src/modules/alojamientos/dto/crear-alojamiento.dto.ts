@@ -139,4 +139,21 @@ export class CrearAlojamientoDto {
   @Matches(/^([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, { message: 'horaCheckOut debe tener formato HH:MM (ej: 11:00)' })
   @IsOptional()
   horaCheckOut?: string;
+
+  @ApiProperty({ example: 2, description: 'Número físico de habitaciones/ambientes del alojamiento', required: false })
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  numHabitaciones?: number;
+
+  @ApiProperty({ example: 3, description: 'Número total de camas disponibles', required: false })
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  numCamas?: number;
+
+  @ApiProperty({ example: '1 Cama King + 1 Sofa Cama', description: 'Detalle o tipo de camas', required: false })
+  @IsString()
+  @IsOptional()
+  tipoCamas?: string;
 }

@@ -82,6 +82,10 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
        )`,
       `CREATE UNIQUE INDEX IF NOT EXISTS uq_checkin_notif_reserva ON checkin_notificaciones (reserva_id)`,
+      `INSERT INTO estados_reserva (id, nombre) VALUES ('EST-004', 'En Limpieza'), ('EST-005', 'Finalizada') ON CONFLICT (id) DO NOTHING`,
+      `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "limpiezaCompletada" BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS "enLimpiezaDesde" TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS "numHabitaciones" INT NOT NULL DEFAULT 1, ADD COLUMN IF NOT EXISTS "numCamas" INT NOT NULL DEFAULT 1`,
+      `ALTER TABLE espacios_rentables ADD COLUMN IF NOT EXISTS "numHabitaciones" INT NOT NULL DEFAULT 1, ADD COLUMN IF NOT EXISTS "numCamas" INT NOT NULL DEFAULT 1, ADD COLUMN IF NOT EXISTS "tipoCamas" VARCHAR(100) NOT NULL DEFAULT '1 Cama Doble / Queen', ADD COLUMN IF NOT EXISTS "enLimpiezaDesde" TIMESTAMPTZ`,
     ];
     for (const stmt of ddl) {
       try {
@@ -124,14 +128,16 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('Las fechas de check-in y check-out son obligatorias.');
     }
 
-    // 1. Obtener espacio rentable
+    // 1. Obtener espacio rentable (únicamente alojamientos y habitaciones en línea)
     const habRows = await this.dataSource.query(
       `SELECT e.*, a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo", a."politicaCancelacion",
               COALESCE(TO_CHAR(a."horaCheckIn", 'HH24:MI'), '14:00') as "horaCheckIn",
               COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut"
        FROM espacios_rentables e
        JOIN alojamientos a ON a.id = e."alojamientoId"
-       WHERE (e.id = $1 OR e.id = $2 OR e.codigo = $3) AND a.estado = 'Activo'
+       WHERE (e.id = $1 OR e.id = $2 OR e.codigo = $3)
+         AND (a.estado = 'Activo' OR a.estado IS NULL)
+         AND (e.estado = 'Activo' OR e.estado IS NULL)
        LIMIT 1`,
       [productId, `HAB-${productId}`, productId],
     );
@@ -144,7 +150,9 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
                 COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut"
          FROM espacios_rentables e
          JOIN alojamientos a ON a.id = e."alojamientoId"
-         WHERE (a.id = $1 OR a.codigo = $1) AND e.estado = 'Activo'
+         WHERE (a.id = $1 OR a.codigo = $1)
+           AND (a.estado = 'Activo' OR a.estado IS NULL)
+           AND (e.estado = 'Activo' OR e.estado IS NULL)
          ORDER BY e."precioPorNoche" ASC LIMIT 1`,
         [accommodationId],
       );
@@ -550,6 +558,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
            OR $1 = '' 
            OR $1 IS NULL
          )
+           AND (a.estado = 'Activo' OR a.estado IS NULL)
            AND (e.estado = 'Activo' OR e.estado IS NULL)
          ORDER BY 
            (CASE WHEN e.codigo = $2 OR e.id = $2 OR REPLACE(e.codigo, '-', '_') = REPLACE($2, '-', '_') THEN 0 ELSE 1 END),
@@ -857,10 +866,15 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
          COALESCE(r."montoPagadoInicial", p.monto, r."precioTotal")::numeric(10,2) as "montoPagadoInicial",
          COALESCE(r."checkinRealizado", false) as "checkinRealizado",
          COALESCE(r."checkoutRealizado", false) as "checkoutRealizado",
+         COALESCE(r."limpiezaCompletada", false) as "limpiezaCompletada",
          r."checkoutHora", r."notasRecepcion",
          r."estadoId", er.nombre as "estadoNombre",
-         e.id as "espacioId", e.nombre as "habitacionNombre", e."precioPorNoche",
+         e.id as "espacioId", e.nombre as "habitacionNombre", e."precioPorNoche", e.estado as "habitacionEstado",
+         COALESCE(e."numHabitaciones", 1)::int as "numHabitaciones",
+         COALESCE(e."numCamas", 1)::int as "numCamas",
+         COALESCE(e."tipoCamas", '1 Cama Doble / Queen') as "tipoCamas",
          a.id as "alojamientoId", a.nombre as "alojamientoNombre", a."imagenUrl", a.codigo as "alojamientoCodigo",
+         a.estado as "alojamientoEstado",
          ub.direccion_detallada as "alojamientoDireccion",
          ub.latitud::float8 as "alojamientoLatitud",
          ub.longitud::float8 as "alojamientoLongitud",
@@ -874,7 +888,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
          f.id as "facturaId",
          COALESCE(
            f."numeroFactura",
-           CASE WHEN r."estadoId" = 'EST-002' THEN '001-002-' || LPAD((ABS(HASHTEXT(r.id)) % 1000000000)::text, 9, '0') ELSE NULL END
+           CASE WHEN r."estadoId" IN ('EST-002', 'EST-004', 'EST-005') THEN '001-002-' || LPAD((ABS(HASHTEXT(r.id)) % 1000000000)::text, 9, '0') ELSE NULL END
          ) as "numeroFactura",
          COALESCE(f."identificacionCliente", u.identificacion, '9999999999999') as "facturaIdentificacion",
          COALESCE(f."nombreRazonSocial", u."nombreCompleto", 'Consumidor Final') as "facturaRazonSocial",
@@ -901,9 +915,15 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
   async getOrder(orderIdOrReservaId: string) {
     const baseSelect = `SELECT
          r.*, er.nombre as "estadoNombre",
+         COALESCE(r."limpiezaCompletada", false) as "limpiezaCompletada",
          e.nombre as "habitacionNombre", e."precioPorNoche", e.codigo as "habitacionCodigo",
+         e.estado as "habitacionEstado",
+         COALESCE(e."numHabitaciones", 1)::int as "numHabitaciones",
+         COALESCE(e."numCamas", 1)::int as "numCamas",
+         COALESCE(e."tipoCamas", '1 Cama Doble / Queen') as "tipoCamas",
          e."capacidadAdultos", e."capacidadNinos",
          a.id as "alojamientoId", a.nombre as "alojamientoNombre", a."imagenUrl", a.codigo as "alojamientoCodigo",
+         a.estado as "alojamientoEstado",
          ub.direccion_detallada as "alojamientoDireccion",
          ub.latitud::float8 as "alojamientoLatitud",
          ub.longitud::float8 as "alojamientoLongitud",
@@ -917,7 +937,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
          f.id as "facturaId",
          COALESCE(
            f."numeroFactura",
-           CASE WHEN r."estadoId" = 'EST-002' THEN '001-002-' || LPAD((ABS(HASHTEXT(r.id)) % 1000000000)::text, 9, '0') ELSE NULL END
+           CASE WHEN r."estadoId" IN ('EST-002', 'EST-004', 'EST-005') THEN '001-002-' || LPAD((ABS(HASHTEXT(r.id)) % 1000000000)::text, 9, '0') ELSE NULL END
          ) as "numeroFactura",
          COALESCE(f."identificacionCliente", u.identificacion, '9999999999999') as "facturaIdentificacion",
          COALESCE(f."nombreRazonSocial", u."nombreCompleto", 'Consumidor Final') as "facturaRazonSocial",
@@ -968,10 +988,16 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       cargosAdicionalesTotal: Number(row.cargosAdicionalesTotal || 0),
       montoPagadoInicial: Number(row.montoPagadoInicial ?? row.pagoMonto ?? row.precioTotal ?? 0),
       checkoutRealizado: Boolean(row.checkoutRealizado),
+      limpiezaCompletada: Boolean(row.limpiezaCompletada),
+      alojamientoEstado: row.alojamientoEstado || 'Activo',
+      habitacionEstado: row.habitacionEstado || 'Activo',
+      numHabitaciones: Number(row.numHabitaciones || 1),
+      numCamas: Number(row.numCamas || 1),
+      tipoCamas: row.tipoCamas || '1 Cama Doble / Queen',
       estado:
         row.estadoId === 'EST-003'
           ? 'CANCELLED'
-          : row.checkoutRealizado === true
+          : row.checkoutRealizado === true || row.estadoId === 'EST-004' || row.estadoId === 'EST-005'
             ? 'CHECKED_OUT'
             : row.checkinRealizado === true
               ? 'CHECKED_IN'
@@ -991,7 +1017,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         r."estadoId",
         CASE 
           WHEN r."estadoId" = 'EST-003' THEN er.nombre
-          WHEN COALESCE(r."checkoutRealizado", false) = true THEN 'Check-out Realizado'
+          WHEN r."estadoId" = 'EST-004' OR (COALESCE(r."checkoutRealizado", false) = true AND COALESCE(r."limpiezaCompletada", false) = false) THEN 'En Limpieza'
+          WHEN r."estadoId" = 'EST-005' OR COALESCE(r."checkoutRealizado", false) = true THEN 'Finalizada'
           WHEN COALESCE(r."checkinRealizado", false) = true THEN 'Llegada Confirmada'
           WHEN EXISTS(
             SELECT 1 FROM booking.evento_outbox eo 
@@ -1006,9 +1033,14 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
           ELSE er.nombre
         END as "estadoNombre",
         r."espacioId", r."espacioOriginalId",
-        e.nombre as "habitacionNombre", e."precioPorNoche",
+        e.nombre as "habitacionNombre", e."precioPorNoche", e.estado as "habitacionEstado",
+        COALESCE(e."numHabitaciones", 1)::int as "numHabitaciones",
+        COALESCE(e."numCamas", 1)::int as "numCamas",
+        COALESCE(e."tipoCamas", '1 Cama Doble / Queen') as "tipoCamas",
         e."capacidadAdultos", e."capacidadNinos",
         a.id as "alojamientoId", a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo",
+        a.estado as "alojamientoEstado",
+        COALESCE(r."limpiezaCompletada", false) as "limpiezaCompletada",
         COALESCE(TO_CHAR(a."horaCheckIn", 'HH24:MI'), '14:00') as "horaCheckIn",
         COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut",
         u."nombreCompleto" as "clienteNombre", u.email as "clienteEmail", u.identificacion as "clienteIdentificacion",
@@ -1590,7 +1622,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     if (order.estadoId === 'EST-003' || order.estado === 'CANCELLED') {
       throw this.invalidTransition('No se puede realizar check-in en una reserva cancelada.');
     }
-    if (order.checkoutRealizado === true || order.estado === 'CHECKED_OUT') {
+    if (order.estadoId === 'EST-004' || order.estadoId === 'EST-005' || order.checkoutRealizado === true || order.estado === 'CHECKED_OUT') {
       throw this.invalidTransition('No se puede confirmar check-in de una estancia que ya realizó check-out.');
     }
     if (order.checkinRealizado === true || order.estado === 'CHECKED_IN') {
@@ -1918,29 +1950,53 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    await this.dataSource.query(
-      `UPDATE reservas 
-       SET "checkinRealizado" = false,
-           "checkoutRealizado" = true,
-           "checkoutHora" = COALESCE("checkoutHora", NOW())
-       WHERE id = $1`,
-      [order.id],
-    );
-
-    try {
-      await this.dataSource.query(
-        `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
-         VALUES ($1, $2, $3, $3, $4)`,
-        [
-          generateEntityId('HIS'),
-          order.id,
-          order.estadoId || 'EST-002',
-          `Check-out completado en recepción. Folio final: $${Number(order.precioTotal || 0).toFixed(2)}. Habitación liberada para nuevas reservas.`,
-        ],
+    await this.dataSource.transaction(async (manager) => {
+      await manager.query(
+        `UPDATE reservas 
+         SET "checkinRealizado" = false,
+             "checkoutRealizado" = true,
+             "checkoutHora" = COALESCE("checkoutHora", NOW()),
+             "estadoId" = 'EST-004',
+             "limpiezaCompletada" = false
+         WHERE id = $1`,
+        [order.id],
       );
-    } catch (e: any) {
-      this.logger.warn(`[CHECKOUT-HISTORIAL] ${e?.message}`);
-    }
+
+      if (order.espacioId) {
+        await manager.query(
+          `UPDATE espacios_rentables
+           SET estado = 'En Limpieza',
+               "enLimpiezaDesde" = NOW()
+           WHERE id = $1`,
+          [order.espacioId],
+        );
+      }
+
+      if (order.alojamientoId) {
+        await manager.query(
+          `UPDATE alojamientos
+           SET estado = 'En Limpieza',
+               "enLimpiezaDesde" = NOW()
+           WHERE id = $1`,
+          [order.alojamientoId],
+        );
+      }
+
+      try {
+        await manager.query(
+          `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
+           VALUES ($1, $2, $3, 'EST-004', $4)`,
+          [
+            generateEntityId('HIS'),
+            order.id,
+            order.estadoId || 'EST-002',
+            `Check-out completado en recepción. Folio final: $${Number(order.precioTotal || 0).toFixed(2)}. Alojamiento y habitación enviados automáticamente a estado En Limpieza.`,
+          ],
+        );
+      } catch (e: any) {
+        this.logger.warn(`[CHECKOUT-HISTORIAL] ${e?.message}`);
+      }
+    });
 
     catalogCache.invalidate();
 
@@ -1953,6 +2009,12 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       reservaId: order.id,
       estado: 'CHECKED_OUT',
       status: 'CHECKED_OUT',
+      estadoId: 'EST-004',
+      estadoNombre: 'En Limpieza',
+      alojamientoEstado: 'En Limpieza',
+      habitacionEstado: 'En Limpieza',
+      limpiezaPendiente: true,
+      limpiezaCompletada: false,
       checkinRealizado: false,
       checkoutRealizado: true,
       habitacionLiberada: order.habitacionNombre || 'Habitación Estándar',
@@ -1964,7 +2026,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       totalFinal: totalFinal.toFixed(2),
       montoPagadoInicial: Number(order.montoPagadoInicial ?? totalFinal).toFixed(2),
       claveDigitalRevocada: true,
-      mensaje: 'Check-out completado exitosamente y habitación liberada para el catálogo.',
+      mensaje: 'Check-out completado. El alojamiento y la habitación pasaron automáticamente a estado En Limpieza hasta confirmar que están listos.',
     };
   }
 
@@ -1979,10 +2041,15 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
          COALESCE(r."montoPagadoInicial", p.monto, r."precioTotal")::numeric(10,2) as "montoPagadoInicial",
          COALESCE(r."checkinRealizado", false) as "checkinRealizado",
          COALESCE(r."checkoutRealizado", false) as "checkoutRealizado",
+         COALESCE(r."limpiezaCompletada", false) as "limpiezaCompletada",
          r."checkoutHora", r."notasRecepcion",
          r."estadoId", er.nombre as "estadoNombre",
-         e.id as "espacioId", e.nombre as "habitacionNombre", e."precioPorNoche",
+         e.id as "espacioId", e.nombre as "habitacionNombre", e."precioPorNoche", e.estado as "habitacionEstado",
+         COALESCE(e."numHabitaciones", 1)::int as "numHabitaciones",
+         COALESCE(e."numCamas", 1)::int as "numCamas",
+         COALESCE(e."tipoCamas", '1 Cama Doble / Queen') as "tipoCamas",
          a.id as "alojamientoId", a.nombre as "alojamientoNombre", a."imagenUrl", a.codigo as "alojamientoCodigo",
+         a.estado as "alojamientoEstado",
          ub.direccion_detallada as "alojamientoDireccion",
          ub.latitud::float8 as "alojamientoLatitud",
          ub.longitud::float8 as "alojamientoLongitud",
@@ -1996,7 +2063,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
          f.id as "facturaId",
          COALESCE(
            f."numeroFactura",
-           CASE WHEN r."estadoId" = 'EST-002' THEN '001-002-' || LPAD((ABS(HASHTEXT(r.id)) % 1000000000)::text, 9, '0') ELSE NULL END
+           CASE WHEN r."estadoId" IN ('EST-002', 'EST-004', 'EST-005') THEN '001-002-' || LPAD((ABS(HASHTEXT(r.id)) % 1000000000)::text, 9, '0') ELSE NULL END
          ) as "numeroFactura",
          COALESCE(f."identificacionCliente", u.identificacion, '9999999999999') as "facturaIdentificacion",
          COALESCE(f."nombreRazonSocial", u."nombreCompleto", 'Consumidor Final') as "facturaRazonSocial",
@@ -2047,8 +2114,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       throw new ForbiddenException('Solo el titular de la reserva puede calificar la estancia.');
     }
 
-    if (reserva.estadoId !== 'EST-002') {
-      throw new ConflictException('Solo se pueden calificar reservas confirmadas.');
+    if (!['EST-002', 'EST-004', 'EST-005'].includes(reserva.estadoId)) {
+      throw new ConflictException('Solo se pueden calificar reservas confirmadas o finalizadas.');
     }
 
     const fechaSalidaStr = reserva.fechaSalida instanceof Date

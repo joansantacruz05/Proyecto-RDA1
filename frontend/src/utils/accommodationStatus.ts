@@ -19,6 +19,7 @@ export interface ReservaItemLike {
   fechaSalida?: string | null | undefined;
   estadoId?: string | null | undefined;
   estadoNombre?: string | null | undefined;
+  checkoutRealizado?: boolean | null | undefined;
 }
 
 export interface CheckIsAlojamientoReservedParams {
@@ -49,6 +50,52 @@ export function setAdminAlojamientoEstado(alojamientoId: string, estado: string)
   } catch (e) {
     console.error('Error guardando estado de alojamiento:', e);
   }
+}
+
+export function setAlojamientoEnLimpieza(
+  alojamientoId: string | null | undefined,
+  alojamientoNombre?: string | null | undefined,
+): void {
+  try {
+    const cleanId = String(alojamientoId ?? '').trim();
+    const lowerId = cleanId.toLowerCase();
+    const cleanName = String(alojamientoNombre ?? '').toLowerCase().trim();
+
+    const liberados = getLiberadosIds().filter((raw) => {
+      const val = String(raw ?? '').toLowerCase().trim();
+      if (!val) return false;
+      if (lowerId && (val === lowerId || val.includes(lowerId) || lowerId.includes(val))) return false;
+      if (cleanName && (val === cleanName || val.includes(cleanName) || cleanName.includes(val))) return false;
+      return true;
+    });
+    localStorage.setItem(KEY_LIBERADOS, JSON.stringify(liberados));
+
+    if (cleanId) {
+      setAdminAlojamientoEstado(cleanId, 'En Limpieza');
+    }
+    if (cleanName) {
+      setAdminAlojamientoEstado(cleanName, 'En Limpieza');
+    }
+  } catch (e) {
+    console.error('Error marcando alojamiento en limpieza:', e);
+  }
+}
+
+export function isAlojamientoInCleaning(params: {
+  alojamientoId?: string | null | undefined;
+  alojamientoNombre?: string | null | undefined;
+  estado?: string | null | undefined;
+}): boolean {
+  const safeId = String(params?.alojamientoId ?? '').trim();
+  const idNorm = safeId.toLowerCase();
+  const nameNorm = String(params?.alojamientoNombre ?? '').toLowerCase().trim();
+  const estadoNorm = String(params?.estado ?? '').toLowerCase().trim();
+  if (estadoNorm === 'en limpieza' || estadoNorm.includes('limpieza')) {
+    return true;
+  }
+  const overrides = getEstadosOverride();
+  const overrideEstado = String(overrides[safeId] || overrides[idNorm] || overrides[nameNorm] || '').toLowerCase().trim();
+  return overrideEstado === 'en limpieza' || overrideEstado.includes('limpieza');
 }
 
 export function getLiberadosIds(): string[] {
@@ -88,9 +135,12 @@ export function liberarAlojamiento(alojamientoId: string | null | undefined, alo
     });
     localStorage.setItem(KEY_RESERVADOS_LOCAL, JSON.stringify(reservados));
 
-    // 3. Forzar estado 'Activo'
+    // 3. Forzar estado 'Activo' (limpiar también posibles claves previas en limpieza)
     if (cleanId) {
       setAdminAlojamientoEstado(cleanId, 'Activo');
+    }
+    if (cleanName) {
+      setAdminAlojamientoEstado(cleanName, 'Activo');
     }
   } catch (e) {
     console.error('Error liberando alojamiento:', e);
@@ -156,10 +206,19 @@ export function checkIsAlojamientoReserved(params: CheckIsAlojamientoReservedPar
   const codeNorm = String(alojamientoCodigo ?? '').toLowerCase().trim();
   const safeReservas = Array.isArray(activeReservas) ? activeReservas : [];
 
-  // 1. Si el administrador lo tiene como 'Inactivo' o 'Pausado', no se puede reservar
+  // 1. Si el administrador o recepción lo tiene como 'Inactivo', 'Pausado' o 'En Limpieza', no se puede reservar
   const overrides = getEstadosOverride();
   const overrideEstado = overrides[safeId] || overrides[idNorm] || overrides[nameNorm];
-  if (overrideEstado === 'Inactivo' || estado === 'Inactivo') {
+  const estadoNorm = String(estado ?? '').toLowerCase().trim();
+  const overrideNorm = String(overrideEstado ?? '').toLowerCase().trim();
+  if (
+    estadoNorm === 'inactivo' ||
+    estadoNorm === 'en limpieza' ||
+    estadoNorm.includes('limpieza') ||
+    overrideNorm === 'inactivo' ||
+    overrideNorm === 'en limpieza' ||
+    overrideNorm.includes('limpieza')
+  ) {
     return true;
   }
 
@@ -174,6 +233,20 @@ export function checkIsAlojamientoReserved(params: CheckIsAlojamientoReservedPar
         (nameNorm && lib.includes(nameNorm))),
   );
 
+  const isClosedReserva = (r: ReservaItemLike) => {
+    const eNombre = String(r.estadoNombre ?? '').toLowerCase();
+    return (
+      Boolean(r.checkoutRealizado) ||
+      r.estadoId === 'EST-003' ||
+      r.estadoId === 'EST-004' ||
+      r.estadoId === 'EST-005' ||
+      eNombre.includes('cancel') ||
+      eNombre.includes('limpieza') ||
+      eNombre.includes('finaliz') ||
+      eNombre.includes('check-out')
+    );
+  };
+
   // 3. Revisar reservas locales recientes
   const locales = getReservadosLocales();
   const hasLocalMatch = locales.some((loc) => {
@@ -186,7 +259,7 @@ export function checkIsAlojamientoReserved(params: CheckIsAlojamientoReservedPar
       (codeNorm && locCode && codeNorm === locCode);
 
     if (!matchesProp) return false;
-    if (loc.estadoId === 'EST-003' || loc.estadoNombre === 'Cancelada') return false;
+    if (isClosedReserva(loc)) return false;
 
     // Si se especifican fechas de consulta, verificar superposición
     if (checkDates?.checkin && checkDates?.checkout && loc.fechaEntrada && loc.fechaSalida) {
@@ -214,8 +287,8 @@ export function checkIsAlojamientoReserved(params: CheckIsAlojamientoReservedPar
 
   // 5. Cruzar contra las reservas oficiales de Azure (activeReservas)
   const hasApiMatch = safeReservas.some((res) => {
-    // Descartar canceladas
-    if (!res || res.estadoId === 'EST-003' || res.estadoNombre === 'Cancelada') return false;
+    // Descartar canceladas, check-out completados o finalizadas
+    if (!res || isClosedReserva(res)) return false;
 
     const resName = String(res.alojamientoNombre ?? '').toLowerCase().trim();
     const resCode = String(res.alojamientoCodigo ?? '').toLowerCase().trim();

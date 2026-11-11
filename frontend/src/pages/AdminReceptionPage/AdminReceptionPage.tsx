@@ -11,7 +11,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { api, getAuthToken } from '../../api/client';
-import { UsuarioSession, ProblemDetailsException } from '../../api/types';
+import { UsuarioSession, ProblemDetailsException, ReservaAdminItem } from '../../api/types';
 import { Button } from '../../components/ui/Button/Button';
 import { Input } from '../../components/ui/Input/Input';
 import { Badge } from '../../components/ui/Badge/Badge';
@@ -23,27 +23,6 @@ import styles from './AdminReceptionPage.module.css';
 
 interface AdminReceptionPageProps {
   currentUser: UsuarioSession | null;
-}
-
-interface ReservaAdminItem {
-  id: string;
-  ordenId: string;
-  external_order_id?: string;
-  alojamientoNombre: string;
-  habitacionNombre: string;
-  fechaEntrada: string;
-  fechaSalida: string;
-  precioTotal: number | string;
-  estadoId: string;
-  estadoNombre: string;
-  usuarioNombre?: string;
-  usuarioEmail?: string;
-  clienteNombre?: string;
-  clienteEmail?: string;
-  clienteIdentificacion?: string;
-  horaCheckIn?: string;
-  horaCheckOut?: string;
-  numeroPersonas?: number;
 }
 
 export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentUser }) => {
@@ -234,10 +213,28 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
             <tbody>
               {filteredReservas.map((res) => {
                 const isCancelled = res.estadoId === 'EST-003' || res.estadoNombre?.toLowerCase().includes('cancel');
+                const isCleaning =
+                  !isCancelled &&
+                  (res.estadoId === 'EST-004' ||
+                    res.estadoNombre === 'En Limpieza' ||
+                    (Boolean(res.checkoutRealizado) &&
+                      res.limpiezaCompletada === false &&
+                      res.estadoId !== 'EST-005'));
+                const isCheckedOut =
+                  !isCancelled &&
+                  (isCleaning ||
+                    Boolean(res.checkoutRealizado) ||
+                    res.estadoId === 'EST-005' ||
+                    res.estadoNombre === 'Finalizada' ||
+                    res.estadoNombre === 'Checked-Out');
                 const isCheckedIn =
-                  res.estadoNombre?.toUpperCase().includes('CHECKED_IN') ||
-                  res.estadoNombre?.toUpperCase().includes('ASISTIDO');
-                const canCheckin = !isCancelled && !isCheckedIn;
+                  !isCancelled &&
+                  !isCheckedOut &&
+                  (Boolean(res.checkinRealizado) ||
+                    res.estadoNombre?.toUpperCase().includes('CHECKED_IN') ||
+                    res.estadoNombre?.toUpperCase().includes('ASISTIDO') ||
+                    res.estadoNombre === 'Checked-In');
+                const canCheckin = !isCancelled && !isCheckedIn && !isCheckedOut;
 
                 const code = res.external_order_id || res.ordenId || res.id;
                 const guestName = res.usuarioNombre || res.clienteNombre || 'Huésped Booking';
@@ -279,8 +276,12 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
                       {formatUSD(Number(res.precioTotal))}
                     </td>
                     <td>
-                      <Badge variant={isCancelled ? 'error' : isCheckedIn ? 'success' : 'gold'}>
-                        {res.estadoNombre || (isCancelled ? 'Cancelada' : 'Confirmada')}
+                      <Badge variant={isCancelled ? 'error' : isCleaning ? 'gold' : isCheckedOut ? 'info' : isCheckedIn ? 'success' : 'gold'}>
+                        {isCleaning
+                          ? '🧹 En Limpieza'
+                          : isCheckedOut
+                            ? 'Finalizada'
+                            : res.estadoNombre || (isCancelled ? 'Cancelada' : 'Confirmada')}
                       </Badge>
                     </td>
                     <td>
@@ -293,6 +294,14 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
                         >
                           Confirmar llegada
                         </Button>
+                      ) : isCleaning ? (
+                        <span style={{ fontSize: 'var(--font-size-xs)', color: '#B45309', fontWeight: 600 }}>
+                          🧹 En Limpieza
+                        </span>
+                      ) : isCheckedOut ? (
+                        <span style={{ fontSize: 'var(--font-size-xs)', color: '#14406B', fontWeight: 600 }}>
+                          ✓ Estancia Finalizada
+                        </span>
                       ) : isCheckedIn ? (
                         <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-success)', fontWeight: 600 }}>
                           ✓ Asistido

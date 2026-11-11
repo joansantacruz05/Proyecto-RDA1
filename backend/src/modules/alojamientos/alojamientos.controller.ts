@@ -130,6 +130,16 @@ export class AlojamientosController {
     return this.alojamientosService.removeAdmin(id);
   }
 
+  @Post('admin/alojamientos/:id/marcar-limpio')
+  @Roles(Role.ADMIN)
+  @ApiTags('Administración')
+  @ApiOperation({ summary: 'Confirmar limpieza completada y poner el alojamiento nuevamente en línea (Activo)' })
+  @ApiResponse({ status: 200, description: 'Alojamiento marcado como limpio y habilitado en línea.' })
+  @HttpCode(HttpStatus.OK)
+  markCleanAdmin(@Param('id') id: string) {
+    return this.alojamientosService.markCleanAdmin(id);
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
   //  Habitaciones (Admin)
   // ══════════════════════════════════════════════════════════════════════════
@@ -153,6 +163,15 @@ export class AlojamientosController {
   @ApiTags('Administración')
   updateRoomAdmin(@Param('habId') habId: string, @Body() dto: any) {
     return this.alojamientosService.updateRoomAdmin(habId, dto);
+  }
+
+  @Post('admin/habitaciones/:habId/marcar-limpio')
+  @Roles(Role.ADMIN)
+  @ApiTags('Administración')
+  @ApiOperation({ summary: 'Confirmar limpieza de una habitación y habilitarla en línea (Activo)' })
+  @HttpCode(HttpStatus.OK)
+  markRoomCleanAdmin(@Param('habId') habId: string) {
+    return this.alojamientosService.updateRoomAdmin(habId, { estado: 'Activo' });
   }
 
   @Delete('admin/habitaciones/:habId')

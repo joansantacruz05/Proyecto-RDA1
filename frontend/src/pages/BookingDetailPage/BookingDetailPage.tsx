@@ -108,8 +108,17 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
   const checkInHora = formatHoraHHMM(reserva.horaCheckIn, '14:00');
   const checkOutHora = formatHoraHHMM(reserva.horaCheckOut, '11:00');
   const dOut = new Date(`${String(reserva.fechaSalida).split('T')[0]}T${checkOutHora}:00-05:00`);
-  const isPast = dOut < now && !isCancelled;
-  const isCheckedIn = reserva.estadoNombre?.toUpperCase().includes('CHECKED_IN') || reserva.estadoId === 'EST-002';
+  const isPast =
+    !isCancelled &&
+    (Boolean(reserva.checkoutRealizado) ||
+      reserva.estadoId === 'EST-004' ||
+      reserva.estadoId === 'EST-005' ||
+      dOut < now);
+  const isCheckedIn =
+    !isPast &&
+    (Boolean(reserva.checkinRealizado) ||
+      reserva.estadoNombre?.toUpperCase().includes('CHECKED_IN') ||
+      reserva.estadoId === 'EST-002');
 
   const checkinClean = String(reserva.fechaEntrada).split('T')[0] || '';
   const checkoutClean = String(reserva.fechaSalida).split('T')[0] || '';

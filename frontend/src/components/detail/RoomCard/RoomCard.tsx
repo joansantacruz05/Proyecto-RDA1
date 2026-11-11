@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, BedDouble, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Users, BedDouble, DoorOpen, AlertTriangle, CheckCircle, Sparkles } from 'lucide-react';
 import { HabitacionDetalle } from '../../../api/types';
 import { PriceDisplay } from '../../ui/PriceDisplay/PriceDisplay';
 import { Button } from '../../ui/Button/Button';
@@ -10,6 +10,7 @@ interface RoomCardProps {
   onSelect: (hab: HabitacionDetalle) => void;
   isSelected?: boolean;
   isHotelReserved?: boolean;
+  isHotelCleaning?: boolean;
 }
 
 const DEFAULT_ROOM_IMG = 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=600&q=80';
@@ -19,16 +20,21 @@ export const RoomCard: React.FC<RoomCardProps> = ({
   onSelect,
   isSelected = false,
   isHotelReserved = false,
+  isHotelCleaning = false,
 }) => {
   const precio = typeof habitacion.precioPorNoche === 'string'
     ? parseFloat(habitacion.precioPorNoche)
     : habitacion.precioPorNoche || 100;
 
   const stock = habitacion.cantidadDisponible ?? 3;
-  const isOutOfStock = Boolean(isHotelReserved) || stock <= 0 || habitacion.estado === 'Inactivo';
+  const isCleaning = Boolean(isHotelCleaning) || habitacion.estado === 'En Limpieza';
+  const isOutOfStock = isCleaning || Boolean(isHotelReserved) || stock <= 0 || habitacion.estado === 'Inactivo';
   const isLowStock = !isOutOfStock && stock > 0 && stock <= 2;
   const code = habitacion.codigo || 'SUITE_DELUXE';
   const capacity = habitacion.capacidadAdultos ?? habitacion.capacidad ?? 2;
+  const numHabitaciones = Number(habitacion.numHabitaciones ?? 1);
+  const numCamas = Number(habitacion.numCamas ?? 1);
+  const tipoCamas = habitacion.tipoCamas || (numCamas === 1 ? '1 Cama Doble / Queen' : `${numCamas} Camas`);
 
   return (
     <div className={styles.roomCard} style={isSelected ? { borderColor: 'var(--color-gold)', backgroundColor: 'var(--color-gold-light)' } : undefined}>
@@ -37,7 +43,12 @@ export const RoomCard: React.FC<RoomCardProps> = ({
           <h4 className={styles.roomTitle}>{habitacion.nombre}</h4>
           <span className={styles.roomCode}>{code}</span>
         </div>
-        {isOutOfStock ? (
+        {isCleaning ? (
+          <div className={styles.lowStockWarning} style={{ color: '#92400E', backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }}>
+            <Sparkles size={13} />
+            <span>En Limpieza · No disponible</span>
+          </div>
+        ) : isOutOfStock ? (
           <div className={styles.lowStockWarning} style={{ color: '#DC2626', backgroundColor: '#FEF2F2' }}>
             <AlertTriangle size={13} />
             <span>Agotada / Reservada</span>
@@ -59,12 +70,21 @@ export const RoomCard: React.FC<RoomCardProps> = ({
         />
 
         <div className={styles.featuresCol}>
-          <div className={styles.capacityBadge}>
-            <Users size={14} color="#14406B" />
-            <span>Capacidad: hasta {capacity} adultos</span>
-            <span style={{ margin: '0 4px' }}>·</span>
-            <BedDouble size={14} color="#14406B" />
-            <span>1 Cama King o 2 Queen</span>
+          <div className={styles.capacityBadge} style={{ flexWrap: 'wrap', gap: '6px' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <Users size={14} color="#14406B" />
+              <span>Hasta {capacity} adultos{habitacion.capacidadNinos ? ` · ${habitacion.capacidadNinos} niños` : ''}</span>
+            </span>
+            <span>·</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <DoorOpen size={14} color="#14406B" />
+              <span>{numHabitaciones} {numHabitaciones === 1 ? 'hab.' : 'habs.'}</span>
+            </span>
+            <span>·</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <BedDouble size={14} color="#14406B" />
+              <span>{numCamas} {numCamas === 1 ? 'cama' : 'camas'} ({tipoCamas})</span>
+            </span>
           </div>
 
           <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
@@ -82,7 +102,7 @@ export const RoomCard: React.FC<RoomCardProps> = ({
           <PriceDisplay amount={precio} period="/ noche" size="md" />
           {isOutOfStock ? (
             <Button variant="outline" size="sm" disabled style={{ opacity: 0.7, cursor: 'not-allowed' }}>
-              Agotada
+              {isCleaning ? 'En Limpieza' : 'Agotada'}
             </Button>
           ) : (
             <Button

@@ -293,7 +293,7 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
           notasRecepcion: notasRecepcion.trim(),
         });
         onSuccess(
-          `Check-out completado para ${reserva.clienteNombre || reserva.usuarioNombre || 'huésped'}. Habitación liberada en el catálogo.`,
+          `Check-out completado para ${reserva.clienteNombre || reserva.usuarioNombre || 'huésped'}. El alojamiento pasó automáticamente a estado En Limpieza.`,
         );
       }
       onClose();
@@ -735,7 +735,7 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
               loading={isSubmitting}
               onClick={handleSubmit}
             >
-              Confirmar Check-out y Liberar Habitación
+              Confirmar Check-out y Enviar a Limpieza
             </Button>
           )}
         </div>

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { MapPin, Sparkles, Waves, AlertCircle } from 'lucide-react';
+import { MapPin, Sparkles, Waves, AlertCircle, BedDouble, DoorOpen } from 'lucide-react';
 import { AlojamientoItem } from '../../../api/types';
 import { api } from '../../../api/client';
-import { checkIsAlojamientoReserved, ReservaItemLike } from '../../../utils/accommodationStatus';
+import { checkIsAlojamientoReserved, isAlojamientoInCleaning, ReservaItemLike } from '../../../utils/accommodationStatus';
 import { RatingStars } from '../../ui/RatingStars/RatingStars';
 import { PriceDisplay } from '../../ui/PriceDisplay/PriceDisplay';
 import { Badge } from '../../ui/Badge/Badge';
@@ -33,6 +33,12 @@ export const AlojamientoCard: React.FC<AlojamientoCardProps> = ({
     staleTime: 5000,
   });
 
+  const isCleaning = isAlojamientoInCleaning({
+    alojamientoId: alojamiento.id,
+    alojamientoNombre: alojamiento.nombre,
+    estado: alojamiento.estado ?? (alojamiento.activo === false ? 'Inactivo' : 'Activo'),
+  });
+
   const isReserved = checkIsAlojamientoReserved({
     alojamientoId: alojamiento.id,
     alojamientoNombre: alojamiento.nombre,
@@ -42,13 +48,16 @@ export const AlojamientoCard: React.FC<AlojamientoCardProps> = ({
       alojamiento.estaReservado ||
       (alojamiento.habitacionesDisponibles !== undefined && alojamiento.habitacionesDisponibles <= 0),
     ),
-    estado: alojamiento.activo === false ? 'Inactivo' : 'Activo',
+    estado: alojamiento.estado ?? (alojamiento.activo === false ? 'Inactivo' : 'Activo'),
     activeReservas,
     checkDates:
       searchDates?.checkin && searchDates.checkout
         ? { checkin: searchDates.checkin, checkout: searchDates.checkout }
         : undefined,
   });
+
+  const numHabitaciones = Number(alojamiento.numHabitaciones ?? 1);
+  const numCamas = Number(alojamiento.numCamas ?? 1);
 
   const price = typeof alojamiento.precioPorNoche === 'string'
     ? parseFloat(alojamiento.precioPorNoche)
@@ -70,7 +79,11 @@ export const AlojamientoCard: React.FC<AlojamientoCardProps> = ({
           loading="lazy"
         />
         <div className={styles.badgeOverlay}>
-          {isReserved ? (
+          {isCleaning ? (
+            <Badge variant="gold" icon={<Sparkles size={12} />}>
+              En Limpieza
+            </Badge>
+          ) : isReserved ? (
             <Badge variant="error" icon={<AlertCircle size={12} />}>
               Reservado
             </Badge>
@@ -111,6 +124,18 @@ export const AlojamientoCard: React.FC<AlojamientoCardProps> = ({
           <RatingStars rating={alojamiento.estrellas || 5} />
         </div>
 
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px', color: '#14406B', fontWeight: 600, marginBottom: '6px' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <DoorOpen size={13} color="#C9A227" />
+            <span>{numHabitaciones} {numHabitaciones === 1 ? 'habitación' : 'habitaciones'}</span>
+          </span>
+          <span>·</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+            <BedDouble size={13} color="#C9A227" />
+            <span>{numCamas} {numCamas === 1 ? 'cama' : 'camas'}</span>
+          </span>
+        </div>
+
         {alojamiento.direccion && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#475569', marginBottom: '6px' }}>
             <MapPin size={12} color="#14406B" style={{ flexShrink: 0 }} />
@@ -131,7 +156,23 @@ export const AlojamientoCard: React.FC<AlojamientoCardProps> = ({
             <PriceDisplay amount={price} period="/ noche" size="md" />
           </div>
 
-          {isReserved ? (
+          {isCleaning ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled
+              style={{
+                opacity: 0.9,
+                cursor: 'not-allowed',
+                color: '#92400E',
+                borderColor: '#FDE68A',
+                backgroundColor: '#FEF3C7',
+                fontWeight: 600,
+              }}
+            >
+              En Limpieza
+            </Button>
+          ) : isReserved ? (
             <Button
               variant="outline"
               size="sm"

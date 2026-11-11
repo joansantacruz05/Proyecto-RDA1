@@ -110,21 +110,22 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
 
   const now = new Date();
 
+  const isBookingEnded = (r: ReservaUsuarioItem) => {
+    if (r.checkoutRealizado || r.estadoId === 'EST-004' || r.estadoId === 'EST-005') {
+      return true;
+    }
+    const outHora = formatHoraHHMM(r.horaCheckOut, '11:00');
+    const dOut = new Date(`${String(r.fechaSalida).split('T')[0]}T${outHora}:00-05:00`);
+    return dOut < now;
+  };
+
   // Filtrado de reservas por pestaña
   const canceladas = reservas.filter((r) => r.estadoId === 'EST-003' || r.estadoNombre?.toLowerCase().includes('cancel'));
   const noCanceladas = reservas.filter((r) => r.estadoId !== 'EST-003' && !r.estadoNombre?.toLowerCase().includes('cancel'));
 
-  const proximas = noCanceladas.filter((r) => {
-    const outHora = formatHoraHHMM(r.horaCheckOut, '11:00');
-    const dOut = new Date(`${String(r.fechaSalida).split('T')[0]}T${outHora}:00-05:00`);
-    return dOut >= now;
-  });
+  const proximas = noCanceladas.filter((r) => !isBookingEnded(r));
 
-  const pasadas = noCanceladas.filter((r) => {
-    const outHora = formatHoraHHMM(r.horaCheckOut, '11:00');
-    const dOut = new Date(`${String(r.fechaSalida).split('T')[0]}T${outHora}:00-05:00`);
-    return dOut < now;
-  });
+  const pasadas = noCanceladas.filter((r) => isBookingEnded(r));
 
   let currentList: ReservaUsuarioItem[] = [];
   if (activeTab === 'proximas') currentList = proximas;

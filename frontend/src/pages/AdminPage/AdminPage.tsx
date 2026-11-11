@@ -25,12 +25,14 @@ import {
   DoorOpen,
   SlidersHorizontal,
   Receipt,
+  Sparkles,
 } from 'lucide-react';
 import { api, getAuthToken } from '../../api/client';
 import { HabitacionAdmin, ReservaAdminItem, UsuarioSession } from '../../api/types';
 import {
   setAdminAlojamientoEstado,
   liberarAlojamiento,
+  setAlojamientoEnLimpieza,
   getEstadosOverride,
   checkIsAlojamientoReserved,
 } from '../../utils/accommodationStatus';
@@ -58,6 +60,7 @@ interface StatsData {
   total_alojamientos?: number;
   reservas_activas?: number;
   ingresos_totales?: number;
+  alojamientos_en_limpieza?: number;
 }
 
 interface AlojamientoAdmin {
@@ -76,6 +79,11 @@ interface AlojamientoAdmin {
   capacidadNinos?: number;
   habitaciones?: number;
   habitaciones_disponibles?: number;
+  habitaciones_limpieza?: number;
+  numHabitaciones?: number;
+  numCamas?: number;
+  tipoCamas?: string;
+  enLimpiezaDesde?: string | null;
   imagenUrl?: string;
   tienePiscina?: boolean;
   estado?: string;
@@ -229,6 +237,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     capacidadAdultos: 2,
     capacidadNinos: 1,
     habitaciones: 3,
+    numHabitaciones: 1,
+    numCamas: 1,
+    tipoCamas: '1 Cama King / Queen',
     imagenUrl: '',
     tienePiscina: false,
     permitePaquete: true,
@@ -254,6 +265,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       capacidadAdultos: 2,
       capacidadNinos: 1,
       habitaciones: 3,
+      numHabitaciones: 1,
+      numCamas: 1,
+      tipoCamas: '1 Cama King / Queen',
       imagenUrl: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80',
       tienePiscina: false,
       permitePaquete: true,
@@ -286,6 +300,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       capacidadAdultos: aloj.capacidadAdultos || 2,
       capacidadNinos: aloj.capacidadNinos || 0,
       habitaciones: aloj.habitaciones || 1,
+      numHabitaciones: aloj.numHabitaciones || 1,
+      numCamas: aloj.numCamas || 1,
+      tipoCamas: aloj.tipoCamas || '1 Cama King / Queen',
       imagenUrl: aloj.imagenUrl || '',
       tienePiscina: Boolean(aloj.tienePiscina),
       permitePaquete: true,
@@ -295,12 +312,48 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     setAlojamientoModalOpen(true);
   };
 
+  const handleMarkCleanAndOnline = async (alojamientoId: string, alojamientoNombre?: string | null) => {
+    if (!alojamientoId) return;
+    try {
+      try {
+        await api.post(`/admin/alojamientos/${alojamientoId}/marcar-limpio`, {});
+      } catch {
+        await api.patch(`/admin/alojamientos/${alojamientoId}`, {
+          estado: 'Activo',
+          liberarReservas: false,
+        });
+      }
+      liberarAlojamiento(alojamientoId, alojamientoNombre);
+      setAdminAlojamientoEstado(alojamientoId, 'Activo');
+
+      showToast(
+        `"${alojamientoNombre || alojamientoId}" marcado como limpio y habilitado nuevamente EN LÍNEA.`,
+      );
+      await Promise.all([refetchAlojamientos(), refetchReservas()]);
+      queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
+      queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
+      queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
+      queryClient.invalidateQueries({ queryKey: ['adminReservasTodas'] });
+      queryClient.invalidateQueries({ queryKey: ['adminDashboardStats'] });
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Error al habilitar alojamiento limpio', 'error');
+    }
+  };
+
   const handleToggleEstadoAlojamiento = async (aloj: AlojamientoAdmin) => {
     const currentOverride = getEstadosOverride()[aloj.id];
-    const currentEstado = currentOverride || aloj.estado || 'Activo';
+    const currentEstado =
+      aloj.estado === 'En Limpieza' || currentOverride === 'En Limpieza'
+        ? 'En Limpieza'
+        : currentOverride || aloj.estado || 'Activo';
+
+    if (currentEstado === 'En Limpieza') {
+      await handleMarkCleanAndOnline(aloj.id, aloj.nombre);
+      return;
+    }
+
     const nuevoEstado = currentEstado === 'Activo' ? 'Inactivo' : 'Activo';
-    
-    // 1. Guardar en almacenamiento reactivo local para efecto inmediato
+
     setAdminAlojamientoEstado(aloj.id, nuevoEstado);
     if (nuevoEstado === 'Activo') {
       liberarAlojamiento(aloj.id, aloj.nombre);
@@ -328,7 +381,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
 
   const handleLiberarAlojamiento = async (aloj: AlojamientoAdmin) => {
     try {
-      // 1. Liberar cupos y forzar estado En Línea
       liberarAlojamiento(aloj.id, aloj.nombre);
       setAdminAlojamientoEstado(aloj.id, 'Activo');
 
@@ -362,20 +414,24 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       longitud: Number(alojamientoForm.longitud),
       horaCheckIn: formatHoraHHMM(alojamientoForm.horaCheckIn, '14:00'),
       horaCheckOut: formatHoraHHMM(alojamientoForm.horaCheckOut, '11:00'),
+      numHabitaciones: Math.max(1, Number(alojamientoForm.numHabitaciones) || 1),
+      numCamas: Math.max(1, Number(alojamientoForm.numCamas) || 1),
+      tipoCamas: alojamientoForm.tipoCamas.trim() || '1 Cama Doble / Queen',
     };
     try {
       if (editingAlojamientoId) {
-        // Guardar estado local
-        setAdminAlojamientoEstado(editingAlojamientoId, payload.estado);
-        if (payload.liberarReservas) {
-          liberarAlojamiento(editingAlojamientoId, payload.nombre);
+        if (payload.estado === 'En Limpieza') {
+          setAlojamientoEnLimpieza(editingAlojamientoId, payload.nombre);
+        } else {
+          setAdminAlojamientoEstado(editingAlojamientoId, payload.estado);
+          if (payload.liberarReservas || payload.estado === 'Activo') {
+            liberarAlojamiento(editingAlojamientoId, payload.nombre);
+          }
         }
 
-        // Editar existente (PATCH /admin/alojamientos/:id)
         await api.patch(`/admin/alojamientos/${editingAlojamientoId}`, payload);
         showToast('Alojamiento actualizado exitosamente en el catálogo');
       } else {
-        // Crear nuevo (POST /admin/alojamientos)
         await api.post('/admin/alojamientos', payload);
         showToast('Nuevo alojamiento y habitaciones creados con éxito');
       }
@@ -435,6 +491,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       capacidadAdultos: 2,
       capacidadNinos: 1,
       cantidadDisponible: 3,
+      numHabitaciones: 1,
+      numCamas: 2,
+      tipoCamas: '1 Cama King / Queen',
       imagenesUrls: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
       estado: 'Activo',
     });
@@ -456,8 +515,25 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
         showToast('Habitación actualizada con éxito');
       }
       setEditingRoom(null);
+      queryClient.invalidateQueries({ queryKey: ['alojamientos'] });
+      queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
+      queryClient.invalidateQueries({ queryKey: ['hotelDetail', roomsModalHotel.id] });
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : 'Error al guardar habitación', 'error');
+    }
+  };
+
+  const handleMarkRoomClean = async (habId: string) => {
+    if (!roomsModalHotel) return;
+    try {
+      await api.post(`/admin/habitaciones/${habId}/marcar-limpio`, {});
+      setRoomsList(roomsList.map((r) => (r.id === habId ? { ...r, estado: 'Activo' } : r)));
+      showToast('Habitación marcada limpia y disponible');
+      queryClient.invalidateQueries({ queryKey: ['alojamientos'] });
+      queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
+      queryClient.invalidateQueries({ queryKey: ['hotelDetail', roomsModalHotel.id] });
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Error al marcar habitación limpia', 'error');
     }
   };
 
@@ -558,14 +634,24 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     reserva: ReservaAdminItem;
   } | null>(null);
   const [receptionFilter, setReceptionFilter] = useState<
-    'todos' | 'pendientes' | 'estancia' | 'finalizados'
+    'todos' | 'pendientes' | 'estancia' | 'limpieza' | 'finalizados'
   >('todos');
 
   const getReservaLifecycle = (res: ReservaAdminItem) => {
     const isCancelled = res.estadoNombre === 'Cancelada' || res.estadoId === 'EST-003';
+    const isCleaning =
+      !isCancelled &&
+      (res.estadoId === 'EST-004' ||
+        res.estadoNombre === 'En Limpieza' ||
+        (Boolean(res.checkoutRealizado) &&
+          res.limpiezaCompletada === false &&
+          res.estadoId !== 'EST-005'));
     const isCheckedOut =
       !isCancelled &&
-      (Boolean(res.checkoutRealizado) ||
+      (isCleaning ||
+        Boolean(res.checkoutRealizado) ||
+        res.estadoId === 'EST-005' ||
+        res.estadoNombre === 'Finalizada' ||
         res.estadoNombre === 'Checked-Out' ||
         res.estadoNombre === 'Check-out Realizado' ||
         res.estadoNombre === 'Estancia Finalizada');
@@ -577,19 +663,21 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
         res.estadoNombre === 'Check-in Realizado' ||
         res.estadoNombre === 'Llegada Confirmada' ||
         Boolean(res.estadoNombre?.toLowerCase().includes('llegada')));
-    return { isCancelled, isCheckedOut, isCheckedIn };
+    return { isCancelled, isCleaning, isCheckedOut, isCheckedIn };
   };
 
   const receptionStats = useMemo(() => {
     let pendientes = 0;
     let enEstancia = 0;
+    let enLimpieza = 0;
     let finalizados = 0;
     let totalExtras = 0;
 
     for (const r of reservas) {
-      const { isCancelled, isCheckedOut, isCheckedIn } = getReservaLifecycle(r);
+      const { isCancelled, isCleaning, isCheckedOut, isCheckedIn } = getReservaLifecycle(r);
       if (isCancelled) continue;
-      if (isCheckedOut) finalizados += 1;
+      if (isCleaning) enLimpieza += 1;
+      else if (isCheckedOut) finalizados += 1;
       else if (isCheckedIn) enEstancia += 1;
       else pendientes += 1;
       totalExtras += Number(r.cargosAdicionalesTotal || 0);
@@ -598,6 +686,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     return {
       pendientes,
       enEstancia,
+      enLimpieza,
       finalizados,
       totalExtras: Number(totalExtras.toFixed(2)),
     };
@@ -608,14 +697,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
   const filteredReservas = useMemo(() => {
     const q = searchReservaQuery.trim().toLowerCase();
     return reservas.filter((r) => {
-      const { isCancelled, isCheckedOut, isCheckedIn } = getReservaLifecycle(r);
+      const { isCancelled, isCleaning, isCheckedOut, isCheckedIn } = getReservaLifecycle(r);
       if (receptionFilter === 'pendientes' && (isCancelled || isCheckedIn || isCheckedOut)) {
         return false;
       }
       if (receptionFilter === 'estancia' && !isCheckedIn) {
         return false;
       }
-      if (receptionFilter === 'finalizados' && !isCheckedOut) {
+      if (receptionFilter === 'limpieza' && !isCleaning) {
+        return false;
+      }
+      if (receptionFilter === 'finalizados' && (!isCheckedOut || isCleaning)) {
         return false;
       }
       if (!q) return true;
@@ -775,6 +867,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 <DollarSign size={26} />
               </div>
             </div>
+
+            <div className={styles.statCard}>
+              <div>
+                <div className={styles.statLabel}>Alojamientos en Limpieza</div>
+                <div className={styles.statValue}>
+                  {stats?.alojamientos_en_limpieza ??
+                    alojamientos.filter((a) => a.estado === 'En Limpieza').length}
+                </div>
+              </div>
+              <div className={styles.statIconBox} style={{ background: 'rgba(245, 158, 11, 0.14)', color: '#B45309' }}>
+                <Sparkles size={26} />
+              </div>
+            </div>
           </div>
 
           <div className={styles.contentCard}>
@@ -849,7 +954,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                   <th>Destino</th>
                   <th>Precio / Noche</th>
                   <th>Capacidad</th>
-                  <th>Habitaciones</th>
+                  <th>Habs · Camas · Stock</th>
                   <th>Piscina</th>
                   <th>Estado</th>
                   <th style={{ textAlign: 'right' }}>Acciones</th>
@@ -869,7 +974,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 ) : (
                   alojamientos.map((aloj) => {
                     const currentOverride = getEstadosOverride()[aloj.id];
-                    const effEstado = currentOverride || aloj.estado || 'Activo';
+                    const effEstado =
+                      aloj.estado === 'En Limpieza' || currentOverride === 'En Limpieza'
+                        ? 'En Limpieza'
+                        : currentOverride || aloj.estado || 'Activo';
+                    const isCleaningState = effEstado === 'En Limpieza';
                     const isReservedNow = checkIsAlojamientoReserved({
                       alojamientoId: aloj.id,
                       alojamientoNombre: aloj.nombre,
@@ -909,7 +1018,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                           {aloj.capacidadAdultos || 2} adultos · {aloj.capacidadNinos || 0} niños
                         </td>
                         <td>
-                          {isReservedNow ? 0 : (aloj.habitaciones_disponibles ?? aloj.habitaciones ?? 1)} habs.
+                          <div style={{ fontWeight: 700, color: '#0F1E33' }}>
+                            {aloj.numHabitaciones || 1} hab{(aloj.numHabitaciones || 1) === 1 ? '' : 's'}. · {aloj.numCamas || 1} cama{(aloj.numCamas || 1) === 1 ? '' : 's'}
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+                            Cupos disp: {isCleaningState || isReservedNow ? 0 : (aloj.habitaciones_disponibles ?? aloj.habitaciones ?? 1)}
+                          </div>
                         </td>
                         <td>
                           {aloj.tienePiscina ? (
@@ -922,7 +1036,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                           <button
                             type="button"
                             onClick={() => handleToggleEstadoAlojamiento(aloj)}
-                            title="Haga clic para alternar entre En Línea y Pausado"
+                            title={isCleaningState ? 'Confirmar limpieza completada y poner en línea' : 'Haga clic para alternar entre En Línea y Pausado'}
                             style={{
                               border: 'none',
                               background: 'transparent',
@@ -930,29 +1044,51 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                               padding: 0,
                             }}
                           >
-                            <Badge variant={effEstado === 'Inactivo' ? 'error' : isReservedNow ? 'gold' : 'success'}>
-                              {effEstado === 'Inactivo' ? '🔴 Pausado' : isReservedNow ? '🟡 Reservado' : '🟢 En Línea'}
+                            <Badge variant={effEstado === 'Inactivo' ? 'error' : isCleaningState ? 'gold' : isReservedNow ? 'gold' : 'success'}>
+                              {effEstado === 'Inactivo'
+                                ? '🔴 Pausado'
+                                : isCleaningState
+                                  ? '🧹 En Limpieza'
+                                  : effEstado === 'En Mantenimiento'
+                                    ? '🛠️ Mantenimiento'
+                                    : isReservedNow
+                                      ? '🟡 Reservado'
+                                      : '🟢 En Línea'}
                             </Badge>
                           </button>
                         </td>
                         <td>
                           <div className={styles.tableActions}>
-                            <Button
-                              variant={effEstado === 'Activo' ? 'ghost' : 'gold'}
-                              size="sm"
-                              onClick={() => handleToggleEstadoAlojamiento(aloj)}
-                              title={effEstado === 'Activo' ? 'Pausar visibilidad en la página principal' : 'Poner en línea para el catálogo'}
-                            >
-                              {effEstado === 'Activo' ? 'Pausar' : 'Poner en Línea'}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleLiberarAlojamiento(aloj)}
-                              title="Liberar reservas activas y habilitar cupos en la página principal"
-                            >
-                              Liberar Cupo
-                            </Button>
+                            {isCleaningState ? (
+                              <Button
+                                variant="gold"
+                                size="sm"
+                                icon={<Sparkles size={14} />}
+                                onClick={() => handleMarkCleanAndOnline(aloj.id, aloj.nombre)}
+                                title="Confirmar que la limpieza terminó y habilitar nuevamente en línea"
+                              >
+                                Marcar Limpio → En Línea
+                              </Button>
+                            ) : (
+                              <>
+                                <Button
+                                  variant={effEstado === 'Activo' ? 'ghost' : 'gold'}
+                                  size="sm"
+                                  onClick={() => handleToggleEstadoAlojamiento(aloj)}
+                                  title={effEstado === 'Activo' ? 'Pausar visibilidad en la página principal' : 'Poner en línea para el catálogo'}
+                                >
+                                  {effEstado === 'Activo' ? 'Pausar' : 'Poner en Línea'}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleLiberarAlojamiento(aloj)}
+                                  title="Liberar reservas activas y habilitar cupos en la página principal"
+                                >
+                                  Liberar Cupo
+                                </Button>
+                              </>
+                            )}
                           <Button
                             variant="secondary"
                             size="sm"
@@ -1020,7 +1156,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
             </div>
             <div className={styles.miniStatCard}>
               <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-                Check-out Completados
+                En Limpieza (Post Check-out)
+              </span>
+              <strong style={{ fontSize: '1.5rem', color: '#B45309' }}>{receptionStats.enLimpieza}</strong>
+            </div>
+            <div className={styles.miniStatCard}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
+                Finalizados (Limpios)
               </span>
               <strong style={{ fontSize: '1.5rem', color: '#14406B' }}>{receptionStats.finalizados}</strong>
             </div>
@@ -1057,6 +1199,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 onClick={() => setReceptionFilter('estancia')}
               >
                 En Estancia / Check-out ({receptionStats.enEstancia})
+              </button>
+              <button
+                type="button"
+                className={`${styles.filterPill} ${receptionFilter === 'limpieza' ? styles.filterPillActive : ''}`}
+                onClick={() => setReceptionFilter('limpieza')}
+              >
+                🧹 En Limpieza ({receptionStats.enLimpieza})
               </button>
               <button
                 type="button"
@@ -1105,7 +1254,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                   </tr>
                 ) : (
                   filteredReservas.map((res) => {
-                    const { isCancelled, isCheckedOut, isCheckedIn } = getReservaLifecycle(res);
+                    const { isCancelled, isCleaning, isCheckedOut, isCheckedIn } = getReservaLifecycle(res);
                     const estPersonas = Number(res.numeroPersonas || 1);
                     const realPersonas = Number(res.huespedesReales ?? estPersonas);
                     const personasDifieren = realPersonas !== estPersonas;
@@ -1176,19 +1325,39 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                           )}
                         </td>
                         <td>
-                          <Badge variant={isCheckedOut ? 'info' : isCheckedIn ? 'success' : isCancelled ? 'error' : 'gold'}>
-                            {isCheckedOut
-                              ? 'Check-out Realizado'
-                              : isCheckedIn
-                                ? 'En Estancia'
-                                : isCancelled
-                                  ? 'Cancelada'
-                                  : 'Pendiente Check-in'}
+                          <Badge variant={isCleaning ? 'gold' : isCheckedOut ? 'info' : isCheckedIn ? 'success' : isCancelled ? 'error' : 'gold'}>
+                            {isCleaning
+                              ? '🧹 En Limpieza (Check-out)'
+                              : isCheckedOut
+                                ? 'Finalizada (Limpia)'
+                                : isCheckedIn
+                                  ? 'En Estancia'
+                                  : isCancelled
+                                    ? 'Cancelada'
+                                    : 'Pendiente Check-in'}
                           </Badge>
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           {isCheckedOut ? (
                             <div className={styles.actionBtnGroup}>
+                              {isCleaning && (
+                                <Button
+                                  variant="gold"
+                                  size="sm"
+                                  icon={<Sparkles size={14} />}
+                                  onClick={() =>
+                                    handleMarkCleanAndOnline(
+                                      res.alojamientoId ||
+                                        alojamientos.find((a) => a.nombre === res.alojamientoNombre)?.id ||
+                                        '',
+                                      res.alojamientoNombre,
+                                    )
+                                  }
+                                  title="Confirmar que la limpieza terminó y volver a habilitar en línea"
+                                >
+                                  Marcar Limpio · En Línea
+                                </Button>
+                              )}
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -1588,7 +1757,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
             </div>
 
             <div>
-              <label className={styles.formLabel}>Cantidad de Habitaciones *</label>
+              <label className={styles.formLabel}>Unidades / Cupos Reservables (Stock) *</label>
               <input
                 type="number"
                 min="1"
@@ -1601,6 +1770,43 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
             </div>
 
             <div>
+              <label className={styles.formLabel}>Habitaciones Físicas *</label>
+              <input
+                type="number"
+                min="1"
+                max="50"
+                required
+                className={styles.formInput}
+                value={alojamientoForm.numHabitaciones}
+                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, numHabitaciones: parseInt(e.target.value, 10) || 1 })}
+              />
+            </div>
+
+            <div>
+              <label className={styles.formLabel}>Cantidad de Camas *</label>
+              <input
+                type="number"
+                min="1"
+                max="60"
+                required
+                className={styles.formInput}
+                value={alojamientoForm.numCamas}
+                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, numCamas: parseInt(e.target.value, 10) || 1 })}
+              />
+            </div>
+
+            <div>
+              <label className={styles.formLabel}>Tipo / Detalle de Camas</label>
+              <input
+                type="text"
+                placeholder="Ej: 1 Cama King + 2 Individuales"
+                className={styles.formInput}
+                value={alojamientoForm.tipoCamas}
+                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, tipoCamas: e.target.value })}
+              />
+            </div>
+
+            <div>
               <label className={styles.formLabel}>Estado del Alojamiento</label>
               <select
                 className={styles.formSelect}
@@ -1608,6 +1814,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 onChange={(e) => setAlojamientoForm({ ...alojamientoForm, estado: e.target.value })}
               >
                 <option value="Activo">🟢 En Línea (Visible en Catálogo)</option>
+                <option value="En Limpieza">🧹 En Limpieza (Post Check-out / No Reservable)</option>
                 <option value="Inactivo">🔴 Pausado (Oculto)</option>
                 <option value="En Mantenimiento">🟡 En Revisión / Mantenimiento</option>
               </select>
@@ -1902,7 +2109,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 </div>
 
                 <div>
-                  <label className={styles.formLabel}>Cantidad Disponible (Stock)</label>
+                  <label className={styles.formLabel}>Unidades Reservables (Stock)</label>
                   <input
                     type="number"
                     min="1"
@@ -1913,14 +2120,51 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 </div>
 
                 <div>
+                  <label className={styles.formLabel}>Habitaciones Físicas</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    className={styles.formInput}
+                    value={editingRoom.numHabitaciones ?? 1}
+                    onChange={(e) => setEditingRoom({ ...editingRoom, numHabitaciones: parseInt(e.target.value, 10) || 1 })}
+                  />
+                </div>
+
+                <div>
+                  <label className={styles.formLabel}>Cantidad de Camas</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="60"
+                    className={styles.formInput}
+                    value={editingRoom.numCamas ?? 1}
+                    onChange={(e) => setEditingRoom({ ...editingRoom, numCamas: parseInt(e.target.value, 10) || 1 })}
+                  />
+                </div>
+
+                <div>
+                  <label className={styles.formLabel}>Detalle / Tipo de Camas</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: 1 Cama King + 1 Queen"
+                    className={styles.formInput}
+                    value={editingRoom.tipoCamas ?? '1 Cama King / Queen'}
+                    onChange={(e) => setEditingRoom({ ...editingRoom, tipoCamas: e.target.value })}
+                  />
+                </div>
+
+                <div>
                   <label className={styles.formLabel}>Estado</label>
                   <select
                     className={styles.formSelect}
                     value={editingRoom.estado || 'Activo'}
                     onChange={(e) => setEditingRoom({ ...editingRoom, estado: e.target.value })}
                   >
-                    <option value="Activo">Activo</option>
-                    <option value="Mantenimiento">Mantenimiento</option>
+                    <option value="Activo">🟢 Activo</option>
+                    <option value="En Limpieza">🧹 En Limpieza</option>
+                    <option value="Inactivo">🔴 Inactivo</option>
+                    <option value="Mantenimiento">🛠️ Mantenimiento</option>
                   </select>
                 </div>
 
@@ -2008,15 +2252,37 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
               {roomsList.map((room) => (
                 <div key={room.id} className={styles.roomCardItem}>
                   <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <strong style={{ fontSize: '15px', color: '#0F1E33' }}>{room.nombre}</strong>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                      <div>
+                        <strong style={{ fontSize: '15px', color: '#0F1E33' }}>{room.nombre}</strong>
+                        <div style={{ marginTop: '4px' }}>
+                          <Badge
+                            variant={
+                              room.estado === 'En Limpieza'
+                                ? 'gold'
+                                : room.estado === 'Activo' || !room.estado
+                                  ? 'success'
+                                  : 'error'
+                            }
+                          >
+                            {room.estado === 'En Limpieza'
+                              ? '🧹 En Limpieza'
+                              : room.estado && room.estado !== 'Activo'
+                                ? room.estado
+                                : '🟢 Activo'}
+                          </Badge>
+                        </div>
+                      </div>
                       <span style={{ fontWeight: 700, color: '#14406B' }}>{formatUSD(Number(room.precioPorNoche))}</span>
                     </div>
                     <div style={{ fontSize: '12.5px', color: '#64748B', marginTop: '6px' }}>
                       Capacidad: {room.capacidadAdultos} adultos, {room.capacidadNinos} niños
                     </div>
+                    <div style={{ fontSize: '12px', color: '#14406B', fontWeight: 600, marginTop: '2px' }}>
+                      {room.numHabitaciones || 1} hab{(room.numHabitaciones || 1) === 1 ? '' : 's'}. · {room.numCamas || 1} cama{(room.numCamas || 1) === 1 ? '' : 's'} ({room.tipoCamas || 'Estándar'})
+                    </div>
                     <div style={{ fontSize: '12px', color: '#059669', marginTop: '2px' }}>
-                      Stock: {room.cantidadDisponible} cuartos disponibles
+                      Stock: {room.cantidadDisponible} unidades reservables
                     </div>
 
                     {room.imagenesUrls && (
@@ -2028,7 +2294,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: '8px', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
+                    {room.estado === 'En Limpieza' && (
+                      <Button
+                        variant="gold"
+                        size="sm"
+                        icon={<Sparkles size={13} />}
+                        onClick={() => handleMarkRoomClean(room.id)}
+                      >
+                        Limpiar → Activo
+                      </Button>
+                    )}
                     <Button variant="outline" size="sm" icon={<Edit2 size={13} />} onClick={() => setEditingRoom(room)}>
                       Editar
                     </Button>
@@ -2178,7 +2454,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
           const closedMode = receptionModalState?.mode;
           const res = receptionModalState?.reserva;
           if (closedMode === 'checkout' && res && (res.alojamientoId || res.alojamientoNombre)) {
-            liberarAlojamiento(res.alojamientoId || '', res.alojamientoNombre);
+            setAlojamientoEnLimpieza(res.alojamientoId || '', res.alojamientoNombre);
           }
           showToast(message);
           refetchReservas();
@@ -2186,6 +2462,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
           queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
           queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
           queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
+          queryClient.invalidateQueries({ queryKey: ['adminDashboardStats'] });
         }}
         onError={(message) => showToast(message, 'error')}
       />
