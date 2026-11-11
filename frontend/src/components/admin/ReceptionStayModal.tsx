@@ -332,7 +332,7 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
               },
         );
         onSuccess(
-          `Check-out completado para ${reserva.clienteNombre || reserva.usuarioNombre || 'huésped'}. El alojamiento pasó automáticamente a estado En Limpieza.`,
+          `Check-out completado para ${reserva.clienteNombre || reserva.usuarioNombre || 'huésped'}. La habitación "${reserva.habitacionNombre || reserva.espacioId}" pasó automáticamente a estado En Limpieza.`,
         );
       }
       onClose();

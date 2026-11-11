@@ -55,6 +55,7 @@ export interface AlojamientoItem {
   activo?: boolean;
   estado?: string;
   habitacionesDisponibles?: number;
+  habitacionesLimpieza?: number;
   numHabitaciones?: number;
   numCamas?: number;
   tipoCamas?: string;

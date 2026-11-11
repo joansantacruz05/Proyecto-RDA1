@@ -2115,16 +2115,6 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         );
       }
 
-      if (order.alojamientoId) {
-        await manager.query(
-          `UPDATE alojamientos
-           SET estado = 'En Limpieza',
-               "enLimpiezaDesde" = NOW()
-           WHERE id = $1`,
-          [order.alojamientoId],
-        );
-      }
-
       try {
         await manager.query(
           `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
@@ -2133,7 +2123,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
             generateEntityId('HIS'),
             order.id,
             order.estadoId || 'EST-002',
-            `Check-out completado en recepción. Folio final: $${Number(order.precioTotal || 0).toFixed(2)}. Alojamiento y habitación enviados automáticamente a estado En Limpieza.`,
+            `Check-out completado en recepción. Folio final: $${Number(order.precioTotal || 0).toFixed(2)}. La habitación pasó automáticamente a estado En Limpieza.`,
           ],
         );
       } catch (e: any) {
@@ -2154,7 +2144,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       status: 'CHECKED_OUT',
       estadoId: 'EST-004',
       estadoNombre: 'En Limpieza',
-      alojamientoEstado: 'En Limpieza',
+      alojamientoEstado: order.alojamientoEstado || 'Activo',
       habitacionEstado: 'En Limpieza',
       limpiezaPendiente: true,
       limpiezaCompletada: false,
@@ -2169,7 +2159,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       totalFinal: totalFinal.toFixed(2),
       montoPagadoInicial: Number(order.montoPagadoInicial ?? totalFinal).toFixed(2),
       claveDigitalRevocada: true,
-      mensaje: 'Check-out completado. El alojamiento y la habitación pasaron automáticamente a estado En Limpieza hasta confirmar que están listos.',
+      mensaje:
+        'Check-out completado. La habitación pasó automáticamente a estado En Limpieza hasta confirmar que está lista; las demás habitaciones del alojamiento permanecen en línea.',
     };
   }
 

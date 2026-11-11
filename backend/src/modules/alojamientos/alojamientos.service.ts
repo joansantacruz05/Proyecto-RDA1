@@ -570,7 +570,7 @@ export class AlojamientosService {
              "precioPorNoche" = COALESCE($2, "precioPorNoche"),
              "capacidadAdultos" = COALESCE($3, "capacidadAdultos"),
              "capacidadNinos" = COALESCE($4, "capacidadNinos"),
-             "cantidadDisponible" = COALESCE($5, "cantidadDisponible"),
+             "cantidadDisponible" = CASE WHEN $7 = 'Activo' THEN GREATEST(COALESCE($5, "cantidadDisponible", 1), 1) ELSE COALESCE($5, "cantidadDisponible") END,
              "imagenesUrls" = COALESCE($6, "imagenesUrls"),
              estado = COALESCE($7, estado),
              "numHabitaciones" = COALESCE($8, "numHabitaciones"),
@@ -585,27 +585,41 @@ export class AlojamientosService {
     if (alojamientoId) {
       await this.syncAlojamientoCapacitySummary(alojamientoId);
       if (dto.estado === 'Activo') {
-        const remaining = await this.alojamientoRepository.query(
-          `SELECT COUNT(*)::int AS en_limpieza FROM espacios_rentables WHERE "alojamientoId" = $1 AND estado = 'En Limpieza'`,
-          [alojamientoId],
+        const roomCleanDoneRows = await this.alojamientoRepository.query(
+          `UPDATE reservas r
+           SET "estadoId" = 'EST-005',
+               "limpiezaCompletada" = true
+           WHERE r."espacioId" = $1
+             AND (
+               r."estadoId" = 'EST-004'
+               OR (COALESCE(r."checkoutRealizado", false) = true AND COALESCE(r."limpiezaCompletada", false) = false)
+             )
+           RETURNING r.id`,
+          [habId],
         );
-        if (Number(remaining[0]?.en_limpieza || 0) === 0) {
-          await this.applyPropertyOnlineState(alojamientoId, { liberarTodasReservas: false });
-        }
-      } else if (dto.estado === 'En Limpieza') {
-        const activeLeft = await this.alojamientoRepository.query(
-          `SELECT COUNT(*)::int AS activos FROM espacios_rentables WHERE "alojamientoId" = $1 AND (estado = 'Activo' OR estado IS NULL)`,
-          [alojamientoId],
-        );
-        if (Number(activeLeft[0]?.activos || 0) === 0) {
+        for (const row of roomCleanDoneRows || []) {
           await this.alojamientoRepository.query(
-            'UPDATE alojamientos SET estado = $1, "enLimpiezaDesde" = COALESCE("enLimpiezaDesde", NOW()) WHERE id = $2',
-            ['En Limpieza', alojamientoId],
-          );
+            `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
+             VALUES ($1, $2, 'EST-004', 'EST-005', $3)`,
+            [
+              `HIS-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`,
+              row.id,
+              'Limpieza de habitación completada por administración. Habitación habilitada en línea.',
+            ],
+          ).catch(() => {});
         }
+        await this.alojamientoRepository.query(
+          `UPDATE alojamientos SET estado = 'Activo', "enLimpiezaDesde" = NULL WHERE id = $1 AND estado = 'En Limpieza'`,
+          [alojamientoId],
+        );
       }
     }
-    return { id: habId, estado: updatedRows?.[0]?.estado || dto.estado };
+    return {
+      id: habId,
+      alojamientoId,
+      estado: updatedRows?.[0]?.estado || dto.estado,
+      limpiezaCompletada: dto.estado === 'Activo',
+    };
   }
 
   async deleteRoomAdmin(habId: string): Promise<void> {
@@ -1431,6 +1445,7 @@ export class AlojamientosService {
         SELECT "alojamientoId" AS aid,
                (array_agg("precioPorNoche" ORDER BY id))[1] AS "precioPorNoche",
                COUNT(*)::int AS habitaciones,
+               COUNT(*) FILTER (WHERE estado = 'En Limpieza')::int AS habitaciones_limpieza,
                GREATEST(COALESCE(SUM("numHabitaciones"), 1), 1)::int AS num_habitaciones,
                GREATEST(COALESCE(SUM("numCamas"), 1), 1)::int AS num_camas,
                (array_agg("tipoCamas" ORDER BY id))[1] AS tipo_camas,
@@ -1448,6 +1463,7 @@ export class AlojamientosService {
              pg.latitud, pg.longitud, pg."horaCheckIn", pg."horaCheckOut",
              pg."numHabitaciones", pg."numCamas", pg.total_results,
              ra."precioPorNoche", COALESCE(ra.habitaciones, 0) AS habitaciones,
+             COALESCE(ra.habitaciones_limpieza, 0) AS habitaciones_limpieza,
              COALESCE(ra.num_habitaciones, pg."numHabitaciones", 1) AS "totalHabitaciones",
              COALESCE(ra.num_camas, pg."numCamas", 1) AS "totalCamas",
              COALESCE(ra.tipo_camas, '1 Cama Doble / Queen') AS "tipoCamas",
@@ -1496,6 +1512,7 @@ export class AlojamientosService {
       moneda: 'USD',
       permitePaquete: true,
       habitacionesDisponibles: Number(item.habitaciones_disponibles ?? 0),
+      habitacionesLimpieza: Number(item.habitaciones_limpieza ?? 0),
       numHabitaciones: Number(item.totalHabitaciones ?? item.numHabitaciones ?? 1),
       numCamas: Number(item.totalCamas ?? item.numCamas ?? 1),
       tipoCamas: item.tipoCamas || '1 Cama Doble / Queen',

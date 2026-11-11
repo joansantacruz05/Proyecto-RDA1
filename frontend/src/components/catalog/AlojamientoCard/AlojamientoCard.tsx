@@ -33,11 +33,20 @@ export const AlojamientoCard: React.FC<AlojamientoCardProps> = ({
     staleTime: 5000,
   });
 
-  const isCleaning = isAlojamientoInCleaning({
-    alojamientoId: alojamiento.id,
-    alojamientoNombre: alojamiento.nombre,
-    estado: alojamiento.estado ?? (alojamiento.activo === false ? 'Inactivo' : 'Activo'),
-  });
+  const hasAvailableRooms =
+    alojamiento.habitacionesDisponibles !== undefined && alojamiento.habitacionesDisponibles > 0;
+  const allRoomsCleaning =
+    !hasAvailableRooms &&
+    alojamiento.habitacionesLimpieza !== undefined &&
+    alojamiento.habitacionesLimpieza > 0;
+  const isCleaning =
+    allRoomsCleaning ||
+    (!hasAvailableRooms &&
+      isAlojamientoInCleaning({
+        alojamientoId: alojamiento.id,
+        alojamientoNombre: alojamiento.nombre,
+        estado: alojamiento.estado ?? (alojamiento.activo === false ? 'Inactivo' : 'Activo'),
+      }));
 
   const isReserved = checkIsAlojamientoReserved({
     alojamientoId: alojamiento.id,

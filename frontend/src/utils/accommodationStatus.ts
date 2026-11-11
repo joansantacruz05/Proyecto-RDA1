@@ -81,6 +81,36 @@ export function setAlojamientoEnLimpieza(
   }
 }
 
+/** Limpia posibles marcas residuales de 'En Limpieza' a nivel hotel cuando la limpieza aplica solo por habitación. */
+export function clearHotelLimpiezaOverride(
+  alojamientoId?: string | null | undefined,
+  alojamientoNombre?: string | null | undefined,
+): void {
+  try {
+    const overrides = getEstadosOverride();
+    let changed = false;
+    const keys = [
+      String(alojamientoId ?? '').trim(),
+      String(alojamientoId ?? '').trim().toLowerCase(),
+      String(alojamientoNombre ?? '').trim(),
+      String(alojamientoNombre ?? '').trim().toLowerCase(),
+    ].filter(Boolean);
+
+    for (const k of keys) {
+      const val = String(overrides[k] || '').toLowerCase().trim();
+      if (val && (val === 'en limpieza' || val.includes('limpieza'))) {
+        delete overrides[k];
+        changed = true;
+      }
+    }
+    if (changed) {
+      localStorage.setItem(KEY_ESTADOS_OVERRIDE, JSON.stringify(overrides));
+    }
+  } catch {
+    // ignorar errores de storage
+  }
+}
+
 export function isAlojamientoInCleaning(params: {
   alojamientoId?: string | null | undefined;
   alojamientoNombre?: string | null | undefined;

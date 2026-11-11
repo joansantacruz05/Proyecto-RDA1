@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   checkIsAlojamientoReserved,
+  clearHotelLimpiezaOverride,
+  getEstadosOverride,
   isAlojamientoInCleaning,
   liberarAlojamiento,
   markAlojamientoReserved,
   markReservaCanceladaLocal,
+  setAdminAlojamientoEstado,
   setAlojamientoEnLimpieza,
 } from './accommodationStatus';
 
@@ -132,6 +135,28 @@ describe('accommodationStatus', () => {
         habitacionesDisponibles: 2,
       }),
     ).toBe(false);
+  });
+
+  it('clearHotelLimpiezaOverride limpia overrides heredados En Limpieza sin borrar Activo/Inactivo', () => {
+    setAlojamientoEnLimpieza('ALO-001', 'Gran Hotel Plaza Grande');
+    expect(
+      isAlojamientoInCleaning({
+        alojamientoId: 'ALO-001',
+        alojamientoNombre: 'Gran Hotel Plaza Grande',
+      }),
+    ).toBe(true);
+
+    clearHotelLimpiezaOverride('ALO-001', 'Gran Hotel Plaza Grande');
+    expect(
+      isAlojamientoInCleaning({
+        alojamientoId: 'ALO-001',
+        alojamientoNombre: 'Gran Hotel Plaza Grande',
+      }),
+    ).toBe(false);
+
+    setAdminAlojamientoEstado('ALO-002', 'Inactivo');
+    clearHotelLimpiezaOverride('ALO-002', 'Villa Colonial');
+    expect(getEstadosOverride()['ALO-002']).toBe('Inactivo');
   });
 });
 

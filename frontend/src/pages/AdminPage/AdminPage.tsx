@@ -32,7 +32,7 @@ import { HabitacionAdmin, ReservaAdminItem, UsuarioSession } from '../../api/typ
 import {
   setAdminAlojamientoEstado,
   liberarAlojamiento,
-  setAlojamientoEnLimpieza,
+  clearHotelLimpiezaOverride,
   getEstadosOverride,
   checkIsAlojamientoReserved,
 } from '../../utils/accommodationStatus';
@@ -61,6 +61,7 @@ interface StatsData {
   reservas_activas?: number;
   ingresos_totales?: number;
   alojamientos_en_limpieza?: number;
+  habitaciones_en_limpieza?: number;
 }
 
 interface AlojamientoAdmin {
@@ -341,6 +342,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
   };
 
   const handleChangeEstadoAlojamiento = async (aloj: AlojamientoAdmin, nuevoEstado: string) => {
+    if (nuevoEstado === 'En Limpieza') {
+      clearHotelLimpiezaOverride(aloj.id, aloj.nombre);
+      showToast('El estado En Limpieza ahora aplica solo por habitación (gestiona desde Cuartos o Recepción).', 'error');
+      return;
+    }
     if (nuevoEstado === 'Activo') {
       const overrides = getEstadosOverride();
       const prevEstado =
@@ -353,8 +359,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       }
       liberarAlojamiento(aloj.id, aloj.nombre);
       setAdminAlojamientoEstado(aloj.id, 'Activo');
-    } else if (nuevoEstado === 'En Limpieza') {
-      setAlojamientoEnLimpieza(aloj.id, aloj.nombre);
     } else {
       setAdminAlojamientoEstado(aloj.id, nuevoEstado);
     }
@@ -441,12 +445,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     try {
       if (editingAlojamientoId) {
         if (payload.estado === 'En Limpieza') {
-          setAlojamientoEnLimpieza(editingAlojamientoId, payload.nombre);
-        } else {
-          setAdminAlojamientoEstado(editingAlojamientoId, payload.estado);
-          if (payload.liberarReservas || payload.estado === 'Activo') {
-            liberarAlojamiento(editingAlojamientoId, payload.nombre);
-          }
+          payload.estado = 'Activo';
+          clearHotelLimpiezaOverride(editingAlojamientoId, payload.nombre);
+        }
+        setAdminAlojamientoEstado(editingAlojamientoId, payload.estado);
+        if (payload.liberarReservas || payload.estado === 'Activo') {
+          liberarAlojamiento(editingAlojamientoId, payload.nombre);
         }
 
         await api.patch(`/admin/alojamientos/${editingAlojamientoId}`, payload);
@@ -543,15 +547,35 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     }
   };
 
-  const handleMarkRoomClean = async (habId: string) => {
-    if (!roomsModalHotel) return;
+  const handleMarkRoomClean = async (
+    habId: string,
+    habNombre?: string | null,
+    alojamientoId?: string | null,
+    alojamientoNombre?: string | null,
+  ) => {
     try {
       await api.post(`/admin/habitaciones/${habId}/marcar-limpio`, {});
-      setRoomsList(roomsList.map((r) => (r.id === habId ? { ...r, estado: 'Activo' } : r)));
-      showToast('Habitación marcada limpia y disponible');
+      if (roomsModalHotel && (!alojamientoId || roomsModalHotel.id === alojamientoId)) {
+        setRoomsList((prev) => prev.map((r) => (r.id === habId ? { ...r, estado: 'Activo' } : r)));
+      }
+      const targetAlojId = alojamientoId || roomsModalHotel?.id;
+      const targetAlojName = alojamientoNombre || roomsModalHotel?.nombre;
+      if (targetAlojId || targetAlojName) {
+        clearHotelLimpiezaOverride(targetAlojId, targetAlojName);
+      }
+      showToast(
+        habNombre
+          ? `Habitación "${habNombre}" marcada limpia y disponible nuevamente`
+          : 'Habitación marcada limpia y disponible nuevamente',
+      );
+      await Promise.all([refetchAlojamientos(), refetchReservas()]);
       queryClient.invalidateQueries({ queryKey: ['alojamientos'] });
       queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
-      queryClient.invalidateQueries({ queryKey: ['hotelDetail', roomsModalHotel.id] });
+      queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
+      queryClient.invalidateQueries({ queryKey: ['hotelRooms'] });
+      queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
+      queryClient.invalidateQueries({ queryKey: ['adminReservasTodas'] });
+      queryClient.invalidateQueries({ queryKey: ['adminDashboardStats'] });
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : 'Error al marcar habitación limpia', 'error');
     }
@@ -749,15 +773,37 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
   >('todos');
   const [searchAlojamientoQuery, setSearchAlojamientoQuery] = useState('');
 
+  const dirtyRoomsByHotel = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const r of reservas) {
+      const { isCleaning } = getReservaLifecycle(r);
+      if (!isCleaning) continue;
+      const roomKey = r.espacioId || r.habitacionNombre || r.id;
+      const keys = [
+        r.alojamientoId ? `id:${r.alojamientoId}` : '',
+        r.alojamientoNombre ? `name:${r.alojamientoNombre.toLowerCase().trim()}` : '',
+      ].filter(Boolean);
+      for (const k of keys) {
+        if (!map.has(k)) map.set(k, new Set());
+        map.get(k)!.add(roomKey);
+      }
+    }
+    return map;
+  }, [reservas]);
+
   const getAlojamientoEstadoInfo = (aloj: AlojamientoAdmin) => {
     const overrides = getEstadosOverride();
-    const currentOverride =
+    const rawOverride =
       overrides[aloj.id] || overrides[aloj.nombre?.toLowerCase().trim() || ''];
-    const effEstado =
-      aloj.estado === 'En Limpieza' || currentOverride === 'En Limpieza'
-        ? 'En Limpieza'
-        : currentOverride || aloj.estado || 'Activo';
+    const currentOverride =
+      rawOverride && rawOverride !== 'En Limpieza' ? rawOverride : undefined;
+    const effEstado = currentOverride || aloj.estado || 'Activo';
     const isCleaningState = effEstado === 'En Limpieza';
+    const dirtyRoomSet =
+      dirtyRoomsByHotel.get(`id:${aloj.id}`) ||
+      dirtyRoomsByHotel.get(`name:${aloj.nombre?.toLowerCase().trim() || ''}`);
+    const dirtyRoomsCount = dirtyRoomSet ? dirtyRoomSet.size : 0;
+    const hasDirtyRooms = dirtyRoomsCount > 0 || isCleaningState;
     const isPausedOrMaint = effEstado === 'Inactivo' || effEstado === 'En Mantenimiento';
     const isReservedNow =
       !isCleaningState &&
@@ -767,7 +813,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
         alojamientoNombre: aloj.nombre,
         activeReservas: reservas,
       });
-    return { effEstado, isCleaningState, isPausedOrMaint, isReservedNow };
+    return {
+      effEstado,
+      isCleaningState,
+      dirtyRoomsCount,
+      hasDirtyRooms,
+      isPausedOrMaint,
+      isReservedNow,
+    };
   };
 
   const alojamientoStats = (() => {
@@ -776,9 +829,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     let reservados = 0;
     let pausados = 0;
     for (const a of alojamientos) {
-      const { isCleaningState, isPausedOrMaint, isReservedNow } = getAlojamientoEstadoInfo(a);
-      if (isCleaningState) enLimpieza += 1;
-      else if (isPausedOrMaint) pausados += 1;
+      const { hasDirtyRooms, isPausedOrMaint, isReservedNow } = getAlojamientoEstadoInfo(a);
+      if (hasDirtyRooms) enLimpieza += 1;
+      if (isPausedOrMaint) pausados += 1;
       else if (isReservedNow) reservados += 1;
       else enLinea += 1;
     }
@@ -786,8 +839,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
   })();
 
   const filteredAlojamientos = alojamientos.filter((aloj) => {
-    const { isCleaningState, isPausedOrMaint, isReservedNow } = getAlojamientoEstadoInfo(aloj);
-    if (alojamientoFilter === 'limpieza' && !isCleaningState) return false;
+    const { isCleaningState, hasDirtyRooms, isPausedOrMaint, isReservedNow } =
+      getAlojamientoEstadoInfo(aloj);
+    if (alojamientoFilter === 'limpieza' && !hasDirtyRooms) return false;
     if (alojamientoFilter === 'inactivo' && !isPausedOrMaint) return false;
     if (alojamientoFilter === 'reservado' && !isReservedNow) return false;
     if (alojamientoFilter === 'activo' && (isCleaningState || isPausedOrMaint || isReservedNow)) {
@@ -955,15 +1009,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
               className={styles.statCard}
               style={{ cursor: 'pointer' }}
               onClick={() => {
-                setActiveTab('alojamientos');
-                setAlojamientoFilter('limpieza');
+                setActiveTab('recepcion');
+                setReceptionFilter('limpieza');
               }}
-              title="Ver alojamientos en estado de limpieza"
+              title="Ver habitaciones en estado de limpieza post check-out"
             >
               <div>
-                <div className={styles.statLabel}>Alojamientos en Limpieza</div>
+                <div className={styles.statLabel}>Habitaciones en Limpieza</div>
                 <div className={styles.statValue}>
-                  {alojamientoStats.enLimpieza || stats?.alojamientos_en_limpieza || 0}
+                  {Math.max(Number(stats?.habitaciones_en_limpieza ?? 0), receptionStats.enLimpieza)}
                 </div>
               </div>
               <div className={styles.statIconBox} style={{ background: 'rgba(245, 158, 11, 0.14)', color: '#B45309' }}>
@@ -1055,7 +1109,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 className={`${styles.filterPill} ${alojamientoFilter === 'limpieza' ? styles.filterPillActive : ''}`}
                 onClick={() => setAlojamientoFilter('limpieza')}
               >
-                🧹 En Limpieza ({alojamientoStats.enLimpieza})
+                🧹 Con hab. en limpieza ({alojamientoStats.enLimpieza})
               </button>
               <button
                 type="button"
@@ -1110,7 +1164,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                   </tr>
                 ) : (
                   filteredAlojamientos.map((aloj) => {
-                    const { effEstado, isCleaningState, isReservedNow } = getAlojamientoEstadoInfo(aloj);
+                    const { effEstado, isCleaningState, dirtyRoomsCount, isReservedNow } =
+                      getAlojamientoEstadoInfo(aloj);
 
                     return (
                       <tr key={aloj.id}>
@@ -1160,6 +1215,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                           <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '2px' }}>
                             {aloj.capacidadAdultos || 2} ad. · {aloj.capacidadNinos || 0} niñ. · Stock: {isCleaningState || isReservedNow ? 0 : (aloj.habitaciones_disponibles ?? aloj.habitaciones ?? 1)}
                           </div>
+                          {dirtyRoomsCount > 0 && (
+                            <div style={{ marginTop: '4px' }}>
+                              <Badge variant="gold">
+                                🧹 {dirtyRoomsCount} hab{dirtyRoomsCount === 1 ? '' : 's'}. en limpieza
+                              </Badge>
+                            </div>
+                          )}
                         </td>
                         <td>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
@@ -1181,7 +1243,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                               onChange={(e) => handleChangeEstadoAlojamiento(aloj, e.target.value)}
                             >
                               <option value="Activo">🟢 En Línea</option>
-                              <option value="En Limpieza">🧹 En Limpieza</option>
                               <option value="Inactivo">🔴 Pausado</option>
                               <option value="En Mantenimiento">🛠️ Mantenimiento</option>
                             </select>
@@ -1202,15 +1263,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                             ) : (
                               <>
                                 <Button
-                                  variant="outline"
-                                  size="sm"
-                                  icon={<Sparkles size={13} />}
-                                  onClick={() => handleChangeEstadoAlojamiento(aloj, 'En Limpieza')}
-                                  title="Pasar propiedad a estado En Limpieza (deshabilita reservas hasta limpiar)"
-                                >
-                                  En Limpieza
-                                </Button>
-                                <Button
                                   variant={effEstado === 'Activo' ? 'ghost' : 'gold'}
                                   size="sm"
                                   onClick={() => handleToggleEstadoAlojamiento(aloj)}
@@ -1229,13 +1281,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                               </>
                             )}
                             <Button
-                              variant="secondary"
+                              variant={dirtyRoomsCount > 0 ? 'gold' : 'secondary'}
                               size="sm"
                               icon={<BedDouble size={13} />}
                               onClick={() => openRoomsManager(aloj)}
-                              title="Gestionar Habitaciones"
+                              title={
+                                dirtyRoomsCount > 0
+                                  ? `${dirtyRoomsCount} habitación(es) en limpieza · Gestionar cuartos`
+                                  : 'Gestionar Habitaciones'
+                              }
                             >
-                              Cuartos
+                              {dirtyRoomsCount > 0 ? `Cuartos (${dirtyRoomsCount} 🧹)` : 'Cuartos'}
                             </Button>
                             <Button
                               variant="outline"
@@ -1501,17 +1557,25 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                                   variant="gold"
                                   size="sm"
                                   icon={<Sparkles size={14} />}
-                                  onClick={() =>
-                                    handleMarkCleanAndOnline(
+                                  onClick={() => {
+                                    const fallbackAlojId =
                                       res.alojamientoId ||
-                                        alojamientos.find((a) => a.nombre === res.alojamientoNombre)?.id ||
-                                        '',
-                                      res.alojamientoNombre,
-                                    )
-                                  }
-                                  title="Confirmar que la limpieza terminó y volver a habilitar en línea"
+                                      alojamientos.find((a) => a.nombre === res.alojamientoNombre)?.id ||
+                                      '';
+                                    if (res.espacioId) {
+                                      handleMarkRoomClean(
+                                        res.espacioId,
+                                        res.habitacionNombre,
+                                        fallbackAlojId,
+                                        res.alojamientoNombre,
+                                      );
+                                    } else {
+                                      handleMarkCleanAndOnline(fallbackAlojId, res.alojamientoNombre);
+                                    }
+                                  }}
+                                  title="Confirmar que la limpieza de esta habitación terminó y volver a habilitarla en línea"
                                 >
-                                  Marcar Limpio · En Línea
+                                  Marcar Hab. Limpia
                                 </Button>
                               )}
                               <Button
@@ -1980,11 +2044,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
               <label className={styles.formLabel}>Estado del Alojamiento</label>
               <select
                 className={styles.formSelect}
-                value={alojamientoForm.estado}
+                value={alojamientoForm.estado === 'En Limpieza' ? 'Activo' : alojamientoForm.estado}
                 onChange={(e) => setAlojamientoForm({ ...alojamientoForm, estado: e.target.value })}
               >
                 <option value="Activo">🟢 En Línea (Visible en Catálogo)</option>
-                <option value="En Limpieza">🧹 En Limpieza (Post Check-out / No Reservable)</option>
                 <option value="Inactivo">🔴 Pausado (Oculto)</option>
                 <option value="En Mantenimiento">🟡 En Revisión / Mantenimiento</option>
               </select>
@@ -2624,13 +2687,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
           const closedMode = receptionModalState?.mode;
           const res = receptionModalState?.reserva;
           if (closedMode === 'checkout' && res && (res.alojamientoId || res.alojamientoNombre)) {
-            setAlojamientoEnLimpieza(res.alojamientoId || '', res.alojamientoNombre);
+            clearHotelLimpiezaOverride(res.alojamientoId || '', res.alojamientoNombre);
           }
           showToast(message);
           refetchReservas();
           refetchAlojamientos();
           queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
           queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
+          queryClient.invalidateQueries({ queryKey: ['hotelRooms'] });
           queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
           queryClient.invalidateQueries({ queryKey: ['adminDashboardStats'] });
         }}

@@ -100,14 +100,25 @@ export const HotelDetailPage: React.FC = () => {
     : typeof hotel.ciudad === 'string'
     ? hotel.ciudad
     : (hotel.ciudad as { nombre?: string } | undefined)?.nombre || 'Ecuador';
-  const defaultPrice = hotelRooms[0]?.precioPorNoche
-    ? Number(hotelRooms[0].precioPorNoche)
+  const firstActiveRoom =
+    hotelRooms.find(
+      (r) => (!r.estado || r.estado === 'Activo') && (r.cantidadDisponible === undefined || r.cantidadDisponible > 0),
+    ) || hotelRooms[0];
+  const defaultPrice = firstActiveRoom?.precioPorNoche
+    ? Number(firstActiveRoom.precioPorNoche)
     : 120;
-  const isHotelCleaning = isAlojamientoInCleaning({
-    alojamientoId: hotel.id,
-    alojamientoNombre: hotel.nombre,
-    estado: hotel.estado,
-  });
+  const allRoomsCleaning =
+    hotelRooms.length > 0 && hotelRooms.every((r) => r.estado === 'En Limpieza');
+  const hasAnyActiveRoom =
+    hotelRooms.length > 0 && hotelRooms.some((r) => !r.estado || r.estado === 'Activo');
+  const isHotelCleaning =
+    allRoomsCleaning ||
+    (!hasAnyActiveRoom &&
+      isAlojamientoInCleaning({
+        alojamientoId: hotel.id,
+        alojamientoNombre: hotel.nombre,
+        estado: hotel.estado,
+      }));
 
   const isHotelReserved = checkIsAlojamientoReserved({
     alojamientoId: hotel.id,
