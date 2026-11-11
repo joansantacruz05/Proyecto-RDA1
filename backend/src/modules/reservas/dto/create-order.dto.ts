@@ -74,7 +74,9 @@ export function IsAfterDate(targetProperty: string, validationOptions?: Validati
       validator: {
         validate(value: any, args: ValidationArguments) {
           const [relatedName] = args.constraints;
-          const relatedValue = (args.object as any)[relatedName] || (args.object as any)['checkin'];
+          const obj = args.object as any;
+          const relatedValue =
+            obj[relatedName] || obj['checkin'] || obj['fechaInicio'] || obj['check_in_date'];
           if (typeof value !== 'string' || typeof relatedValue !== 'string') return false;
           const cleanVal = value.split('T')[0];
           const cleanRelated = relatedValue.split('T')[0];
@@ -90,14 +92,50 @@ export function IsAfterDate(targetProperty: string, validationOptions?: Validati
 }
 
 export class OcupantesDto {
+  @IsOptional()
   @IsInt({ message: 'El número de adultos debe ser un número entero' })
   @Min(1, { message: 'El número de adultos debe ser mayor o igual a 1' })
-  adultos: number;
+  adultos?: number;
+
+  @IsOptional()
+  @IsInt({ message: 'El número de adultos debe ser un número entero' })
+  @Min(1, { message: 'El número de adultos debe ser mayor o igual a 1' })
+  adults?: number;
+
+  @IsOptional()
+  @IsInt({ message: 'El número de adultos debe ser un número entero' })
+  @Min(1, { message: 'El número de adultos debe ser mayor o igual a 1' })
+  number_of_adults?: number;
 
   @IsOptional()
   @IsInt()
   @Min(0)
   ninos?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  children?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  number_of_children?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  rooms?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  number_of_rooms?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  cantidadHabitaciones?: number;
 }
 
 export class HuespedTitularDto {
@@ -179,6 +217,14 @@ export class CreateOrderDto {
 
   @IsOptional()
   @IsString()
+  hotel_id?: string;
+
+  @IsOptional()
+  @IsString()
+  property_id?: string;
+
+  @IsOptional()
+  @IsString()
   tipoHabitacionCodigo?: string;
 
   @IsOptional()
@@ -188,6 +234,10 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   room_type?: string;
+
+  @IsOptional()
+  @IsString()
+  room_type_code?: string;
 
   @IsOptional()
   @IsString()
@@ -210,12 +260,20 @@ export class CreateOrderDto {
   checkin?: string;
 
   @IsOptional()
+  @IsNonPastDateGuayaquil()
+  check_in_date?: string;
+
+  @IsOptional()
   @IsAfterDate('fechaInicio')
   fechaFin?: string;
 
   @IsOptional()
   @IsAfterDate('checkin')
   checkout?: string;
+
+  @IsOptional()
+  @IsAfterDate('check_in_date')
+  check_out_date?: string;
 
   @IsOptional()
   @IsInt()
@@ -227,6 +285,11 @@ export class CreateOrderDto {
   @IsInt()
   @Min(1)
   rooms?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  number_of_rooms?: number;
 
   @IsOptional()
   @ValidateNested()
@@ -259,6 +322,13 @@ export class CreateOrderDto {
   customer?: CustomerContactDto;
 
   @IsOptional()
+  @IsEmail({}, { message: 'El correo de contacto debe tener un formato válido' })
+  contact_email?: string;
+
+  @IsOptional()
+  selected_product?: any;
+
+  @IsOptional()
   @IsString()
   nombreCliente?: string;
 
@@ -278,6 +348,16 @@ export class CreateOrderDto {
   @IsInt()
   @Min(1, { message: 'adultos debe ser mayor o igual a 1' })
   adultos?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1, { message: 'adults debe ser mayor o igual a 1' })
+  adults?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1, { message: 'number_of_adults debe ser mayor o igual a 1' })
+  number_of_adults?: number;
 
   @IsOptional()
   @IsInt()
