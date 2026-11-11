@@ -15,6 +15,7 @@ import { Badge } from '../../components/ui/Badge/Badge';
 import { formatUSD } from '../../components/ui/PriceDisplay/PriceDisplay';
 import { OrderCreateResponse, PagoResponse, AlojamientoDetalle } from '../../api/types';
 import { descargarICS } from '../../utils/calendarIcs';
+import { formatHoraHHMM } from '../../utils/ecuadorLocations';
 import styles from './Step3Confirmation.module.css';
 
 interface Step3ConfirmationProps {
@@ -78,6 +79,9 @@ export const Step3Confirmation: React.FC<Step3ConfirmationProps> = ({
     }
   };
 
+  const checkInHora = formatHoraHHMM(orderResult.horaCheckIn || hotel?.horaCheckIn, '14:00');
+  const checkOutHora = formatHoraHHMM(orderResult.horaCheckOut || hotel?.horaCheckOut, '11:00');
+
   const handleDownloadICS = () => {
     descargarICS({
       codigoReserva: reservationCode,
@@ -91,6 +95,8 @@ export const Step3Confirmation: React.FC<Step3ConfirmationProps> = ({
             : (hotel?.destino as { nombre?: string } | undefined)?.nombre) || undefined,
       checkinFecha: checkin,
       checkoutFecha: checkout,
+      horaCheckIn: checkInHora,
+      horaCheckOut: checkOutHora,
       huespedNombre: guestName,
       total,
     });
@@ -169,12 +175,12 @@ export const Step3Confirmation: React.FC<Step3ConfirmationProps> = ({
 
           <div className={styles.infoRow}>
             <span className={styles.infoLabel}>Check-in</span>
-            <span className={styles.infoValue}>{checkin} (desde las 11:00)</span>
+            <span className={styles.infoValue}>{checkin} (desde las {checkInHora})</span>
           </div>
 
           <div className={styles.infoRow}>
             <span className={styles.infoLabel}>Check-out</span>
-            <span className={styles.infoValue}>{checkout} (hasta las 15:00)</span>
+            <span className={styles.infoValue}>{checkout} (hasta las {checkOutHora})</span>
           </div>
 
           <div className={styles.infoRow}>

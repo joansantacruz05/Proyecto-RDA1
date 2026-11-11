@@ -14,6 +14,7 @@ interface CancelModalProps {
   reservaId: string;
   hotelNombre: string;
   fechaEntrada: string;
+  horaCheckIn?: string | undefined;
   precioTotal: number;
   onSuccess: () => void;
 }
@@ -24,6 +25,7 @@ export const CancelModal: React.FC<CancelModalProps> = ({
   reservaId,
   hotelNombre,
   fechaEntrada,
+  horaCheckIn,
   precioTotal,
   onSuccess,
 }) => {
@@ -31,8 +33,9 @@ export const CancelModal: React.FC<CancelModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Cálculo del tramo de penalidad según la hora de check-in (14:00 hora de Guayaquil)
-  const dEntrada = new Date(`${fechaEntrada.split('T')[0]}T14:00:00-05:00`).getTime();
+  const inHora = (horaCheckIn || '14:00').slice(0, 5);
+  // Cálculo del tramo de penalidad según la hora de check-in del alojamiento (hora de Guayaquil)
+  const dEntrada = new Date(`${fechaEntrada.split('T')[0]}T${inHora}:00-05:00`).getTime();
   const ahora = Date.now();
   const horasRestantes = (dEntrada - ahora) / (1000 * 60 * 60);
 

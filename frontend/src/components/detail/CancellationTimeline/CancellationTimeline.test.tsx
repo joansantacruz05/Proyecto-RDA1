@@ -15,6 +15,13 @@ describe('Componente CancellationTimeline (Línea de Tiempo en 3 Tramos)', () =>
     expect(screen.getByText(/Sin Devolución \(0%\)/i)).toBeInTheDocument();
   });
 
+  it('debe mostrar 14:00 check-in y 11:00 check-out por defecto', () => {
+    render(<CancellationTimeline />);
+
+    expect(screen.getByText(/Check-in: desde las 14:00/i)).toBeInTheDocument();
+    expect(screen.getByText(/Check-out: hasta las 11:00/i)).toBeInTheDocument();
+  });
+
   it('debe mostrar los horarios configurados de check-in y check-out', () => {
     render(<CancellationTimeline checkinHour="16:00" checkoutHour="12:00" />);
 

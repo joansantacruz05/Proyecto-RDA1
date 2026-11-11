@@ -14,6 +14,13 @@ import { Button } from '../../components/ui/Button/Button';
 import { api } from '../../api/client';
 import { AlojamientoDetalle, HabitacionDetalle } from '../../api/types';
 import { checkIsAlojamientoReserved, ReservaItemLike } from '../../utils/accommodationStatus';
+import { InteractiveMap } from '../../components/map/InteractiveMap';
+import {
+  buildGoogleMapsUrl,
+  formatHoraHHMM,
+  hasValidCoordinates,
+  resolveMapCoords,
+} from '../../utils/ecuadorLocations';
 import styles from './HotelDetailPage.module.css';
 
 export const HotelDetailPage: React.FC = () => {
@@ -157,7 +164,13 @@ export const HotelDetailPage: React.FC = () => {
           <MapPin size={15} color="#C9A227" />
           <span>{hotel.direccion || `Centro y zona turística de ${destination}, Ecuador`}</span>
           <a
-            href={`https://maps.google.com/?q=${encodeURIComponent(`${hotel.nombre} ${destination} Ecuador`)}`}
+            href={buildGoogleMapsUrl({
+              lat: hotel.latitud,
+              lng: hotel.longitud,
+              nombre: hotel.nombre,
+              direccion: hotel.direccion,
+              destino: destination,
+            })}
             target="_blank"
             rel="noopener noreferrer"
             className={styles.mapLink}
@@ -210,8 +223,64 @@ export const HotelDetailPage: React.FC = () => {
             )}
           </div>
 
+          {/* Ubicación interactiva en mapa */}
+          {(() => {
+            const mapCoords = resolveMapCoords(hotel.latitud, hotel.longitud, destination);
+            const googleMapsHref = buildGoogleMapsUrl({
+              lat: hotel.latitud,
+              lng: hotel.longitud,
+              nombre: hotel.nombre,
+              direccion: hotel.direccion,
+              destino: destination,
+            });
+            const hasExactCoords = hasValidCoordinates(hotel.latitud, hotel.longitud);
+            return (
+              <div className={styles.mapSectionBox}>
+                <div className={styles.mapSectionHeader}>
+                  <div>
+                    <h3 className={styles.subHeading} style={{ marginBottom: '4px' }}>
+                      Ubicación en el Mapa
+                    </h3>
+                    <p className={styles.mapAddressText}>
+                      <MapPin size={14} color="#C9A227" />
+                      <span>
+                        {hotel.direccion || `Zona turística de ${destination}, Ecuador`}
+                        {hasExactCoords && (
+                          <span className={styles.coordsTag}>
+                            {' '}· ({Number(hotel.latitud).toFixed(5)}, {Number(hotel.longitud).toFixed(5)})
+                          </span>
+                        )}
+                      </span>
+                    </p>
+                  </div>
+                  <a
+                    href={googleMapsHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={styles.mapExternalBtn}
+                  >
+                    Abrir en Google Maps
+                  </a>
+                </div>
+                <InteractiveMap
+                  lat={mapCoords.lat}
+                  lng={mapCoords.lng}
+                  zoom={mapCoords.zoom}
+                  height={290}
+                  editable={false}
+                  isApproximate={mapCoords.isApproximate}
+                  markerTitle={hotel.nombre}
+                  markerSubtitle={hotel.direccion || `${destination}, Ecuador`}
+                />
+              </div>
+            );
+          })()}
+
           {/* Línea de Tiempo de Política de Cancelación */}
-          <CancellationTimeline />
+          <CancellationTimeline
+            checkinHour={formatHoraHHMM(hotel.horaCheckIn, '14:00')}
+            checkoutHour={formatHoraHHMM(hotel.horaCheckOut, '11:00')}
+          />
 
           {/* Sección de Reseñas Verificadas */}
           <ReviewsSection alojamientoId={id!} />

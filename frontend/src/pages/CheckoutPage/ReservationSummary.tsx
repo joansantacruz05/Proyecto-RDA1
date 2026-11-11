@@ -5,6 +5,7 @@ import { RatingStars } from '../../components/ui/RatingStars/RatingStars';
 import { formatUSD } from '../../components/ui/PriceDisplay/PriceDisplay';
 import { Button } from '../../components/ui/Button/Button';
 import { usePriceCountdown } from '../../hooks/usePriceCountdown';
+import { formatHoraHHMM } from '../../utils/ecuadorLocations';
 import styles from './ReservationSummary.module.css';
 
 interface ReservationSummaryProps {
@@ -134,7 +135,7 @@ export const ReservationSummary: React.FC<ReservationSummaryProps> = ({
           <span className={styles.stayLabel}>Check-in</span>
           <div className={styles.stayValue}>
             <span>{checkin}</span>
-            <span className={styles.timeSubtext}>Desde las 11:00 (Guayaquil)</span>
+            <span className={styles.timeSubtext}>Desde las {formatHoraHHMM(hotel?.horaCheckIn, '14:00')} (Guayaquil)</span>
           </div>
         </div>
 
@@ -142,7 +143,7 @@ export const ReservationSummary: React.FC<ReservationSummaryProps> = ({
           <span className={styles.stayLabel}>Check-out</span>
           <div className={styles.stayValue}>
             <span>{checkout}</span>
-            <span className={styles.timeSubtext}>Hasta las 15:00 (Guayaquil)</span>
+            <span className={styles.timeSubtext}>Hasta las {formatHoraHHMM(hotel?.horaCheckOut, '11:00')} (Guayaquil)</span>
           </div>
         </div>
 

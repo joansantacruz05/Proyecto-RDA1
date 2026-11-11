@@ -1,4 +1,15 @@
-import { IsBoolean, IsInt, IsNotEmpty, IsNumber, IsPositive, IsString, IsOptional } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsPositive,
+  IsString,
+  IsOptional,
+  Matches,
+  Max,
+  Min,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CrearAlojamientoDto {
@@ -102,4 +113,30 @@ export class CrearAlojamientoDto {
   @IsBoolean()
   @IsOptional()
   liberarReservas?: boolean;
+
+  @ApiProperty({ example: -0.1807, description: 'Latitud GPS en grados decimales', required: false })
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  @IsOptional()
+  latitud?: number;
+
+  @ApiProperty({ example: -78.4678, description: 'Longitud GPS en grados decimales', required: false })
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  @IsOptional()
+  longitud?: number;
+
+  @ApiProperty({ example: '14:00', description: 'Hora de check-in en formato HH:MM', required: false })
+  @IsString()
+  @Matches(/^([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, { message: 'horaCheckIn debe tener formato HH:MM (ej: 14:00)' })
+  @IsOptional()
+  horaCheckIn?: string;
+
+  @ApiProperty({ example: '11:00', description: 'Hora de check-out en formato HH:MM', required: false })
+  @IsString()
+  @Matches(/^([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, { message: 'horaCheckOut debe tener formato HH:MM (ej: 11:00)' })
+  @IsOptional()
+  horaCheckOut?: string;
 }

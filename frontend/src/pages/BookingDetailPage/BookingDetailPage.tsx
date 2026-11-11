@@ -24,6 +24,7 @@ import { ContractModal } from '../../components/modals/ContractModal';
 import { ReviewModal } from '../../components/modals/ReviewModal';
 import { CancelModal } from '../../components/modals/CancelModal';
 import { descargarICS } from '../../utils/calendarIcs';
+import { formatHoraHHMM } from '../../utils/ecuadorLocations';
 import styles from './BookingDetailPage.module.css';
 
 interface BookingDetailPageProps {
@@ -100,7 +101,9 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
 
   const now = new Date();
   const isCancelled = reserva.estadoId === 'EST-003' || reserva.estadoNombre?.toLowerCase().includes('cancel');
-  const dOut = new Date(`${String(reserva.fechaSalida).split('T')[0]}T11:00:00-05:00`);
+  const checkInHora = formatHoraHHMM(reserva.horaCheckIn, '14:00');
+  const checkOutHora = formatHoraHHMM(reserva.horaCheckOut, '11:00');
+  const dOut = new Date(`${String(reserva.fechaSalida).split('T')[0]}T${checkOutHora}:00-05:00`);
   const isPast = dOut < now && !isCancelled;
   const isCheckedIn = reserva.estadoNombre?.toUpperCase().includes('CHECKED_IN') || reserva.estadoId === 'EST-002';
 
@@ -115,6 +118,8 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
       ciudad: 'Ecuador',
       checkinFecha: checkinClean,
       checkoutFecha: checkoutClean,
+      horaCheckIn: checkInHora,
+      horaCheckOut: checkOutHora,
       huespedNombre: currentUser.nombre,
       total: Number(reserva.precioTotal),
     });
@@ -189,7 +194,7 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
                   <Hotel size={20} />
                 </div>
                 <span className={isCheckedIn ? styles.stepTextActive : styles.stepText}>
-                  Check-in (11:00)
+                  Check-in ({checkInHora})
                 </span>
               </div>
 
@@ -201,7 +206,7 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
                   <Clock size={20} />
                 </div>
                 <span className={isPast ? styles.stepTextActive : styles.stepText}>
-                  Check-out (15:00)
+                  Check-out ({checkOutHora})
                 </span>
               </div>
             </>
@@ -233,12 +238,12 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
 
             <div className={styles.infoRow}>
               <span className={styles.infoLabel}>Fecha de Entrada (Check-in)</span>
-              <span className={styles.infoValue}>{checkinClean} (desde las 11:00)</span>
+              <span className={styles.infoValue}>{checkinClean} (desde las {checkInHora})</span>
             </div>
 
             <div className={styles.infoRow}>
               <span className={styles.infoLabel}>Fecha de Salida (Check-out)</span>
-              <span className={styles.infoValue}>{checkoutClean} (hasta las 15:00)</span>
+              <span className={styles.infoValue}>{checkoutClean} (hasta las {checkOutHora})</span>
             </div>
 
             <div className={styles.infoRow}>
@@ -372,6 +377,8 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
           onClose={() => setShowContractModal(false)}
           reservaId={reserva.id}
           hotelNombre={reserva.alojamientoNombre}
+          horaCheckIn={checkInHora}
+          horaCheckOut={checkOutHora}
           onSuccess={handleModalSuccess}
         />
       )}
@@ -393,6 +400,7 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
           reservaId={reserva.id}
           hotelNombre={reserva.alojamientoNombre}
           fechaEntrada={String(reserva.fechaEntrada)}
+          horaCheckIn={checkInHora}
           precioTotal={Number(reserva.precioTotal)}
           onSuccess={handleModalSuccess}
         />

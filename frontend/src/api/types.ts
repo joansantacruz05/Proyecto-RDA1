@@ -40,6 +40,10 @@ export interface AlojamientoItem {
   ciudad?: string;
   destino?: string;
   direccion?: string;
+  latitud?: number | null;
+  longitud?: number | null;
+  horaCheckIn?: string;
+  horaCheckOut?: string;
   descripcion?: string;
   estrellas: number;
   tipo?: string;
@@ -81,6 +85,10 @@ export interface AlojamientoDetalle {
   destino?: string;
   ciudad?: string;
   direccion?: string;
+  latitud?: number | null;
+  longitud?: number | null;
+  horaCheckIn?: string;
+  horaCheckOut?: string;
   estrellas?: number;
   estado?: string;
   estaReservado?: boolean;
@@ -169,6 +177,8 @@ export interface OrderCreateResponse {
   cantidadHabitaciones?: number;
   checkinFecha?: string;
   checkoutFecha?: string;
+  horaCheckIn?: string;
+  horaCheckOut?: string;
   noches?: number;
   huespedTitular?: {
     nombreCompleto: string;
@@ -235,6 +245,8 @@ export interface ReservaUsuarioItem {
   alojamientoId: string;
   alojamientoNombre: string;
   alojamientoCodigo?: string;
+  horaCheckIn?: string;
+  horaCheckOut?: string;
   imagenUrl?: string;
   contratoFirmado?: boolean;
   estadoPago?: string;

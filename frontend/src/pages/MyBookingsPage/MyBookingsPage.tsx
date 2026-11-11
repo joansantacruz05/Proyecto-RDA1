@@ -20,6 +20,7 @@ import { formatUSD } from '../../components/ui/PriceDisplay/PriceDisplay';
 import { ContractModal } from '../../components/modals/ContractModal';
 import { ReviewModal } from '../../components/modals/ReviewModal';
 import { CancelModal } from '../../components/modals/CancelModal';
+import { formatHoraHHMM } from '../../utils/ecuadorLocations';
 import styles from './MyBookingsPage.module.css';
 
 interface MyBookingsPageProps {
@@ -79,12 +80,14 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
   const noCanceladas = reservas.filter((r) => r.estadoId !== 'EST-003' && !r.estadoNombre?.toLowerCase().includes('cancel'));
 
   const proximas = noCanceladas.filter((r) => {
-    const dOut = new Date(`${String(r.fechaSalida).split('T')[0]}T11:00:00-05:00`);
+    const outHora = formatHoraHHMM(r.horaCheckOut, '11:00');
+    const dOut = new Date(`${String(r.fechaSalida).split('T')[0]}T${outHora}:00-05:00`);
     return dOut >= now;
   });
 
   const pasadas = noCanceladas.filter((r) => {
-    const dOut = new Date(`${String(r.fechaSalida).split('T')[0]}T11:00:00-05:00`);
+    const outHora = formatHoraHHMM(r.horaCheckOut, '11:00');
+    const dOut = new Date(`${String(r.fechaSalida).split('T')[0]}T${outHora}:00-05:00`);
     return dOut < now;
   });
 
@@ -171,7 +174,9 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
         <div className={styles.bookingsList}>
           {currentList.map((reserva) => {
             const isCancelled = reserva.estadoId === 'EST-003' || reserva.estadoNombre?.toLowerCase().includes('cancel');
-            const dOut = new Date(`${String(reserva.fechaSalida).split('T')[0]}T11:00:00-05:00`);
+            const inHora = formatHoraHHMM(reserva.horaCheckIn, '14:00');
+            const outHora = formatHoraHHMM(reserva.horaCheckOut, '11:00');
+            const dOut = new Date(`${String(reserva.fechaSalida).split('T')[0]}T${outHora}:00-05:00`);
             const isPast = dOut < now && !isCancelled;
             const canReview = isPast && !reserva.calificacion;
             const canSign = !reserva.contratoFirmado && !isCancelled;
@@ -216,7 +221,7 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
                     <div className={styles.metaItem}>
                       <Clock size={13} color="#14406B" />
                       <span>
-                        {checkinClean} (11:00) a {checkoutClean} (15:00)
+                        {checkinClean} ({inHora}) a {checkoutClean} ({outHora})
                       </span>
                     </div>
 
@@ -308,6 +313,8 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
           onClose={() => setContractReserva(null)}
           reservaId={contractReserva.id}
           hotelNombre={contractReserva.alojamientoNombre}
+          horaCheckIn={formatHoraHHMM(contractReserva.horaCheckIn, '14:00')}
+          horaCheckOut={formatHoraHHMM(contractReserva.horaCheckOut, '11:00')}
           onSuccess={handleModalSuccess}
         />
       )}
@@ -329,6 +336,7 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
           reservaId={cancelReserva.id}
           hotelNombre={cancelReserva.alojamientoNombre}
           fechaEntrada={String(cancelReserva.fechaEntrada)}
+          horaCheckIn={formatHoraHHMM(cancelReserva.horaCheckIn, '14:00')}
           precioTotal={Number(cancelReserva.precioTotal)}
           onSuccess={handleModalSuccess}
         />

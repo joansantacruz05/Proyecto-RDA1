@@ -13,6 +13,7 @@ import { validarIdentificacion } from '../../common/utils/ecuador-validators';
 import { HttpStatus, BadRequestException } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { catalogCache } from '../../common/utils/ttl-cache';
+import { normalizeHoraHHMM, toCoordNumber } from '../../common/utils/time-format';
 
 @Injectable()
 export class AlojamientosService {
@@ -82,15 +83,111 @@ export class AlojamientosService {
     );
   }
 
+  private async resolveCiudadId(cityName?: string): Promise<{ ciudadId: string; ciudadNombre: string }> {
+    const cleanName = (cityName || '').trim() || 'Quito';
+    const found = await this.alojamientoRepository.query(
+      'SELECT id, nombre FROM ciudades WHERE LOWER(nombre) = LOWER($1) LIMIT 1',
+      [cleanName],
+    );
+    if (found.length > 0) {
+      return { ciudadId: found[0].id, ciudadNombre: found[0].nombre };
+    }
+    const newCiudadId = 'CIU-EC-' + Date.now().toString().slice(-6);
+    await this.alojamientoRepository.query(
+      'INSERT INTO ciudades (id, "paisId", nombre) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING',
+      [newCiudadId, 'PAI-001', cleanName],
+    );
+    return { ciudadId: newCiudadId, ciudadNombre: cleanName };
+  }
+
+  private async upsertDedicatedUbicacion(
+    alojamientoId: string,
+    opts: {
+      currentUbiId?: string | null;
+      destino?: string;
+      direccion?: string;
+      latitud?: number | null;
+      longitud?: number | null;
+    },
+  ): Promise<string> {
+    let currentRow: any = null;
+    if (opts.currentUbiId) {
+      const rows = await this.alojamientoRepository.query(
+        'SELECT id, "ciudadId", direccion_detallada, latitud, longitud FROM ubicaciones WHERE id = $1 LIMIT 1',
+        [opts.currentUbiId],
+      );
+      currentRow = rows[0] || null;
+    }
+
+    const ciudadRes = opts.destino
+      ? await this.resolveCiudadId(opts.destino)
+      : { ciudadId: currentRow?.ciudadId || 'CIU-001', ciudadNombre: opts.destino || 'Ecuador' };
+
+    const direccionFinal =
+      opts.direccion !== undefined && opts.direccion.trim() !== ''
+        ? opts.direccion.trim()
+        : currentRow?.direccion_detallada || `Centro de ${ciudadRes.ciudadNombre}`;
+
+    const latFinal = opts.latitud !== undefined ? (toCoordNumber(opts.latitud) ?? 0) : (toCoordNumber(currentRow?.latitud) ?? 0);
+    const lngFinal = opts.longitud !== undefined ? (toCoordNumber(opts.longitud) ?? 0) : (toCoordNumber(currentRow?.longitud) ?? 0);
+
+    let canUpdateInPlace = false;
+    if (opts.currentUbiId && !/^UBI-0\d+$/i.test(opts.currentUbiId)) {
+      const shared = await this.alojamientoRepository.query(
+        'SELECT COUNT(*)::int AS cnt FROM alojamientos WHERE "ubicacionId" = $1',
+        [opts.currentUbiId],
+      );
+      if (Number(shared[0]?.cnt || 0) <= 1) {
+        canUpdateInPlace = true;
+      }
+    }
+
+    if (canUpdateInPlace && opts.currentUbiId) {
+      await this.alojamientoRepository.query(
+        'UPDATE ubicaciones SET "ciudadId" = $1, direccion_detallada = $2, latitud = $3, longitud = $4 WHERE id = $5',
+        [ciudadRes.ciudadId, direccionFinal, latFinal, lngFinal, opts.currentUbiId],
+      );
+      return opts.currentUbiId;
+    }
+
+    const dedicatedId = `UBI-A-${String(alojamientoId).replace(/^ALO-/i, '')}`.slice(0, 20);
+    await this.alojamientoRepository.query(
+      `INSERT INTO ubicaciones (id, "ciudadId", direccion_detallada, latitud, longitud)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (id) DO UPDATE SET
+         "ciudadId" = EXCLUDED."ciudadId",
+         direccion_detallada = EXCLUDED.direccion_detallada,
+         latitud = EXCLUDED.latitud,
+         longitud = EXCLUDED.longitud`,
+      [dedicatedId, ciudadRes.ciudadId, direccionFinal, latFinal, lngFinal],
+    );
+    return dedicatedId;
+  }
+
   async createAdmin(dto: any): Promise<any> {
     catalogCache.invalidate();
     const id = dto.id || `ALO-${Math.floor(Math.random() * 900) + 100}`;
-    const ubicacionId = await this.resolveUbicacion(dto.ubicacionId, dto.destino || dto.ciudad);
+    const hasCustomLocation =
+      Boolean(dto.direccion && String(dto.direccion).trim()) ||
+      dto.latitud !== undefined ||
+      dto.longitud !== undefined;
+
+    const ubicacionId = hasCustomLocation
+      ? await this.upsertDedicatedUbicacion(id, {
+          destino: dto.destino || dto.ciudad,
+          direccion: dto.direccion,
+          latitud: dto.latitud,
+          longitud: dto.longitud,
+        })
+      : await this.resolveUbicacion(dto.ubicacionId, dto.destino || dto.ciudad);
+
     const estado = dto.estado || 'Activo';
+    const horaCheckIn = normalizeHoraHHMM(dto.horaCheckIn, '14:00');
+    const horaCheckOut = normalizeHoraHHMM(dto.horaCheckOut, '11:00');
 
     await this.alojamientoRepository.query(
-      'INSERT INTO alojamientos (id, nombre, descripcion, "imagenUrl", "ubicacionId", estado) VALUES ($1, $2, $3, $4, $5, $6)',
-      [id, dto.nombre || 'Nuevo Alojamiento', dto.descripcion || '', dto.imagenUrl || '/villa.jpg', ubicacionId, estado]
+      'INSERT INTO alojamientos (id, nombre, descripcion, "imagenUrl", "ubicacionId", estado, "horaCheckIn", "horaCheckOut") VALUES ($1, $2, $3, $4, $5, $6, $7::time, $8::time)',
+      [id, dto.nombre || 'Nuevo Alojamiento', dto.descripcion || '', dto.imagenUrl || '/villa.jpg', ubicacionId, estado, horaCheckIn, horaCheckOut]
     );
 
     const habId = `HAB-${Math.floor(Math.random() * 900) + 100}`;
@@ -124,6 +221,11 @@ export class AlojamientosService {
       capacidadNinos: dto.capacidadNinos ?? 0,
       habitaciones: dto.habitaciones || 1,
       imagenUrl: dto.imagenUrl,
+      direccion: dto.direccion || undefined,
+      latitud: toCoordNumber(dto.latitud),
+      longitud: toCoordNumber(dto.longitud),
+      horaCheckIn,
+      horaCheckOut,
       tienePiscina: Boolean(dto.tienePiscina),
       estado,
     };
@@ -139,6 +241,11 @@ export class AlojamientosService {
         a."ubicacionId",
         a.estado,
         c.nombre as destino,
+        u.direccion_detallada as direccion,
+        u.latitud::float8 as latitud,
+        u.longitud::float8 as longitud,
+        COALESCE(TO_CHAR(a."horaCheckIn", 'HH24:MI'), '14:00') as "horaCheckIn",
+        COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut",
         (SELECT "precioPorNoche" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "precioPorNoche",
         (SELECT "capacidadAdultos" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "capacidadAdultos",
         (SELECT "capacidadNinos" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "capacidadNinos",
@@ -152,6 +259,7 @@ export class AlojamientosService {
       FROM alojamientos a
       LEFT JOIN ubicaciones u ON a."ubicacionId" = u.id
       LEFT JOIN ciudades c ON u."ciudadId" = c.id
+      ORDER BY a.id ASC
     `);
     return result;
   }
@@ -160,6 +268,10 @@ export class AlojamientosService {
     const result = await this.alojamientoRepository.query(`
       SELECT 
         a.*,
+        c.nombre as destino,
+        u.direccion_detallada as direccion,
+        u.latitud::float8 as latitud,
+        u.longitud::float8 as longitud,
         (
           COALESCE((
             SELECT SUM(GREATEST(0, COALESCE(er."cantidadDisponible", 1) - COALESCE((
@@ -174,11 +286,17 @@ export class AlojamientosService {
           ), 1) <= 0
         ) as esta_reservado
       FROM alojamientos a 
+      LEFT JOIN ubicaciones u ON a."ubicacionId" = u.id
+      LEFT JOIN ciudades c ON u."ciudadId" = c.id
       WHERE a.id = $1 OR a.codigo = $1 OR a.id = ('ALO-' || $1)
     `, [id]);
     if (!result.length) throw new NotFoundException(`Alojamiento ${id} no encontrado`);
     const item = result[0];
     item.estaReservado = Boolean(item.esta_reservado);
+    item.latitud = toCoordNumber(item.latitud);
+    item.longitud = toCoordNumber(item.longitud);
+    item.horaCheckIn = normalizeHoraHHMM(item.horaCheckIn, '14:00');
+    item.horaCheckOut = normalizeHoraHHMM(item.horaCheckOut, '11:00');
     item.habitaciones = await this.getRoomsAdmin(id);
     return item;
   }
@@ -186,13 +304,37 @@ export class AlojamientosService {
   async updateAdmin(id: string, dto: any): Promise<any> {
     catalogCache.invalidate();
     let ubicacionId: string | undefined = undefined;
-    if (dto.ubicacionId || dto.destino) {
+    const hasCustomLocation =
+      dto.direccion !== undefined || dto.latitud !== undefined || dto.longitud !== undefined;
+
+    if (hasCustomLocation) {
+      const existing = await this.alojamientoRepository.query(
+        'SELECT "ubicacionId" FROM alojamientos WHERE id = $1 LIMIT 1',
+        [id],
+      );
+      ubicacionId = await this.upsertDedicatedUbicacion(id, {
+        currentUbiId: existing[0]?.ubicacionId || null,
+        destino: dto.destino || dto.ciudad,
+        direccion: dto.direccion,
+        latitud: dto.latitud,
+        longitud: dto.longitud,
+      });
+    } else if (dto.ubicacionId || dto.destino) {
       ubicacionId = await this.resolveUbicacion(dto.ubicacionId, dto.destino);
     }
 
+    const horaCheckIn =
+      dto.horaCheckIn !== undefined && String(dto.horaCheckIn).trim() !== ''
+        ? normalizeHoraHHMM(dto.horaCheckIn, '14:00')
+        : null;
+    const horaCheckOut =
+      dto.horaCheckOut !== undefined && String(dto.horaCheckOut).trim() !== ''
+        ? normalizeHoraHHMM(dto.horaCheckOut, '11:00')
+        : null;
+
     await this.alojamientoRepository.query(
-      'UPDATE alojamientos SET nombre = COALESCE($1, nombre), descripcion = COALESCE($2, descripcion), "imagenUrl" = COALESCE($3, "imagenUrl"), "ubicacionId" = COALESCE($4, "ubicacionId"), estado = COALESCE($5, estado) WHERE id = $6',
-      [dto.nombre, dto.descripcion, dto.imagenUrl, ubicacionId, dto.estado, id]
+      'UPDATE alojamientos SET nombre = COALESCE($1, nombre), descripcion = COALESCE($2, descripcion), "imagenUrl" = COALESCE($3, "imagenUrl"), "ubicacionId" = COALESCE($4, "ubicacionId"), estado = COALESCE($5, estado), "horaCheckIn" = COALESCE($6::time, "horaCheckIn"), "horaCheckOut" = COALESCE($7::time, "horaCheckOut") WHERE id = $8',
+      [dto.nombre, dto.descripcion, dto.imagenUrl, ubicacionId, dto.estado, horaCheckIn, horaCheckOut, id]
     );
 
     if (dto.estado === 'Inactivo') {
@@ -242,7 +384,17 @@ export class AlojamientosService {
       }
     }
     
-    return { id, nombre: dto.nombre, descripcion: dto.descripcion, imagenUrl: dto.imagenUrl };
+    return {
+      id,
+      nombre: dto.nombre,
+      descripcion: dto.descripcion,
+      imagenUrl: dto.imagenUrl,
+      direccion: dto.direccion,
+      latitud: dto.latitud,
+      longitud: dto.longitud,
+      horaCheckIn: horaCheckIn || undefined,
+      horaCheckOut: horaCheckOut || undefined,
+    };
   }
 
   async removeAdmin(id: string): Promise<void> {
@@ -700,7 +852,11 @@ export class AlojamientosService {
         a.descripcion, 
         a."imagenUrl",
         a."politicaCancelacion",
+        a."horaCheckIn",
+        a."horaCheckOut",
         u.direccion_detallada,
+        u.latitud::float8 as latitud,
+        u.longitud::float8 as longitud,
         c.nombre as ciudad,
         p.nombre as pais
       FROM alojamientos a
@@ -746,9 +902,13 @@ export class AlojamientosService {
             address: item.direccion_detallada,
             city: item.ciudad,
             country: item.pais,
+            latitude: toCoordNumber(item.latitud),
+            longitude: toCoordNumber(item.longitud),
           },
           policies: {
             cancellation: item.politicaCancelacion,
+            checkin_time: normalizeHoraHHMM(item.horaCheckIn, '14:00'),
+            checkout_time: normalizeHoraHHMM(item.horaCheckOut, '11:00'),
           },
           facilities: facilities.map((f: any) => f.nombre),
           rooms: rooms.map((r: any) => ({
@@ -1019,6 +1179,9 @@ export class AlojamientosService {
     const query = `
       WITH page AS (
         SELECT a.id, a.nombre, a.descripcion, a."imagenUrl", a.estado, c.nombre AS destino,
+               u.direccion_detallada AS direccion, u.latitud::float8 AS latitud, u.longitud::float8 AS longitud,
+               COALESCE(TO_CHAR(a."horaCheckIn", 'HH24:MI'), '14:00') AS "horaCheckIn",
+               COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') AS "horaCheckOut",
                COUNT(*) OVER()::int AS total_results
         FROM alojamientos a
         LEFT JOIN ubicaciones u ON a."ubicacionId" = u.id
@@ -1053,7 +1216,8 @@ export class AlojamientosService {
         FROM rooms
         GROUP BY "alojamientoId"
       )
-      SELECT pg.id, pg.nombre, pg.descripcion, pg."imagenUrl", pg.estado, pg.destino, pg.total_results,
+      SELECT pg.id, pg.nombre, pg.descripcion, pg."imagenUrl", pg.estado, pg.destino, pg.direccion,
+             pg.latitud, pg.longitud, pg."horaCheckIn", pg."horaCheckOut", pg.total_results,
              ra."precioPorNoche", COALESCE(ra.habitaciones, 0) AS habitaciones,
              COALESCE(ra.habitaciones_disponibles, 0) AS habitaciones_disponibles,
              COALESCE(ra.esta_reservado, false) AS esta_reservado,
@@ -1089,6 +1253,11 @@ export class AlojamientosService {
       descripcion: item.descripcion,
       imagenUrl: item.imagenUrl,
       destino: item.destino || 'Ecuador',
+      direccion: item.direccion || undefined,
+      latitud: toCoordNumber(item.latitud),
+      longitud: toCoordNumber(item.longitud),
+      horaCheckIn: normalizeHoraHHMM(item.horaCheckIn, '14:00'),
+      horaCheckOut: normalizeHoraHHMM(item.horaCheckOut, '11:00'),
       estrellas: 5,
       precioPorNoche: Number(item.precioPorNoche || 85).toFixed(2),
       moneda: 'USD',

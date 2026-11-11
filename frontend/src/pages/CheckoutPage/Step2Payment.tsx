@@ -20,6 +20,7 @@ import {
   ProblemDetailsException,
 } from '../../api/types';
 import { markAlojamientoReserved } from '../../utils/accommodationStatus';
+import { formatHoraHHMM } from '../../utils/ecuadorLocations';
 import { BillingFormData } from './Step1Billing';
 import styles from './Step2Payment.module.css';
 
@@ -31,6 +32,7 @@ interface Step2PaymentProps {
   roomCode?: string | undefined;
   checkin: string;
   checkout: string;
+  horaCheckIn?: string | undefined;
   adults: number;
   rooms: number;
   total: number;
@@ -58,6 +60,7 @@ export const Step2Payment: React.FC<Step2PaymentProps> = ({
   roomCode,
   checkin,
   checkout,
+  horaCheckIn,
   adults,
   rooms,
   total,
@@ -478,7 +481,7 @@ export const Step2Payment: React.FC<Step2PaymentProps> = ({
           {isCash && (
             <div style={{ padding: 'var(--spacing-3) 0' }}>
               <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-                Tu reserva quedará registrada de inmediato. El pago total de ${total.toFixed(2)} USD se realizará en efectivo directamente en la recepción del hotel al momento de tu check-in (a partir de las 11:00).
+                Tu reserva quedará registrada de inmediato. El pago total de ${total.toFixed(2)} USD se realizará en efectivo directamente en la recepción del hotel al momento de tu check-in (a partir de las {formatHoraHHMM(horaCheckIn, '14:00')}).
               </p>
             </div>
           )}

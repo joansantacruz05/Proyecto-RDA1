@@ -41,6 +41,8 @@ interface ReservaAdminItem {
   clienteNombre?: string;
   clienteEmail?: string;
   clienteIdentificacion?: string;
+  horaCheckIn?: string;
+  horaCheckOut?: string;
   numeroPersonas?: number;
 }
 
@@ -269,8 +271,8 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
                     </td>
                     <td>
                       <div style={{ fontSize: 'var(--font-size-xs)' }}>
-                        <div>In: {inDate} (11:00)</div>
-                        <div>Out: {outDate} (15:00)</div>
+                        <div>In: {inDate} ({String(res.horaCheckIn || '14:00').slice(0, 5)})</div>
+                        <div>Out: {outDate} ({String(res.horaCheckOut || '11:00').slice(0, 5)})</div>
                       </div>
                     </td>
                     <td style={{ fontWeight: 700, color: 'var(--color-pacific-blue)' }}>

@@ -10,6 +10,8 @@ export interface ReservaCalendarioData {
   ciudad?: string | undefined;
   checkinFecha: string;  // YYYY-MM-DD
   checkoutFecha: string; // YYYY-MM-DD
+  horaCheckIn?: string | undefined;
+  horaCheckOut?: string | undefined;
   huespedNombre: string;
   total: number;
 }
@@ -17,15 +19,17 @@ export interface ReservaCalendarioData {
 export function formatearFechaICS(fechaStr: string, hora: string): string {
   // Convierte "2026-11-20" y "14:00" en formato "20261120T140000"
   const cleanDate = fechaStr.replace(/-/g, '');
-  const cleanTime = hora.replace(/:/g, '') + '00';
+  const cleanTime = hora.replace(/:/g, '').slice(0, 4) + '00';
   return `${cleanDate}T${cleanTime}`;
 }
 
 export function generarArchivoICS(reserva: ReservaCalendarioData): string {
   const dtStamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-  // Check-in desde las 14:00 y Check-out hasta las 11:00 (hora local de Ecuador)
-  const dtStart = formatearFechaICS(reserva.checkinFecha, '14:00');
-  const dtEnd = formatearFechaICS(reserva.checkoutFecha, '11:00');
+  const checkInHora = (reserva.horaCheckIn || '14:00').slice(0, 5);
+  const checkOutHora = (reserva.horaCheckOut || '11:00').slice(0, 5);
+  // Check-in y Check-out según horario configurado del alojamiento (hora local de Ecuador)
+  const dtStart = formatearFechaICS(reserva.checkinFecha, checkInHora);
+  const dtEnd = formatearFechaICS(reserva.checkoutFecha, checkOutHora);
   const ubicacion = [reserva.hotelNombre, reserva.direccion, reserva.ciudad, 'Ecuador']
     .filter(Boolean)
     .join(', ');
@@ -35,8 +39,8 @@ export function generarArchivoICS(reserva: ReservaCalendarioData): string {
     `Reserva confirmada en LuxeStays Ecuador`,
     `Localizador: ${reserva.codigoReserva}`,
     `Huésped Titular: ${reserva.huespedNombre}`,
-    `Check-in: ${reserva.checkinFecha} a partir de las 14:00`,
-    `Check-out: ${reserva.checkoutFecha} hasta las 11:00`,
+    `Check-in: ${reserva.checkinFecha} a partir de las ${checkInHora}`,
+    `Check-out: ${reserva.checkoutFecha} hasta las ${checkOutHora}`,
     `Total pagado: $${reserva.total.toFixed(2)} USD`,
     `Asistencia 24/7: soporte@luxestays.ec`,
   ].join('\\n');
@@ -59,7 +63,7 @@ export function generarArchivoICS(reserva: ReservaCalendarioData): string {
     'BEGIN:VALARM',
     'TRIGGER:-PT24H',
     'ACTION:DISPLAY',
-    `DESCRIPTION:Recordatorio: Tu check-in en ${reserva.hotelNombre} es mañana a las 14:00`,
+    `DESCRIPTION:Recordatorio: Tu check-in en ${reserva.hotelNombre} es mañana a las ${checkInHora}`,
     'END:VALARM',
     'END:VEVENT',
     'END:VCALENDAR',

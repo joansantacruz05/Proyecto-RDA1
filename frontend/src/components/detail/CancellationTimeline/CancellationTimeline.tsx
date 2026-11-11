@@ -8,8 +8,8 @@ interface CancellationTimelineProps {
 }
 
 export const CancellationTimeline: React.FC<CancellationTimelineProps> = ({
-  checkinHour = '11:00',
-  checkoutHour = '15:00',
+  checkinHour = '14:00',
+  checkoutHour = '11:00',
 }) => {
   return (
     <div className={styles.container}>

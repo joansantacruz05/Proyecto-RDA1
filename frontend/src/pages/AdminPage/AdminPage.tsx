@@ -35,6 +35,12 @@ import { Button } from '../../components/ui/Button/Button';
 import { Badge } from '../../components/ui/Badge/Badge';
 import { Modal } from '../../components/ui/Modal/Modal';
 import { formatUSD } from '../../components/ui/PriceDisplay/PriceDisplay';
+import { InteractiveMap } from '../../components/map/InteractiveMap';
+import {
+  formatHoraHHMM,
+  getCityCenterCoords,
+  hasValidCoordinates,
+} from '../../utils/ecuadorLocations';
 import styles from './AdminPage.module.css';
 
 interface AdminPageProps {
@@ -52,6 +58,11 @@ interface AlojamientoAdmin {
   nombre: string;
   descripcion?: string;
   destino: string;
+  direccion?: string;
+  latitud?: number | null;
+  longitud?: number | null;
+  horaCheckIn?: string;
+  horaCheckOut?: string;
   ubicacionId?: string;
   precioPorNoche?: number | string;
   capacidadAdultos?: number;
@@ -93,6 +104,8 @@ interface ReservaAdminItem {
   clienteNombre?: string;
   clienteEmail?: string;
   clienteIdentificacion?: string;
+  horaCheckIn?: string;
+  horaCheckOut?: string;
   numeroPersonas?: number;
   checkinRealizado?: boolean;
 }
@@ -212,10 +225,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
   const [alojamientoModalOpen, setAlojamientoModalOpen] = useState(false);
   const [editingAlojamientoId, setEditingAlojamientoId] = useState<string | null>(null);
   const [isSavingAlojamiento, setIsSavingAlojamiento] = useState(false);
+  const initialQuitoCoords = getCityCenterCoords('Quito');
+  const [hasCustomPin, setHasCustomPin] = useState(false);
   const [alojamientoForm, setAlojamientoForm] = useState({
     nombre: '',
     descripcion: '',
     destino: 'Quito',
+    direccion: '',
+    latitud: initialQuitoCoords.lat,
+    longitud: initialQuitoCoords.lng,
+    horaCheckIn: '14:00',
+    horaCheckOut: '11:00',
     precioPorNoche: 95,
     capacidadAdultos: 2,
     capacidadNinos: 1,
@@ -228,11 +248,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
   });
 
   const handleOpenCreateAlojamiento = () => {
+    const defaultDestino = ciudadesEcuador[0] || 'Quito';
+    const cityCoords = getCityCenterCoords(defaultDestino);
     setEditingAlojamientoId(null);
+    setHasCustomPin(false);
     setAlojamientoForm({
       nombre: '',
       descripcion: '',
-      destino: ciudadesEcuador[0] || 'Quito',
+      destino: defaultDestino,
+      direccion: '',
+      latitud: cityCoords.lat,
+      longitud: cityCoords.lng,
+      horaCheckIn: '14:00',
+      horaCheckOut: '11:00',
       precioPorNoche: 95,
       capacidadAdultos: 2,
       capacidadNinos: 1,
@@ -247,11 +275,24 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
   };
 
   const handleOpenEditAlojamiento = (aloj: AlojamientoAdmin) => {
+    const cityName =
+      typeof aloj.destino === 'string'
+        ? aloj.destino
+        : (aloj.destino as { nombre?: string } | undefined)?.nombre || 'Quito';
+    const validPin = hasValidCoordinates(aloj.latitud, aloj.longitud);
+    const cityCoords = getCityCenterCoords(cityName);
+
     setEditingAlojamientoId(aloj.id);
+    setHasCustomPin(validPin);
     setAlojamientoForm({
       nombre: aloj.nombre || '',
       descripcion: aloj.descripcion || '',
-      destino: aloj.destino || 'Quito',
+      destino: cityName,
+      direccion: aloj.direccion || '',
+      latitud: validPin ? Number(aloj.latitud) : cityCoords.lat,
+      longitud: validPin ? Number(aloj.longitud) : cityCoords.lng,
+      horaCheckIn: formatHoraHHMM(aloj.horaCheckIn, '14:00'),
+      horaCheckOut: formatHoraHHMM(aloj.horaCheckOut, '11:00'),
       precioPorNoche: Number(aloj.precioPorNoche) || 95,
       capacidadAdultos: aloj.capacidadAdultos || 2,
       capacidadNinos: aloj.capacidadNinos || 0,
@@ -325,24 +366,28 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
   const handleSaveAlojamiento = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingAlojamiento(true);
+    const payload = {
+      ...alojamientoForm,
+      direccion: alojamientoForm.direccion.trim() || `Centro de ${alojamientoForm.destino}`,
+      latitud: Number(alojamientoForm.latitud),
+      longitud: Number(alojamientoForm.longitud),
+      horaCheckIn: formatHoraHHMM(alojamientoForm.horaCheckIn, '14:00'),
+      horaCheckOut: formatHoraHHMM(alojamientoForm.horaCheckOut, '11:00'),
+    };
     try {
       if (editingAlojamientoId) {
         // Guardar estado local
-        setAdminAlojamientoEstado(editingAlojamientoId, alojamientoForm.estado);
-        if (alojamientoForm.liberarReservas) {
-          liberarAlojamiento(editingAlojamientoId, alojamientoForm.nombre);
+        setAdminAlojamientoEstado(editingAlojamientoId, payload.estado);
+        if (payload.liberarReservas) {
+          liberarAlojamiento(editingAlojamientoId, payload.nombre);
         }
 
         // Editar existente (PATCH /admin/alojamientos/:id)
-        try {
-          await api.patch(`/admin/alojamientos/${editingAlojamientoId}`, alojamientoForm);
-        } catch {
-          // Continuar con persistencia local
-        }
+        await api.patch(`/admin/alojamientos/${editingAlojamientoId}`, payload);
         showToast('Alojamiento actualizado exitosamente en el catálogo');
       } else {
         // Crear nuevo (POST /admin/alojamientos)
-        await api.post('/admin/alojamientos', alojamientoForm);
+        await api.post('/admin/alojamientos', payload);
         showToast('Nuevo alojamiento y habitaciones creados con éxito');
       }
       setAlojamientoModalOpen(false);
@@ -875,6 +920,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                               ? aloj.destino
                               : (aloj.destino as { nombre?: string } | undefined)?.nombre || 'Ecuador'}
                           </span>
+                          <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                            In {formatHoraHHMM(aloj.horaCheckIn, '14:00')} · Out {formatHoraHHMM(aloj.horaCheckOut, '11:00')}
+                          </div>
                         </td>
                         <td style={{ fontWeight: 700, color: '#14406B' }}>
                           {formatUSD(Number(aloj.precioPorNoche) || 95)}
@@ -1051,8 +1099,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                           <div style={{ fontSize: '12px', color: '#64748B' }}>{res.habitacionNombre}</div>
                         </td>
                         <td>
-                          <div style={{ fontWeight: 500 }}>In: {String(res.fechaEntrada || '').split('T')[0]} (11:00)</div>
-                          <div style={{ fontWeight: 500 }}>Out: {String(res.fechaSalida || '').split('T')[0]} (15:00)</div>
+                          <div style={{ fontWeight: 500 }}>
+                            In: {String(res.fechaEntrada || '').split('T')[0]} ({formatHoraHHMM(res.horaCheckIn, '14:00')})
+                          </div>
+                          <div style={{ fontWeight: 500 }}>
+                            Out: {String(res.fechaSalida || '').split('T')[0]} ({formatHoraHHMM(res.horaCheckOut, '11:00')})
+                          </div>
                         </td>
                         <td style={{ fontWeight: 700, color: '#0F1E33' }}>
                           {formatUSD(Number(res.precioTotal) || 0)}
@@ -1337,7 +1389,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
               <select
                 className={styles.formSelect}
                 value={alojamientoForm.destino}
-                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, destino: e.target.value })}
+                onChange={(e) => {
+                  const nextDestino = e.target.value;
+                  const cityCoords = getCityCenterCoords(nextDestino);
+                  setAlojamientoForm((prev) => ({
+                    ...prev,
+                    destino: nextDestino,
+                    ...(hasCustomPin ? {} : { latitud: cityCoords.lat, longitud: cityCoords.lng }),
+                  }));
+                }}
               >
                 {ciudadesEcuador.map((ciu) => (
                   <option key={ciu} value={ciu}>
@@ -1409,6 +1469,130 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 <option value="Inactivo">🔴 Pausado (Oculto)</option>
                 <option value="En Mantenimiento">🟡 En Revisión / Mantenimiento</option>
               </select>
+            </div>
+
+            <div>
+              <label className={styles.formLabel}>Hora de Check-in (Entrada) *</label>
+              <input
+                type="time"
+                required
+                className={styles.formInput}
+                value={alojamientoForm.horaCheckIn}
+                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, horaCheckIn: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <label className={styles.formLabel}>Hora de Check-out (Salida) *</label>
+              <input
+                type="time"
+                required
+                className={styles.formInput}
+                value={alojamientoForm.horaCheckOut}
+                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, horaCheckOut: e.target.value })}
+              />
+            </div>
+
+            <div className={styles.fullSpan}>
+              <label className={styles.formLabel}>Dirección Exacta / Referencia</label>
+              <input
+                type="text"
+                className={styles.formInput}
+                value={alojamientoForm.direccion}
+                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, direccion: e.target.value })}
+                placeholder="Ej. Calle García Moreno N4-25 y Chile, Centro Histórico"
+              />
+            </div>
+
+            <div className={styles.fullSpan}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '8px', flexWrap: 'wrap' }}>
+                <label className={styles.formLabel} style={{ marginBottom: 0 }}>
+                  Ubicación en Mapa Interactivo (haz clic o arrastra el pin)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const center = getCityCenterCoords(alojamientoForm.destino);
+                    setHasCustomPin(false);
+                    setAlojamientoForm((prev) => ({
+                      ...prev,
+                      latitud: center.lat,
+                      longitud: center.lng,
+                    }));
+                  }}
+                  style={{
+                    border: '1px solid #CBD5E1',
+                    background: '#F8FAFC',
+                    color: '#14406B',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    padding: '4px 10px',
+                    borderRadius: '999px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Centrar en {alojamientoForm.destino}
+                </button>
+              </div>
+              {alojamientoModalOpen && (
+                <InteractiveMap
+                  lat={Number(alojamientoForm.latitud) || getCityCenterCoords(alojamientoForm.destino).lat}
+                  lng={Number(alojamientoForm.longitud) || getCityCenterCoords(alojamientoForm.destino).lng}
+                  zoom={hasCustomPin ? 15 : getCityCenterCoords(alojamientoForm.destino).zoom}
+                  height={250}
+                  editable
+                  onChange={(lat, lng) => {
+                    setHasCustomPin(true);
+                    setAlojamientoForm((prev) => ({
+                      ...prev,
+                      latitud: lat,
+                      longitud: lng,
+                    }));
+                  }}
+                />
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '8px' }}>
+                <div>
+                  <label className={styles.formLabel} style={{ fontSize: '11.5px', color: '#64748B' }}>
+                    Latitud
+                  </label>
+                  <input
+                    type="number"
+                    step="0.000001"
+                    min="-90"
+                    max="90"
+                    className={styles.formInput}
+                    value={alojamientoForm.latitud}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      if (!Number.isNaN(val)) {
+                        setHasCustomPin(true);
+                        setAlojamientoForm((prev) => ({ ...prev, latitud: val }));
+                      }
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className={styles.formLabel} style={{ fontSize: '11.5px', color: '#64748B' }}>
+                    Longitud
+                  </label>
+                  <input
+                    type="number"
+                    step="0.000001"
+                    min="-180"
+                    max="180"
+                    className={styles.formInput}
+                    value={alojamientoForm.longitud}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      if (!Number.isNaN(val)) {
+                        setHasCustomPin(true);
+                        setAlojamientoForm((prev) => ({ ...prev, longitud: val }));
+                      }
+                    }}
+                  />
+                </div>
+              </div>
             </div>
 
             {editingAlojamientoId && (
@@ -1831,7 +2015,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
               </div>
               <div><strong>Alojamiento:</strong> {checkinModalReserva.alojamientoNombre} ({checkinModalReserva.habitacionNombre})</div>
               <div>
-                <strong>Horario Oficial:</strong> Check-in {String(checkinModalReserva.fechaEntrada || '').split('T')[0]} (desde las 11:00) · Check-out {String(checkinModalReserva.fechaSalida || '').split('T')[0]} (hasta las 15:00)
+                <strong>Horario Oficial:</strong> Check-in {String(checkinModalReserva.fechaEntrada || '').split('T')[0]} (desde las {formatHoraHHMM(checkinModalReserva.horaCheckIn, '14:00')}) · Check-out {String(checkinModalReserva.fechaSalida || '').split('T')[0]} (hasta las {formatHoraHHMM(checkinModalReserva.horaCheckOut, '11:00')})
               </div>
               <div><strong>Localizador:</strong> <span style={{ fontFamily: 'monospace' }}>{checkinModalReserva.ordenId || checkinModalReserva.id}</span></div>
             </div>

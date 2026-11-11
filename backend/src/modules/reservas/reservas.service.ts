@@ -18,6 +18,7 @@ import { generateEntityId } from '../../common/utils/password-rules';
 import { validarIdentificacion } from '../../common/utils/ecuador-validators';
 import { randomUUID } from 'crypto';
 import { catalogCache } from '../../common/utils/ttl-cache';
+import { buildEcuadorHourTimestamp, normalizeHoraHHMM, parseHoraMinutes } from '../../common/utils/time-format';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -116,7 +117,9 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
 
     // 1. Obtener espacio rentable
     const habRows = await this.dataSource.query(
-      `SELECT e.*, a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo", a."politicaCancelacion"
+      `SELECT e.*, a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo", a."politicaCancelacion",
+              COALESCE(TO_CHAR(a."horaCheckIn", 'HH24:MI'), '14:00') as "horaCheckIn",
+              COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut"
        FROM espacios_rentables e
        JOIN alojamientos a ON a.id = e."alojamientoId"
        WHERE (e.id = $1 OR e.id = $2 OR e.codigo = $3) AND a.estado = 'Activo'
@@ -127,7 +130,9 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     let espacio = habRows[0];
     if (!espacio && accommodationId) {
       const fallback = await this.dataSource.query(
-        `SELECT e.*, a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo", a."politicaCancelacion"
+        `SELECT e.*, a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo", a."politicaCancelacion",
+                COALESCE(TO_CHAR(a."horaCheckIn", 'HH24:MI'), '14:00') as "horaCheckIn",
+                COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut"
          FROM espacios_rentables e
          JOIN alojamientos a ON a.id = e."alojamientoId"
          WHERE (a.id = $1 OR a.codigo = $1) AND e.estado = 'Activo'
@@ -222,6 +227,9 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       createdAt: Date.now(),
     });
 
+    const horaCheckIn = normalizeHoraHHMM(espacio.horaCheckIn, '14:00');
+    const horaCheckOut = normalizeHoraHHMM(espacio.horaCheckOut, '11:00');
+
     return {
       order_preview_id: orderPreviewId,
       accommodation_id: espacio.alojamientoId,
@@ -232,6 +240,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       dates: {
         checkin,
         checkout,
+        checkin_time: horaCheckIn,
+        checkout_time: horaCheckOut,
         total_nights: pricing.nights,
       },
       guests: {
@@ -248,7 +258,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       cancellation_policy: {
         type: 'FLEXIBLE',
         description: espacio.politicaCancelacion || 'Cancelación gratuita hasta 24 horas antes del check-in.',
-        free_cancellation_until: `${checkin}T14:00:00-05:00`,
+        free_cancellation_until: buildEcuadorHourTimestamp(checkin, horaCheckIn),
         penalty_percentage: 100.0,
       },
     };
@@ -516,7 +526,9 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       }
 
       const espacios = await manager.query(
-        `SELECT e.*, a.id as "alojamientoId", a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo", a."politicaCancelacion"
+        `SELECT e.*, a.id as "alojamientoId", a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo", a."politicaCancelacion",
+                COALESCE(TO_CHAR(a."horaCheckIn", 'HH24:MI'), '14:00') as "horaCheckIn",
+                COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut"
          FROM alojamientos a
          JOIN espacios_rentables e ON e."alojamientoId" = a.id
          WHERE (
@@ -750,7 +762,9 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         checkinFecha: checkinClean,
         checkoutFecha: checkoutClean,
         noches: pricing.nights,
-        checkinHabilitadoDesde: `${checkinClean}T14:00:00-05:00`,
+        horaCheckIn: normalizeHoraHHMM(espacio.horaCheckIn, '14:00'),
+        horaCheckOut: normalizeHoraHHMM(espacio.horaCheckOut, '11:00'),
+        checkinHabilitadoDesde: buildEcuadorHourTimestamp(checkinClean, espacio.horaCheckIn, '14:00'),
         earlyCheckinAutorizado: false,
         cotizacionId: cotizacionId || randomUUID(),
         huespedTitular: {
@@ -829,6 +843,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
          r."estadoId", er.nombre as "estadoNombre",
          e.id as "espacioId", e.nombre as "habitacionNombre", e."precioPorNoche",
          a.id as "alojamientoId", a.nombre as "alojamientoNombre", a."imagenUrl", a.codigo as "alojamientoCodigo",
+         COALESCE(TO_CHAR(a."horaCheckIn", 'HH24:MI'), '14:00') as "horaCheckIn",
+         COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut",
          c.firmado as "contratoFirmado",
          p.estado as "estadoPago", p.id as "pagoId",
          f.id as "facturaId", f."numeroFactura"
@@ -851,6 +867,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
          r.*, er.nombre as "estadoNombre",
          e.nombre as "habitacionNombre", e."precioPorNoche", e.codigo as "habitacionCodigo",
          a.id as "alojamientoId", a.nombre as "alojamientoNombre", a."imagenUrl", a.codigo as "alojamientoCodigo",
+         COALESCE(TO_CHAR(a."horaCheckIn", 'HH24:MI'), '14:00') as "horaCheckIn",
+         COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut",
          u."nombreCompleto" as "clienteNombre", u.email as "clienteEmail", u.telefono as "clienteTelefono", u.identificacion as "clienteIdentificacion",
          c.terminos as "contratoTerminos", c.firmado as "contratoFirmado", c."fechaFirma" as "contratoFechaFirma",
          p.id as "pagoId", p.estado as "estadoPago", p.monto as "pagoMonto"
@@ -922,6 +940,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         END as "estadoNombre",
         e.nombre as "habitacionNombre",
         a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo",
+        COALESCE(TO_CHAR(a."horaCheckIn", 'HH24:MI'), '14:00') as "horaCheckIn",
+        COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut",
         u."nombreCompleto" as "clienteNombre", u.email as "clienteEmail", u.identificacion as "clienteIdentificacion",
         p.id as "pagoId", p.estado as "estadoPago", p.monto as "pagoMonto",
         (
@@ -1297,7 +1317,10 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       huespedesReales = n;
     }
 
-    // Fecha y hora en America/Guayaquil: desde la fecha de entrada y desde las 11:00, salvo confirmación de recepción / early-checkin
+    // Fecha y hora en America/Guayaquil: desde la fecha de entrada y desde la horaCheckIn del hotel, salvo confirmación de recepción / early-checkin
+    const horaCheckIn = normalizeHoraHHMM(order.horaCheckIn, '14:00');
+    const { totalMinutes: checkinMinTotal } = parseHoraMinutes(horaCheckIn, '14:00');
+
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Guayaquil',
       year: 'numeric',
@@ -1311,6 +1334,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     for (const p of parts) pMap[p.type] = p.value;
     const hoyGuayaquil = `${pMap.year}-${pMap.month}-${pMap.day}`;
     const horaGuayaquil = parseInt(pMap.hour, 10) % 24;
+    const minGuayaquil = parseInt(pMap.minute, 10) || 0;
+    const ahoraMin = horaGuayaquil * 60 + minGuayaquil;
 
     const fechaEntradaStr = order.fechaEntrada instanceof Date
       ? order.fechaEntrada.toISOString().split('T')[0]
@@ -1324,7 +1349,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
 
     if (!autorizadoEnRecepcion) {
       const fechaNoAlcanzada = hoyGuayaquil < fechaEntradaStr;
-      const horaNoAlcanzada = hoyGuayaquil === fechaEntradaStr && horaGuayaquil < 11;
+      const horaNoAlcanzada = hoyGuayaquil === fechaEntradaStr && ahoraMin < checkinMinTotal;
       if (fechaNoAlcanzada || horaNoAlcanzada) {
         throw new ProblemDetailsException(
           {
@@ -1332,8 +1357,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
             title: 'Check-in Time Not Reached',
             status: HttpStatus.UNPROCESSABLE_ENTITY,
             code: 'CHECKIN_TIME_NOT_REACHED',
-            detail: `El check-in solo está permitido desde la fecha de entrada (${fechaEntradaStr}) a partir de las 11:00 (hora Guayaquil), salvo confirmación en recepción con cédula o early-checkin aprobado por ADMIN.`,
-            habilitadoDesde: `${fechaEntradaStr}T11:00:00-05:00`,
+            detail: `El check-in solo está permitido desde la fecha de entrada (${fechaEntradaStr}) a partir de las ${horaCheckIn} (hora Guayaquil), salvo confirmación en recepción con cédula o early-checkin aprobado por ADMIN.`,
+            habilitadoDesde: buildEcuadorHourTimestamp(fechaEntradaStr, horaCheckIn, '14:00'),
           },
           HttpStatus.UNPROCESSABLE_ENTITY,
         );
@@ -1548,6 +1573,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
          r."estadoId", er.nombre as "estadoNombre",
          e.id as "espacioId", e.nombre as "habitacionNombre", e."precioPorNoche",
          a.id as "alojamientoId", a.nombre as "alojamientoNombre", a."imagenUrl", a.codigo as "alojamientoCodigo",
+         COALESCE(TO_CHAR(a."horaCheckIn", 'HH24:MI'), '14:00') as "horaCheckIn",
+         COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut",
          c.firmado as "contratoFirmado",
          p.estado as "estadoPago", p.id as "pagoId",
          f.id as "facturaId", f."numeroFactura"
@@ -1600,7 +1627,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     const fechaSalidaStr = reserva.fechaSalida instanceof Date
       ? reserva.fechaSalida.toISOString().split('T')[0]
       : String(reserva.fechaSalida).split('T')[0];
-    const checkoutDate = new Date(`${fechaSalidaStr}T11:00:00-05:00`).getTime();
+    const horaCheckOut = normalizeHoraHHMM(reserva.horaCheckOut, '11:00');
+    const checkoutDate = new Date(buildEcuadorHourTimestamp(fechaSalidaStr, horaCheckOut, '11:00')).getTime();
     if (Date.now() < checkoutDate) {
       throw new ConflictException('Solo se puede emitir una reseña una vez concluida la estancia (fecha de check-out).');
     }

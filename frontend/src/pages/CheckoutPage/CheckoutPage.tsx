@@ -242,6 +242,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ currentUser }) => {
                 roomCode={roomCode}
                 checkin={checkin}
                 checkout={checkout}
+                horaCheckIn={hotel?.horaCheckIn}
                 adults={adults}
                 rooms={rooms}
                 subtotal={subtotal}
