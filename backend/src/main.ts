@@ -56,15 +56,17 @@ async function bootstrap() {
     next();
   });
 
-  // ── Enrutamiento y Normalización de Versiones (v1, v2 y rutas directas /alojamientos) ──
+  // ── Enrutamiento y Normalización de Versiones (v1, v2 y rutas directas /alojamientos, /orders, /availability, etc.) ──
   app.use((req: Request, res: Response, next: NextFunction) => {
     // Si la petición viene con prefijo /api/v2/, normalizar internamente a /api/v1/
     if (req.url.startsWith('/api/v2/')) {
       req.url = req.url.replace(/^\/api\/v2\//, '/api/v1/');
     }
-    // Si viene directamente con /alojamientos/ (excepto health que está en exclude), normalizar a /api/v1/alojamientos/
-    if (req.url.startsWith('/alojamientos/') && !req.url.startsWith('/alojamientos/health')) {
-      req.url = '/api/v1' + req.url;
+    // Si viene directamente sin /api/v1/ ni excluded routes
+    const cleanPath = req.url.split('?')[0];
+    const excludedPrefixes = ['/api/v1', '/health', '/alojamientos/health', '/docs', '/swagger', '/metrics'];
+    if (cleanPath !== '/' && !excludedPrefixes.some((p) => cleanPath === p || cleanPath.startsWith(p + '/'))) {
+      req.url = '/api/v1' + (req.url.startsWith('/') ? req.url : '/' + req.url);
     }
     next();
   });

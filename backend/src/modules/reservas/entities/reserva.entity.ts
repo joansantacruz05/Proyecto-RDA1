@@ -22,6 +22,9 @@ export class Reserva {
   @Column({ type: 'int', default: 1 })
   numeroPersonas: number;
 
+  @Column({ type: 'int', default: 1 })
+  cantidadHabitaciones: number;
+
   @Column('numeric', {
     precision: 10,
     scale: 2,

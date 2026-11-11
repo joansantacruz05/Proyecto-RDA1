@@ -197,3 +197,4 @@ testAzureScenarios().catch((e) => {
   console.error('\n❌ ERROR EN PRUEBAS AZURE:', e.message);
   process.exit(1);
 });
+

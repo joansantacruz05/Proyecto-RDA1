@@ -147,6 +147,10 @@ async function runAllTests() {
   };
 
   try {
+    const { DataSource } = require('typeorm');
+    const initDs = app.get(DataSource);
+    await initDs.query(`DELETE FROM reservas WHERE "idempotencyKey" IS NOT NULL OR "usuarioId" LIKE 'CLI-%' OR "usuarioId" LIKE 'booking-%' OR "usuarioId" LIKE 'ADMIN-%'`);
+
     // Buscar alojamiento y habitación base
     const searchRes = await fetch(`${baseUrl}/alojamientos?limit=1`);
     const searchData = await searchRes.json();
@@ -157,8 +161,9 @@ async function runAllTests() {
     // ──────────────────────────────────────────────────────────────────────────
     console.log('\n--- 1. Verificación de Idempotencia Atómica ---');
     const key1 = crypto.randomUUID();
-    const inDate1 = addDaysGuayaquil(10);
-    const outDate1 = addDaysGuayaquil(12);
+    const offset1 = 3000 + Math.floor(Math.random() * 1000);
+    const inDate1 = addDaysGuayaquil(offset1);
+    const outDate1 = addDaysGuayaquil(offset1 + 2);
 
     const body1 = {
       alojamientoId,
@@ -426,7 +431,6 @@ async function runAllTests() {
     const outConc = addDaysGuayaquil(randomOffset6A + 2);
 
     // Asegurar que la habitación tiene exactamente 1 cupo disponible en base de datos
-    const { DataSource } = require('typeorm');
     const ds = app.get(DataSource);
     await ds.query(`UPDATE espacios_rentables SET "cantidadDisponible" = 1 WHERE id = 'HAB-CONC-ULTIMA' OR codigo = 'HAB-CONC-ULTIMA'`);
 
@@ -587,8 +591,9 @@ async function runAllTests() {
     // 7B. Doble POST con misma Idempotency-Key -> 1 sola orden y devuelve reservation_id idéntico
     console.log('\n   [7B] Doble POST con misma Idempotency-Key en /api/v2/reservas...');
     const v2Key = crypto.randomUUID();
-    const v2DateIn = addDaysGuayaquil(200);
-    const v2DateOut = addDaysGuayaquil(202);
+    const offset7B = 6000 + Math.floor(Math.random() * 1000);
+    const v2DateIn = addDaysGuayaquil(offset7B);
+    const v2DateOut = addDaysGuayaquil(offset7B + 2);
     const v2Body = {
       alojamientoId,
       tipoHabitacionCodigo: 'ESP-001',

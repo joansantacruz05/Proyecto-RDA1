@@ -330,9 +330,19 @@ export class AlojamientosService {
 
     const noches = Math.max(1, Math.round((dOut.getTime() - dIn.getTime()) / (1000 * 60 * 60 * 24)));
 
+    // Normalizar fechas a ISO YYYY-MM-DD
+    const checkinClean = String(checkin).split('T')[0];
+    const checkoutClean = String(checkout).split('T')[0];
+
     // Verificar si el alojamiento existe
     const alRows = await this.alojamientoRepository.query(
-      `SELECT * FROM alojamientos WHERE id = $1 OR codigo = $1 OR id = ('ALO-' || $1)`,
+      `SELECT * FROM alojamientos 
+       WHERE id = $1 
+          OR codigo = $1 
+          OR REPLACE(codigo, '-', '_') = REPLACE($1, '-', '_') 
+          OR REPLACE(codigo, '_', '-') = REPLACE($1, '_', '-') 
+          OR id = ('ALO-' || $1)
+       LIMIT 1`,
       [alojamientoId],
     );
 
@@ -361,34 +371,38 @@ export class AlojamientosService {
 
     if (tipoHabitacion) {
       params.push(tipoHabitacion);
-      query += ` AND (e.codigo = $2 OR e.id = $2)`;
+      query += ` AND (e.codigo = $2 OR e.id = $2 OR REPLACE(e.codigo, '-', '_') = REPLACE($2, '-', '_'))`;
     }
 
     query += ` ORDER BY e.nombre`;
     const spaces = await this.alojamientoRepository.query(query, params);
 
-    // Conteo global de reservas activas del alojamiento para el rango de fechas
+    // Conteo global de habitaciones ocupadas y total del hotel
     const ocupacionHotelRes = await this.alojamientoRepository.query(
-      `SELECT COUNT(*)::int as ocupadas_hotel
+      `SELECT 
+         COALESCE(SUM(COALESCE(r."cantidadHabitaciones", 1)), 0)::int as ocupadas_hotel,
+         (SELECT COALESCE(SUM(er3."cantidadDisponible"), 0)::int FROM espacios_rentables er3 WHERE er3."alojamientoId" = $1 AND (er3.estado = 'Activo' OR er3.estado IS NULL)) as total_hotel
        FROM reservas r
        JOIN espacios_rentables er ON er.id = r."espacioId"
        WHERE er."alojamientoId" = $1
          AND r."estadoId" IN ('EST-001', 'EST-002')
-         AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2`,
-      [accommodation.id, checkin, checkout],
+         AND r."fechaEntrada" < $3::date AND r."fechaSalida" > $2::date`,
+      [accommodation.id, checkinClean, checkoutClean],
     );
     const ocupadasHotel = Number(ocupacionHotelRes[0]?.ocupadas_hotel || 0);
+    const totalHotel = Number(ocupacionHotelRes[0]?.total_hotel || 0);
+    const dispHotel = Math.max(0, totalHotel - ocupadasHotel);
 
-    // Consulta con la ocupación por habitación (evita N+1 viajes a la BD)
+    // Consulta con la ocupación por habitación (contando cantidadHabitaciones por reserva)
     const ocupacionRows = spaces.length
       ? await this.alojamientoRepository.query(
-          `SELECT r."espacioId" AS id, COUNT(*)::int AS ocupadas
+          `SELECT r."espacioId" AS id, COALESCE(SUM(COALESCE(r."cantidadHabitaciones", 1)), 0)::int AS ocupadas
            FROM reservas r
            WHERE r."espacioId" = ANY($1)
              AND r."estadoId" IN ('EST-001', 'EST-002')
-             AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2
+             AND r."fechaEntrada" < $3::date AND r."fechaSalida" > $2::date
            GROUP BY r."espacioId"`,
-          [spaces.map((s: any) => s.id), checkin, checkout],
+          [spaces.map((s: any) => s.id), checkinClean, checkoutClean],
         )
       : [];
     const ocupadasPorEspacio = new Map<string, number>(
@@ -398,8 +412,9 @@ export class AlojamientosService {
     const opciones: any[] = [];
     for (const sp of spaces) {
       const ocEsp = ocupadasPorEspacio.get(String(sp.id)) || 0;
-      const ocEfectivas = Math.max(ocEsp, ocupadasHotel);
-      const disponibles = Math.max(0, Number(sp.cantidadDisponible ?? 0) - ocEfectivas);
+      const totalEsp = Number(sp.cantidadDisponible ?? 0);
+      const dispEsp = Math.max(0, totalEsp - ocEsp);
+      const disponibles = Math.min(dispEsp, dispHotel);
       const precioNocheNum = Number(sp.precioPorNoche || 0);
       const precioTotalNum = Math.round(precioNocheNum * noches * rooms * 100) / 100;
 
@@ -408,6 +423,7 @@ export class AlojamientosService {
         nombre: sp.nombre,
         estaDisponible: disponibles >= rooms,
         habitacionesRemanentes: disponibles,
+        available_rooms: disponibles,
         precioNoche: precioNocheNum.toFixed(2),
         precioTotalEstancia: precioTotalNum.toFixed(2),
         regimen: 'SOLO_HABITACION',
@@ -415,11 +431,19 @@ export class AlojamientosService {
       });
     }
 
+    const totalDisponibles = opciones.reduce((sum, o) => sum + (o.habitacionesRemanentes || 0), 0);
+    const estaDisponible = opciones.some((o) => o.estaDisponible);
+
     return {
       alojamientoId: accommodation.id,
-      checkin,
-      checkout,
+      checkin: checkinClean,
+      checkout: checkoutClean,
       noches,
+      estaDisponible,
+      habitacionesRemanentes: totalDisponibles,
+      available_rooms: totalDisponibles,
+      totalHabitaciones: totalHotel,
+      habitacionesOcupadas: ocupadasHotel,
       opciones,
     };
   }
@@ -429,16 +453,38 @@ export class AlojamientosService {
       availabilityRequest.alojamientoId ||
       availabilityRequest.accommodation ||
       availabilityRequest.accommodation_id ||
+      availabilityRequest.hotel_id ||
+      availabilityRequest.hotelId ||
+      availabilityRequest.id ||
       ''
-    );
+    ).trim();
     const checkin = availabilityRequest.fechaInicio || availabilityRequest.checkin || availabilityRequest.dates?.checkin;
     const checkout = availabilityRequest.fechaFin || availabilityRequest.checkout || availabilityRequest.dates?.checkout;
-    const tipoHabitacionCodigo = availabilityRequest.tipoHabitacionCodigo || availabilityRequest.product_id || availabilityRequest.productId;
-    const cantidadHabitaciones = Number(availabilityRequest.cantidadHabitaciones || availabilityRequest.rooms || availabilityRequest.guests?.number_of_rooms || 1);
+    const tipoHabitacionCodigo = String(
+      availabilityRequest.tipoHabitacionCodigo ||
+      availabilityRequest.product_id ||
+      availabilityRequest.productId ||
+      availabilityRequest.room_type ||
+      availabilityRequest.room_type_code ||
+      availabilityRequest.tipoHabitacion ||
+      ''
+    ).trim();
+    const cantidadHabitaciones = Math.max(1, Number(
+      availabilityRequest.cantidadHabitaciones ||
+      availabilityRequest.rooms ||
+      availabilityRequest.guests?.number_of_rooms ||
+      1
+    ));
     const planTarifaCodigo = availabilityRequest.planTarifaCodigo || 'FLEX_BB';
 
     const alRows = await this.alojamientoRepository.query(
-      `SELECT * FROM alojamientos WHERE id = $1 OR codigo = $1 OR id = ('ALO-' || $1)`,
+      `SELECT * FROM alojamientos 
+       WHERE id = $1 
+          OR codigo = $1 
+          OR REPLACE(codigo, '-', '_') = REPLACE($1, '-', '_') 
+          OR REPLACE(codigo, '_', '-') = REPLACE($1, '_', '-') 
+          OR id = ('ALO-' || $1)
+       LIMIT 1`,
       [accommodationId],
     );
 
@@ -467,10 +513,10 @@ export class AlojamientosService {
 
     if (tipoHabitacionCodigo) {
       params.push(tipoHabitacionCodigo);
-      query += ` AND (e.codigo = $2 OR e.id = $2)`;
+      query += ` AND (e.codigo = $2 OR e.id = $2 OR REPLACE(e.codigo, '-', '_') = REPLACE($2, '-', '_'))`;
     }
 
-    query += ` ORDER BY (CASE WHEN e.codigo = $2 THEN 0 ELSE 1 END) LIMIT 1`;
+    query += ` ORDER BY (CASE WHEN e.codigo = $2 THEN 0 ELSE 1 END), e.id LIMIT 1`;
     const spaces = await this.alojamientoRepository.query(query, params);
 
     if (!spaces || spaces.length === 0) {
@@ -488,42 +534,43 @@ export class AlojamientosService {
 
     const room = spaces[0];
 
+    const checkinClean = String(checkin || new Date().toISOString().split('T')[0]).split('T')[0];
+    const checkoutClean = String(checkout || new Date(Date.now() + 86400000).toISOString().split('T')[0]).split('T')[0];
+
     // Calcular noches
     let nights = 1;
-    if (checkin && checkout) {
-      const dIn = new Date(checkin);
-      const dOut = new Date(checkout);
+    if (checkinClean && checkoutClean) {
+      const dIn = new Date(`${checkinClean}T00:00:00Z`);
+      const dOut = new Date(`${checkoutClean}T00:00:00Z`);
       const diffTime = Math.max(dOut.getTime() - dIn.getTime(), 1000 * 60 * 60 * 24);
       nights = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
     }
 
-    // Validar disponibilidad contando todas las reservas activas sobre el inventario
+    // Validar disponibilidad contando TODAS las reservas activas que solapan
     const availCheck = await this.alojamientoRepository.query(
-      `SELECT (
-         e."cantidadDisponible" - GREATEST(
-           (
-             SELECT COUNT(*) 
-             FROM reservas r 
-             WHERE r."espacioId" = e.id 
-               AND r."estadoId" IN ('EST-001', 'EST-002') 
-               AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2
-           ),
-           (
-             SELECT COUNT(*)
-             FROM reservas r2
-             JOIN espacios_rentables er2 ON er2.id = r2."espacioId"
-             WHERE er2."alojamientoId" = e."alojamientoId"
-               AND r2."estadoId" IN ('EST-001', 'EST-002')
-               AND r2."fechaEntrada" < $3 AND r2."fechaSalida" > $2
-           )
-         )
-       ) as disponibles
-       FROM espacios_rentables e
-       WHERE e.id = $1`,
-      [room.id, checkin || '2026-11-01', checkout || '2026-11-02'],
+      `SELECT 
+         COALESCE(SUM(CASE WHEN r."espacioId" = $1 THEN COALESCE(r."cantidadHabitaciones", 1) ELSE 0 END), 0)::int as ocupadas_espacio,
+         COALESCE(SUM(COALESCE(r."cantidadHabitaciones", 1)), 0)::int as ocupadas_hotel,
+         (SELECT e."cantidadDisponible"::int FROM espacios_rentables e WHERE e.id = $1) as total_espacio,
+         (SELECT COALESCE(SUM(er3."cantidadDisponible"), 0)::int FROM espacios_rentables er3 WHERE er3."alojamientoId" = $2 AND (er3.estado = 'Activo' OR er3.estado IS NULL)) as total_hotel
+       FROM reservas r
+       JOIN espacios_rentables er ON er.id = r."espacioId"
+       WHERE er."alojamientoId" = $2
+         AND r."estadoId" IN ('EST-001', 'EST-002')
+         AND r."fechaEntrada" < $4::date AND r."fechaSalida" > $3::date`,
+      [room.id, accommodation.id, checkinClean, checkoutClean],
     );
 
-    const disponibles = Math.max(0, Number(availCheck[0]?.disponibles ?? 0));
+    const row = availCheck[0] || {};
+    const totalEspacio = Number(row.total_espacio ?? room.cantidadDisponible ?? 1);
+    const totalHotel = Number(row.total_hotel ?? totalEspacio);
+    const ocupadasEspacio = Number(row.ocupadas_espacio || 0);
+    const ocupadasHotel = Number(row.ocupadas_hotel || 0);
+
+    const dispEsp = Math.max(0, totalEspacio - ocupadasEspacio);
+    const dispHotel = Math.max(0, totalHotel - ocupadasHotel);
+    const disponibles = Math.min(dispEsp, dispHotel);
+
     if (disponibles < cantidadHabitaciones) {
       throw new ProblemDetailsException(
         {
@@ -531,7 +578,7 @@ export class AlojamientosService {
           title: 'Sin habitaciones disponibles',
           status: HttpStatus.CONFLICT,
           code: 'OUT_OF_STOCK',
-          detail: 'No hay cupos disponibles para el tipo de habitación en las fechas solicitadas.',
+          detail: `No hay cupos disponibles para ${cantidadHabitaciones} habitación(es) en las fechas solicitadas (remanentes: ${disponibles}).`,
         },
         HttpStatus.CONFLICT,
       );
@@ -539,8 +586,8 @@ export class AlojamientosService {
 
     const pricing = this.pricingService.calculatePrice(
       Number(room.precioPorNoche),
-      checkin || new Date().toISOString().split('T')[0],
-      checkout || new Date(Date.now() + 86400000).toISOString().split('T')[0],
+      checkinClean,
+      checkoutClean,
       cantidadHabitaciones,
     );
 
@@ -551,8 +598,8 @@ export class AlojamientosService {
       alojamientoId: accommodation.id,
       espacioId: room.id,
       tipoHabitacionCodigo: room.codigo || 'SUITE_DELUXE',
-      fechaInicio: checkin,
-      fechaFin: checkout,
+      fechaInicio: checkinClean,
+      fechaFin: checkoutClean,
       cantidadHabitaciones,
       total: pricing.total,
       tarifaValidaHasta: new Date(Date.now() + 30 * 60 * 1000),
@@ -563,6 +610,7 @@ export class AlojamientosService {
       tipoHabitacionCodigo: room.codigo || 'SUITE_DELUXE',
       estaDisponible: true,
       habitacionesRemanentes: disponibles,
+      available_rooms: disponibles,
       nochesEstancia: nights,
       precioTotalCotizado: pricing.totalStr,
       cotizacionId: cotizacionId,
@@ -829,12 +877,13 @@ export class AlojamientosService {
     );
 
     const activeReservations = await this.alojamientoRepository.query(
-      `SELECT r."espacioId", r."fechaEntrada"::text as "fechaEntrada", r."fechaSalida"::text as "fechaSalida"
+      `SELECT r."espacioId", r."fechaEntrada"::text as "fechaEntrada", r."fechaSalida"::text as "fechaSalida",
+              COALESCE(r."cantidadHabitaciones", 1)::int as "cantidadHabitaciones"
        FROM reservas r
        JOIN espacios_rentables er ON er.id = r."espacioId"
        WHERE (er."alojamientoId" = $1 OR er."alojamientoId" = ('ALO-' || $1))
          AND r."estadoId" IN ('EST-001', 'EST-002')
-         AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2`,
+         AND r."fechaEntrada" < $3::date AND r."fechaSalida" > $2::date`,
       [alojamientoId, fechaDesde, fechaHasta],
     );
 
@@ -845,11 +894,13 @@ export class AlojamientosService {
     while (curr <= end) {
       const dateStr = curr.toISOString().split('T')[0];
       for (const r of rooms) {
-        const occupied = activeReservations.filter((res: any) => {
-          const rIn = String(res.fechaEntrada).split('T')[0];
-          const rOut = String(res.fechaSalida).split('T')[0];
-          return (res.espacioId === r.id || rooms.length === 1) && rIn <= dateStr && rOut > dateStr;
-        }).length;
+        const occupied = activeReservations
+          .filter((res: any) => {
+            const rIn = String(res.fechaEntrada).split('T')[0];
+            const rOut = String(res.fechaSalida).split('T')[0];
+            return (res.espacioId === r.id || rooms.length === 1) && rIn <= dateStr && rOut > dateStr;
+          })
+          .reduce((sum: number, res: any) => sum + Number(res.cantidadHabitaciones || 1), 0);
         const total = Number(r.cantidadDisponible || 1);
         const disponibles = Math.max(0, total - occupied);
 
@@ -862,6 +913,7 @@ export class AlojamientosService {
           reservadas: occupied,
           bloqueadas: 0,
           disponibles,
+          available_rooms: disponibles,
           total,
           precioPorNoche: String(Number(r.precioPorNoche || 50).toFixed(2)),
           moneda: 'USD',
@@ -935,7 +987,7 @@ export class AlojamientosService {
         SELECT er.id, er."alojamientoId", er."precioPorNoche", er."capacidadAdultos", er."capacidadNinos",
                er.estado, er."cantidadDisponible",
                (
-                 SELECT COUNT(*) FROM reservas r
+                 SELECT COALESCE(SUM(COALESCE(r."cantidadHabitaciones", 1)), 0) FROM reservas r
                  WHERE r."espacioId" = er.id
                    AND r."estadoId" IN ('EST-001', 'EST-002')
                    AND r."fechaSalida" >= CURRENT_DATE

@@ -160,32 +160,32 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     }
 
     // 3. Verificar disponibilidad por solapamiento de fechas
+    const checkinClean = String(checkin).split('T')[0];
+    const checkoutClean = String(checkout).split('T')[0];
+
     const availabilityQuery = await this.dataSource.query(
-      `SELECT (
-         e."cantidadDisponible" - GREATEST(
-           (
-             SELECT COUNT(*) 
-             FROM reservas r 
-             WHERE r."espacioId" = e.id 
-               AND r."estadoId" IN ('EST-001', 'EST-002') 
-               AND r."fechaEntrada" < $3 AND r."fechaSalida" > $2
-           ),
-           (
-             SELECT COUNT(*)
-             FROM reservas r2
-             JOIN espacios_rentables er2 ON er2.id = r2."espacioId"
-             WHERE er2."alojamientoId" = e."alojamientoId"
-               AND r2."estadoId" IN ('EST-001', 'EST-002')
-               AND r2."fechaEntrada" < $3 AND r2."fechaSalida" > $2
-           )
-         )
-       ) as disponibles
-       FROM espacios_rentables e
-       WHERE e.id = $1 AND (e.estado = 'Activo' OR e.estado IS NULL)`,
-      [espacio.id, checkin, checkout],
+      `SELECT 
+         COALESCE(SUM(CASE WHEN r."espacioId" = $1 THEN COALESCE(r."cantidadHabitaciones", 1) ELSE 0 END), 0)::int as ocupadas_espacio,
+         COALESCE(SUM(COALESCE(r."cantidadHabitaciones", 1)), 0)::int as ocupadas_hotel,
+         (SELECT e."cantidadDisponible"::int FROM espacios_rentables e WHERE e.id = $1) as total_espacio,
+         (SELECT COALESCE(SUM(er3."cantidadDisponible"), 0)::int FROM espacios_rentables er3 WHERE er3."alojamientoId" = $2 AND (er3.estado = 'Activo' OR er3.estado IS NULL)) as total_hotel
+       FROM reservas r
+       JOIN espacios_rentables er ON er.id = r."espacioId"
+       WHERE er."alojamientoId" = $2
+         AND r."estadoId" IN ('EST-001', 'EST-002')
+         AND r."fechaEntrada" < $4::date AND r."fechaSalida" > $3::date`,
+      [espacio.id, espacio.alojamientoId, checkinClean, checkoutClean],
     );
 
-    const disponibles = Number(availabilityQuery[0]?.disponibles || 0);
+    const rowAvail = availabilityQuery[0] || {};
+    const totalEspacio = Number(rowAvail.total_espacio ?? espacio.cantidadDisponible ?? 1);
+    const totalHotel = Number(rowAvail.total_hotel ?? totalEspacio);
+    const ocupadasEspacio = Number(rowAvail.ocupadas_espacio || 0);
+    const ocupadasHotel = Number(rowAvail.ocupadas_hotel || 0);
+
+    const dispEsp = Math.max(0, totalEspacio - ocupadasEspacio);
+    const dispHotel = Math.max(0, totalHotel - ocupadasHotel);
+    const disponibles = Math.min(dispEsp, dispHotel);
     const roomsRequested = Number(guests.number_of_rooms || 1);
 
     if (disponibles < roomsRequested) {
@@ -279,20 +279,33 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     const previewId = createRequest.order_preview_id || createRequest.orderPreviewId;
     const cachedPreview = previewId ? ReservasService.previewsCache.get(previewId) : null;
 
-    const accommodationId =
+    const accommodationId = String(
       createRequest.alojamientoId ||
       createRequest.accommodation_id ||
       createRequest.accommodationId ||
-      cachedPreview?.accommodationId;
+      createRequest.hotel_id ||
+      createRequest.hotelId ||
+      createRequest.accommodation ||
+      createRequest.property_id ||
+      createRequest.selected_product?.accommodation_id ||
+      cachedPreview?.accommodationId ||
+      ''
+    ).trim();
 
-    const tipoHabitacionCodigo =
+    const tipoHabitacionCodigo = String(
       createRequest.tipoHabitacionCodigo ||
       createRequest.tipoHabitacion ||
       createRequest.room_type ||
+      createRequest.room_type_code ||
       createRequest.product_id ||
       createRequest.productId ||
+      createRequest.roomId ||
+      createRequest.room_id ||
       createRequest.espacioId ||
-      cachedPreview?.productId;
+      createRequest.selected_product?.product_id ||
+      cachedPreview?.productId ||
+      ''
+    ).trim();
 
     const checkin =
       createRequest.fechaInicio ||
@@ -306,12 +319,12 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       createRequest.dates?.checkout ||
       cachedPreview?.checkout;
 
-    const cantidadHabitaciones = Number(
+    const cantidadHabitaciones = Math.max(1, Number(
       createRequest.cantidadHabitaciones ||
       createRequest.rooms ||
       createRequest.guests?.number_of_rooms ||
       1,
-    );
+    ));
 
     const ocupantes = createRequest.ocupantes || createRequest.guests;
 
@@ -490,7 +503,14 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       // 1. Bloqueo exclusivo a nivel de fila sobre el alojamiento y la habitación (serializa peticiones concurrentes)
       if (accommodationId) {
         await manager.query(
-          `SELECT id FROM alojamientos WHERE (id = $1 OR codigo = $1 OR id = ('ALO-' || $1)) FOR UPDATE`,
+          `SELECT id FROM alojamientos 
+           WHERE (
+             id = $1 
+             OR codigo = $1 
+             OR REPLACE(codigo, '-', '_') = REPLACE($1, '-', '_') 
+             OR REPLACE(codigo, '_', '-') = REPLACE($1, '_', '-') 
+             OR id = ('ALO-' || $1)
+           ) FOR UPDATE`,
           [accommodationId],
         );
       }
@@ -499,10 +519,18 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         `SELECT e.*, a.id as "alojamientoId", a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo", a."politicaCancelacion"
          FROM alojamientos a
          JOIN espacios_rentables e ON e."alojamientoId" = a.id
-         WHERE (a.id = $1 OR a.codigo = $1 OR a.id = ('ALO-' || $1) OR $1 = '' OR $1 IS NULL)
+         WHERE (
+           a.id = $1 
+           OR a.codigo = $1 
+           OR REPLACE(a.codigo, '-', '_') = REPLACE($1, '-', '_') 
+           OR REPLACE(a.codigo, '_', '-') = REPLACE($1, '_', '-') 
+           OR a.id = ('ALO-' || $1) 
+           OR $1 = '' 
+           OR $1 IS NULL
+         )
            AND (e.estado = 'Activo' OR e.estado IS NULL)
          ORDER BY 
-           (CASE WHEN e.codigo = $2 OR e.id = $2 THEN 0 ELSE 1 END),
+           (CASE WHEN e.codigo = $2 OR e.id = $2 OR REPLACE(e.codigo, '-', '_') = REPLACE($2, '-', '_') THEN 0 ELSE 1 END),
            (CASE WHEN e.codigo = 'SUITE_DELUXE' THEN 0 ELSE 1 END),
            e.id
          LIMIT 1
@@ -546,23 +574,28 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       }
 
       // 3. Bajo el bloqueo exclusivo FOR UPDATE, contar reservas activas concurrentes para las fechas solicitadas
-      // Contar tanto las reservas sobre el espacio como todas las reservas sobre el mismo alojamiento
+      // Contar tanto las reservas sobre el espacio como todas las reservas sobre el mismo alojamiento (sumando cantidadHabitaciones)
       const overlapCountRes = await manager.query(
         `SELECT 
-           COUNT(*)::int as ocupadas_hotel,
-           COUNT(*) FILTER (WHERE r."espacioId" = $2)::int as ocupadas_espacio
+           COALESCE(SUM(CASE WHEN r."espacioId" = $2 THEN COALESCE(r."cantidadHabitaciones", 1) ELSE 0 END), 0)::int as ocupadas_espacio,
+           COALESCE(SUM(COALESCE(r."cantidadHabitaciones", 1)), 0)::int as ocupadas_hotel,
+           (SELECT COALESCE(SUM(er3."cantidadDisponible"), 0)::int FROM espacios_rentables er3 WHERE er3."alojamientoId" = $1 AND (er3.estado = 'Activo' OR er3.estado IS NULL)) as total_hotel
          FROM reservas r
          JOIN espacios_rentables er ON er.id = r."espacioId"
          WHERE er."alojamientoId" = $1
            AND r."estadoId" IN ('EST-001', 'EST-002')
-           AND r."fechaEntrada" < $4 AND r."fechaSalida" > $3`,
+           AND r."fechaEntrada" < $4::date AND r."fechaSalida" > $3::date`,
         [espacio.alojamientoId, espacio.id, checkinClean, checkoutClean],
       );
 
       const ocupadasHotel = Number(overlapCountRes[0]?.ocupadas_hotel || 0);
       const ocupadasEspacio = Number(overlapCountRes[0]?.ocupadas_espacio || 0);
+      const totalHotel = Number(overlapCountRes[0]?.total_hotel || 0);
       const totalEspacio = Number(espacio.cantidadDisponible || 1);
-      const disponibles = Math.max(0, totalEspacio - Math.max(ocupadasEspacio, ocupadasHotel));
+
+      const dispEspacio = Math.max(0, totalEspacio - ocupadasEspacio);
+      const dispHotel = Math.max(0, totalHotel - ocupadasHotel);
+      const disponibles = Math.min(dispEspacio, dispHotel);
 
       if (disponibles < cantidadHabitaciones) {
         throw new ProblemDetailsException(
@@ -642,9 +675,10 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         `INSERT INTO reservas (
            id, "ordenId", "usuarioId", "espacioId", "estadoId", 
            "fechaEntrada", "fechaSalida", "precioTotal", subtotal, iva, "tasaMunicipal", 
-           moneda, "numeroPersonas", "fechaCreacion", "checkinRealizado", "earlyCheckinAutorizado", "idempotencyKey"
+           moneda, "numeroPersonas", "fechaCreacion", "checkinRealizado", "earlyCheckinAutorizado", "idempotencyKey",
+           "cantidadHabitaciones"
          )
-         VALUES ($1, $2, $3, $4, 'EST-002', $5, $6, $7, $8, $9, $10, 'USD', $11, CURRENT_TIMESTAMP, false, false, $12)`,
+         VALUES ($1, $2, $3, $4, 'EST-002', $5, $6, $7, $8, $9, $10, 'USD', $11, CURRENT_TIMESTAMP, false, false, $12, $13)`,
         [
           reservaId,
           orderId,
@@ -658,6 +692,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
           pricing.tasaMunicipal,
           totalPersonas,
           idemKey,
+          cantidadHabitaciones,
         ],
       );
 
@@ -852,6 +887,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       orderId: row.ordenId || row.id,
       reservaId: row.ordenId || row.id,
       externalOrderId: row.ordenId || row.id,
+      cantidadHabitaciones: Number(row.cantidadHabitaciones || 1),
+      rooms: Number(row.cantidadHabitaciones || 1),
       estado:
         row.estadoId === 'EST-003'
           ? 'CANCELLED'
@@ -1060,7 +1097,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       montoReembolsado,
       montoPenalidad,
       penalidad,
-      cuposRestaurados: 1,
+      cuposRestaurados: Number(reserva.cantidadHabitaciones || 1),
       yaCancelada: false,
       timestamp: new Date().toISOString(),
     };
