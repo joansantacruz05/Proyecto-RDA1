@@ -312,10 +312,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       }
 
       showToast(`"${aloj.nombre}" ha sido inspeccionado y liberado. Vuelve a estar en línea y disponible para reservas en la página principal.`);
-      refetchAlojamientos();
+      await Promise.all([refetchAlojamientos(), refetchReservas()]);
       queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
       queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
       queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
+      queryClient.invalidateQueries({ queryKey: ['adminReservasTodas'] });
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : 'Error al liberar alojamiento', 'error');
     }

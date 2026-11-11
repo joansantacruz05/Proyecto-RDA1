@@ -96,17 +96,15 @@ export const HotelDetailPage: React.FC = () => {
   const defaultPrice = hotelRooms[0]?.precioPorNoche
     ? Number(hotelRooms[0].precioPorNoche)
     : 120;
-  const isHotelReserved =
-    Boolean(hotel.estaReservado) ||
-    checkIsAlojamientoReserved({
-      alojamientoId: hotel.id,
-      alojamientoNombre: hotel.nombre,
-      alojamientoCodigo: hotel.codigo,
-      estaReservadoApi: hotel.estaReservado,
-      estado: hotel.estado,
-      activeReservas,
-      checkDates: checkinParam && checkoutParam ? { checkin: checkinParam, checkout: checkoutParam } : undefined,
-    });
+  const isHotelReserved = checkIsAlojamientoReserved({
+    alojamientoId: hotel.id,
+    alojamientoNombre: hotel.nombre,
+    alojamientoCodigo: hotel.codigo,
+    estaReservadoApi: hotel.estaReservado,
+    estado: hotel.estado,
+    activeReservas,
+    checkDates: checkinParam && checkoutParam ? { checkin: checkinParam, checkout: checkoutParam } : undefined,
+  });
 
   return (
     <div className={`container ${styles.detailContainer}`}>

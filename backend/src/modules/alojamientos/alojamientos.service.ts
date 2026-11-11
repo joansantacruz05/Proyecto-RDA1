@@ -160,12 +160,18 @@ export class AlojamientosService {
     const result = await this.alojamientoRepository.query(`
       SELECT 
         a.*,
-        EXISTS (
-          SELECT 1 FROM reservas r
-          JOIN espacios_rentables er ON r."espacioId" = er.id
-          WHERE er."alojamientoId" = a.id 
-            AND r."estadoId" IN ('EST-001', 'EST-002')
-            AND r."fechaSalida" >= CURRENT_DATE
+        (
+          COALESCE((
+            SELECT SUM(GREATEST(0, COALESCE(er."cantidadDisponible", 1) - COALESCE((
+              SELECT SUM(COALESCE(r."cantidadHabitaciones", 1))
+              FROM reservas r
+              WHERE r."espacioId" = er.id
+                AND r."estadoId" IN ('EST-001', 'EST-002')
+                AND r."fechaSalida" >= CURRENT_DATE
+            ), 0)))
+            FROM espacios_rentables er
+            WHERE er."alojamientoId" = a.id AND (er.estado = 'Activo' OR er.estado IS NULL)
+          ), 1) <= 0
         ) as esta_reservado
       FROM alojamientos a 
       WHERE a.id = $1 OR a.codigo = $1 OR a.id = ('ALO-' || $1)
@@ -194,9 +200,13 @@ export class AlojamientosService {
         'UPDATE espacios_rentables SET estado = $1 WHERE "alojamientoId" = $2',
         ['Inactivo', id]
       );
-    } else if (dto.estado === 'Activo') {
+    } else if (dto.estado === 'Activo' || dto.liberarReservas) {
       await this.alojamientoRepository.query(
-        'UPDATE espacios_rentables SET estado = $1 WHERE "alojamientoId" = $2',
+        'UPDATE alojamientos SET estado = $1 WHERE id = $2',
+        ['Activo', id]
+      );
+      await this.alojamientoRepository.query(
+        'UPDATE espacios_rentables SET estado = $1, "cantidadDisponible" = GREATEST(COALESCE("cantidadDisponible", 1), 1) WHERE "alojamientoId" = $2',
         ['Activo', id]
       );
     }
@@ -204,15 +214,17 @@ export class AlojamientosService {
     if (dto.liberarReservas) {
       await this.alojamientoRepository.query(
         `UPDATE reservas r
-         SET "fechaSalida" = LEAST("fechaSalida", CURRENT_DATE - INTERVAL '1 day')
+         SET "fechaEntrada" = LEAST(r."fechaEntrada", CURRENT_DATE - INTERVAL '2 days'),
+             "fechaSalida" = LEAST(r."fechaSalida", CURRENT_DATE - INTERVAL '1 day')
          FROM espacios_rentables er
          WHERE r."espacioId" = er.id 
-           AND er."alojamientoId" = $1
+           AND (er."alojamientoId" = $1 OR er."alojamientoId" = ('ALO-' || $1))
            AND r."estadoId" IN ('EST-001', 'EST-002')
            AND r."fechaSalida" >= CURRENT_DATE`,
         [id],
       );
     }
+    catalogCache.invalidate();
     
     if (dto.precioPorNoche !== undefined || dto.capacidadAdultos !== undefined || dto.capacidadNinos !== undefined || dto.habitaciones !== undefined) {
       const er = await this.alojamientoRepository.query('SELECT id FROM espacios_rentables WHERE "alojamientoId" = $1 LIMIT 1', [id]);
@@ -1033,7 +1045,11 @@ export class AlojamientosService {
                COUNT(*)::int AS habitaciones,
                COALESCE(SUM(CASE WHEN estado = 'Activo' OR estado IS NULL
                                  THEN GREATEST(0, "cantidadDisponible" - ocupadas) ELSE 0 END), 0)::int AS habitaciones_disponibles,
-               BOOL_OR(ocupadas > 0) AS esta_reservado
+               (
+                 COALESCE(SUM(CASE WHEN estado = 'Activo' OR estado IS NULL
+                                   THEN GREATEST(0, "cantidadDisponible" - ocupadas) ELSE 0 END), 0) <= 0
+                 AND COUNT(*) > 0
+               ) AS esta_reservado
         FROM rooms
         GROUP BY "alojamientoId"
       )
@@ -1231,14 +1247,17 @@ export class AlojamientosService {
   }
 
   async checkOutOrder(orderId: string, body?: any): Promise<any> {
+    catalogCache.invalidate();
     const order = await this.reservasService.getOrder(orderId);
 
     await this.alojamientoRepository.query(
       `UPDATE reservas 
-       SET "fechaSalida" = LEAST("fechaSalida", CURRENT_DATE - INTERVAL '1 day')
+       SET "fechaEntrada" = LEAST("fechaEntrada", CURRENT_DATE - INTERVAL '2 days'),
+           "fechaSalida" = LEAST("fechaSalida", CURRENT_DATE - INTERVAL '1 day')
        WHERE id = $1 OR "ordenId"::text = $1`,
       [order.id],
     );
+    catalogCache.invalidate();
 
     try {
       const hisId = `HIS-${Math.floor(1000 + Math.random() * 9000)}`;

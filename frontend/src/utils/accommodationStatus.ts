@@ -26,6 +26,7 @@ export interface CheckIsAlojamientoReservedParams {
   alojamientoNombre?: string | undefined;
   alojamientoCodigo?: string | undefined;
   estaReservadoApi?: boolean | undefined;
+  habitacionesDisponibles?: number | undefined;
   estado?: string | undefined;
   activeReservas?: ReservaItemLike[] | undefined;
   checkDates?: { checkin?: string | undefined; checkout?: string | undefined } | undefined;
@@ -61,11 +62,15 @@ export function getLiberadosIds(): string[] {
 
 export function liberarAlojamiento(alojamientoId: string, alojamientoNombre?: string): void {
   try {
-    // 1. Agregar a lista de liberados
+    // 1. Agregar a lista de liberados (normalizado en minúsculas y original)
     const liberados = getLiberadosIds();
     const cleanId = alojamientoId.trim();
-    if (!liberados.includes(cleanId)) {
+    const lowerId = cleanId.toLowerCase();
+    if (cleanId && !liberados.includes(cleanId)) {
       liberados.push(cleanId);
+    }
+    if (lowerId && !liberados.includes(lowerId)) {
+      liberados.push(lowerId);
     }
     if (alojamientoNombre && !liberados.includes(alojamientoNombre.toLowerCase().trim())) {
       liberados.push(alojamientoNombre.toLowerCase().trim());
@@ -74,7 +79,8 @@ export function liberarAlojamiento(alojamientoId: string, alojamientoNombre?: st
 
     // 2. Remover de lista local de reservados
     const reservados = getReservadosLocales().filter((r) => {
-      const matchId = r.alojamientoId && (r.alojamientoId === cleanId || cleanId.includes(r.alojamientoId) || r.alojamientoId.includes(cleanId));
+      const rId = (r.alojamientoId || '').toLowerCase().trim();
+      const matchId = rId && (rId === lowerId || lowerId.includes(rId) || rId.includes(lowerId));
       const matchName = alojamientoNombre && r.alojamientoNombre && r.alojamientoNombre.toLowerCase().includes(alojamientoNombre.toLowerCase());
       return !matchId && !matchName;
     });
@@ -131,6 +137,7 @@ export function checkIsAlojamientoReserved(params: CheckIsAlojamientoReservedPar
     alojamientoNombre = '',
     alojamientoCodigo = '',
     estaReservadoApi = false,
+    habitacionesDisponibles,
     estado = 'Activo',
     activeReservas = [],
     checkDates,
@@ -142,15 +149,20 @@ export function checkIsAlojamientoReserved(params: CheckIsAlojamientoReservedPar
 
   // 1. Si el administrador lo tiene como 'Inactivo' o 'Pausado', no se puede reservar
   const overrides = getEstadosOverride();
-  const overrideEstado = overrides[alojamientoId] || overrides[nameNorm];
+  const overrideEstado = overrides[alojamientoId] || overrides[idNorm] || overrides[nameNorm];
   if (overrideEstado === 'Inactivo' || estado === 'Inactivo') {
     return true;
   }
 
   // 2. Si el administrador lo liberó explícitamente y no hay nuevas reservas locales
-  const liberados = getLiberadosIds();
+  const liberados = getLiberadosIds().map((l) => String(l || '').toLowerCase().trim());
   const isLiberado = liberados.some(
-    (lib) => lib === idNorm || lib === nameNorm || (idNorm && lib.includes(idNorm)) || (nameNorm && lib.includes(nameNorm))
+    (lib) =>
+      Boolean(lib) &&
+      (lib === idNorm ||
+        lib === nameNorm ||
+        (idNorm && lib.includes(idNorm)) ||
+        (nameNorm && lib.includes(nameNorm))),
   );
 
   // 3. Revisar reservas locales recientes
@@ -183,7 +195,12 @@ export function checkIsAlojamientoReserved(params: CheckIsAlojamientoReservedPar
   // Si estaba liberado por el admin y no hay reserva local reciente, respetar la liberación
   if (isLiberado) return false;
 
-  // 4. Si el backend explícitamente reportó estaReservadoApi
+  // Si el catálogo reporta que aún quedan habitaciones disponibles (> 0), está disponible para reservar
+  if (habitacionesDisponibles !== undefined && habitacionesDisponibles > 0 && !estaReservadoApi) {
+    return false;
+  }
+
+  // 4. Si el backend explícitamente reportó estaReservadoApi (0 habitaciones disponibles)
   if (estaReservadoApi) return true;
 
   // 5. Cruzar contra las reservas oficiales de Azure (activeReservas)

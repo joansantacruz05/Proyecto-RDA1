@@ -33,19 +33,22 @@ export const AlojamientoCard: React.FC<AlojamientoCardProps> = ({
     staleTime: 5000,
   });
 
-  const isReserved = Boolean(
-    alojamiento.estaReservado ||
-    (alojamiento.habitacionesDisponibles !== undefined && alojamiento.habitacionesDisponibles <= 0) ||
-    checkIsAlojamientoReserved({
-      alojamientoId: alojamiento.id,
-      alojamientoNombre: alojamiento.nombre,
-      alojamientoCodigo: alojamiento.codigo,
-      estaReservadoApi: alojamiento.estaReservado,
-      estado: alojamiento.activo === false ? 'Inactivo' : 'Activo',
-      activeReservas,
-      checkDates: searchDates?.checkin && searchDates.checkout ? { checkin: searchDates.checkin, checkout: searchDates.checkout } : undefined,
-    })
-  );
+  const isReserved = checkIsAlojamientoReserved({
+    alojamientoId: alojamiento.id,
+    alojamientoNombre: alojamiento.nombre,
+    alojamientoCodigo: alojamiento.codigo,
+    habitacionesDisponibles: alojamiento.habitacionesDisponibles,
+    estaReservadoApi: Boolean(
+      alojamiento.estaReservado ||
+      (alojamiento.habitacionesDisponibles !== undefined && alojamiento.habitacionesDisponibles <= 0),
+    ),
+    estado: alojamiento.activo === false ? 'Inactivo' : 'Activo',
+    activeReservas,
+    checkDates:
+      searchDates?.checkin && searchDates.checkout
+        ? { checkin: searchDates.checkin, checkout: searchDates.checkout }
+        : undefined,
+  });
 
   const price = typeof alojamiento.precioPorNoche === 'string'
     ? parseFloat(alojamiento.precioPorNoche)
