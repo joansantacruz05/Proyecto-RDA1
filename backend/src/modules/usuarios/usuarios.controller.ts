@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Put, UseGuards } from '@nestjs/common';
 import { UsuariosService } from './usuarios.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -20,5 +20,17 @@ export class UsuariosController {
   @ApiResponse({ status: 403, description: 'Acceso denegado (Requiere rol Admin)' })
   findAllAdmin() {
     return this.usuariosService.findAll();
+  }
+
+  @Patch(':id')
+  @Put(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Editar los datos, rol o contraseña de un usuario desde el panel Admin' })
+  @ApiResponse({ status: 200, description: 'Usuario actualizado exitosamente' })
+  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
+  updateUserAdmin(@Param('id') id: string, @Body() body: any) {
+    return this.usuariosService.updateAdminUser(id, body);
   }
 }

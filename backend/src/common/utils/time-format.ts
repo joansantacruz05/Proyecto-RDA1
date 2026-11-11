@@ -38,3 +38,4 @@ export function toCoordNumber(raw: unknown): number | null {
   const num = Number(raw);
   return Number.isFinite(num) ? num : null;
 }
+

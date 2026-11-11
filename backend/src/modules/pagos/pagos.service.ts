@@ -188,13 +188,21 @@ export class PagosService {
         f.id, f."numeroFactura", f."identificacionCliente", f."nombreRazonSocial",
         f.direccion, f."fechaEmision", f.subtotal, f.iva, f.total, f."tasaMunicipal",
         p.id as "pagoId", p.monto, p.estado as "estadoPago", p."fechaPago",
-        r.id as "reservaId", r."ordenId", m.nombre as "metodoPago",
-        a.nombre as "alojamientoNombre"
+        r.id as "reservaId", r."ordenId", r."fechaEntrada", r."fechaSalida", r."numeroPersonas",
+        COALESCE(r."huespedesReales", r."numeroPersonas")::int as "huespedesReales",
+        COALESCE(r."extrasCargos", '[]'::jsonb) as "extrasCargos",
+        COALESCE(r."cargosAdicionalesTotal", 0)::numeric(10,2) as "cargosAdicionalesTotal",
+        e.nombre as "habitacionNombre", m.nombre as "metodoPago",
+        a.nombre as "alojamientoNombre",
+        ub.direccion_detallada as "alojamientoDireccion",
+        ci.nombre as "alojamientoDestino"
       FROM facturas f
       JOIN pagos p ON f."pagoId" = p.id
       JOIN reservas r ON p."reservaId" = r.id
       JOIN espacios_rentables e ON r."espacioId" = e.id
       JOIN alojamientos a ON e."alojamientoId" = a.id
+      LEFT JOIN ubicaciones ub ON a."ubicacionId" = ub.id
+      LEFT JOIN ciudades ci ON ub."ciudadId" = ci.id
       JOIN metodos_pago m ON p."metodoPagoId" = m.id
       WHERE r."usuarioId" = $1
       ORDER BY f."fechaEmision" DESC
@@ -211,13 +219,21 @@ export class PagosService {
         f.id, f."numeroFactura", f."identificacionCliente", f."nombreRazonSocial",
         f.direccion, f."fechaEmision", f.subtotal, f.iva, f.total, f."tasaMunicipal",
         p.id as "pagoId", p.monto, p.estado as "estadoPago", p."fechaPago",
-        r.id as "reservaId", r."ordenId", m.nombre as "metodoPago",
-        a.nombre as "alojamientoNombre"
+        r.id as "reservaId", r."ordenId", r."fechaEntrada", r."fechaSalida", r."numeroPersonas",
+        COALESCE(r."huespedesReales", r."numeroPersonas")::int as "huespedesReales",
+        COALESCE(r."extrasCargos", '[]'::jsonb) as "extrasCargos",
+        COALESCE(r."cargosAdicionalesTotal", 0)::numeric(10,2) as "cargosAdicionalesTotal",
+        e.nombre as "habitacionNombre", m.nombre as "metodoPago",
+        a.nombre as "alojamientoNombre",
+        ub.direccion_detallada as "alojamientoDireccion",
+        ci.nombre as "alojamientoDestino"
       FROM facturas f
       JOIN pagos p ON f."pagoId" = p.id
       JOIN reservas r ON p."reservaId" = r.id
       JOIN espacios_rentables e ON r."espacioId" = e.id
       JOIN alojamientos a ON e."alojamientoId" = a.id
+      LEFT JOIN ubicaciones ub ON a."ubicacionId" = ub.id
+      LEFT JOIN ciudades ci ON ub."ciudadId" = ci.id
       JOIN metodos_pago m ON p."metodoPagoId" = m.id
       ORDER BY f."fechaEmision" DESC
     `);

@@ -90,9 +90,9 @@ export const Step3Confirmation: React.FC<Step3ConfirmationProps> = ({
       ciudad: typeof hotel?.ciudad === 'string'
         ? hotel.ciudad
         : (hotel?.ciudad as { nombre?: string } | undefined)?.nombre ||
-          (typeof hotel?.destino === 'string'
-            ? hotel.destino
-            : (hotel?.destino as { nombre?: string } | undefined)?.nombre) || undefined,
+        (typeof hotel?.destino === 'string'
+          ? hotel.destino
+          : (hotel?.destino as { nombre?: string } | undefined)?.nombre) || undefined,
       checkinFecha: checkin,
       checkoutFecha: checkout,
       horaCheckIn: checkInHora,

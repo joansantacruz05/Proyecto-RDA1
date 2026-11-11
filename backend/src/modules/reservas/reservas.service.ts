@@ -861,17 +861,35 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
          r."estadoId", er.nombre as "estadoNombre",
          e.id as "espacioId", e.nombre as "habitacionNombre", e."precioPorNoche",
          a.id as "alojamientoId", a.nombre as "alojamientoNombre", a."imagenUrl", a.codigo as "alojamientoCodigo",
+         ub.direccion_detallada as "alojamientoDireccion",
+         ub.latitud::float8 as "alojamientoLatitud",
+         ub.longitud::float8 as "alojamientoLongitud",
+         ci.nombre as "alojamientoDestino",
          COALESCE(TO_CHAR(a."horaCheckIn", 'HH24:MI'), '14:00') as "horaCheckIn",
          COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut",
+         u."nombreCompleto" as "clienteNombre", u.email as "clienteEmail", u.telefono as "clienteTelefono", u.identificacion as "clienteIdentificacion",
          c.firmado as "contratoFirmado",
          p.estado as "estadoPago", p.id as "pagoId",
-         f.id as "facturaId", f."numeroFactura"
+         COALESCE(mp.nombre, 'Tarjeta de Crédito / Débito') as "metodoPago",
+         f.id as "facturaId",
+         COALESCE(
+           f."numeroFactura",
+           CASE WHEN r."estadoId" = 'EST-002' THEN '001-002-' || LPAD((ABS(HASHTEXT(r.id)) % 1000000000)::text, 9, '0') ELSE NULL END
+         ) as "numeroFactura",
+         COALESCE(f."identificacionCliente", u.identificacion, '9999999999999') as "facturaIdentificacion",
+         COALESCE(f."nombreRazonSocial", u."nombreCompleto", 'Consumidor Final') as "facturaRazonSocial",
+         COALESCE(f.direccion, ub.direccion_detallada, 'Quito, Ecuador') as "facturaDireccion",
+         COALESCE(f."fechaEmision", p."fechaPago", r."fechaCreacion") as "facturaFechaEmision"
        FROM reservas r
        JOIN estados_reserva er ON r."estadoId" = er.id
        JOIN espacios_rentables e ON r."espacioId" = e.id
        JOIN alojamientos a ON e."alojamientoId" = a.id
+       LEFT JOIN ubicaciones ub ON a."ubicacionId" = ub.id
+       LEFT JOIN ciudades ci ON ub."ciudadId" = ci.id
+       JOIN usuarios u ON r."usuarioId" = u.id
        LEFT JOIN contratos c ON c."reservaId" = r.id
        LEFT JOIN pagos p ON p."reservaId" = r.id
+       LEFT JOIN metodos_pago mp ON p."metodoPagoId" = mp.id
        LEFT JOIN facturas f ON f."pagoId" = p.id
        WHERE r."usuarioId" = $1
        ORDER BY r."fechaCreacion" DESC`,
@@ -886,18 +904,36 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
          e.nombre as "habitacionNombre", e."precioPorNoche", e.codigo as "habitacionCodigo",
          e."capacidadAdultos", e."capacidadNinos",
          a.id as "alojamientoId", a.nombre as "alojamientoNombre", a."imagenUrl", a.codigo as "alojamientoCodigo",
+         ub.direccion_detallada as "alojamientoDireccion",
+         ub.latitud::float8 as "alojamientoLatitud",
+         ub.longitud::float8 as "alojamientoLongitud",
+         ci.nombre as "alojamientoDestino",
          COALESCE(TO_CHAR(a."horaCheckIn", 'HH24:MI'), '14:00') as "horaCheckIn",
          COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut",
          u."nombreCompleto" as "clienteNombre", u.email as "clienteEmail", u.telefono as "clienteTelefono", u.identificacion as "clienteIdentificacion",
          c.terminos as "contratoTerminos", c.firmado as "contratoFirmado", c."fechaFirma" as "contratoFechaFirma",
-         p.id as "pagoId", p.estado as "estadoPago", p.monto as "pagoMonto"
+         p.id as "pagoId", p.estado as "estadoPago", p.monto as "pagoMonto",
+         COALESCE(mp.nombre, 'Tarjeta de Crédito / Débito') as "metodoPago",
+         f.id as "facturaId",
+         COALESCE(
+           f."numeroFactura",
+           CASE WHEN r."estadoId" = 'EST-002' THEN '001-002-' || LPAD((ABS(HASHTEXT(r.id)) % 1000000000)::text, 9, '0') ELSE NULL END
+         ) as "numeroFactura",
+         COALESCE(f."identificacionCliente", u.identificacion, '9999999999999') as "facturaIdentificacion",
+         COALESCE(f."nombreRazonSocial", u."nombreCompleto", 'Consumidor Final') as "facturaRazonSocial",
+         COALESCE(f.direccion, ub.direccion_detallada, 'Quito, Ecuador') as "facturaDireccion",
+         COALESCE(f."fechaEmision", p."fechaPago", r."fechaCreacion") as "facturaFechaEmision"
        FROM reservas r
        JOIN estados_reserva er ON r."estadoId" = er.id
        JOIN espacios_rentables e ON r."espacioId" = e.id
        JOIN alojamientos a ON e."alojamientoId" = a.id
+       LEFT JOIN ubicaciones ub ON a."ubicacionId" = ub.id
+       LEFT JOIN ciudades ci ON ub."ciudadId" = ci.id
        JOIN usuarios u ON r."usuarioId" = u.id
        LEFT JOIN contratos c ON c."reservaId" = r.id
-       LEFT JOIN pagos p ON p."reservaId" = r.id`;
+       LEFT JOIN pagos p ON p."reservaId" = r.id
+       LEFT JOIN metodos_pago mp ON p."metodoPagoId" = mp.id
+       LEFT JOIN facturas f ON f."pagoId" = p.id`;
 
     const key = String(orderIdOrReservaId || '');
     // 1) Búsqueda exacta por índice (ordenId UUID / id de reserva)
@@ -1513,6 +1549,22 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         ],
       );
 
+      // Sincronizar montos de la factura SRI asociada si ya existe
+      try {
+        await manager.query(
+          `UPDATE facturas f
+           SET subtotal = $1,
+               iva = $2,
+               "tasaMunicipal" = $3,
+               total = $4
+           FROM pagos p
+           WHERE f."pagoId" = p.id AND p."reservaId" = $5`,
+          [totals.subtotal, totals.iva, totals.tasaMunicipal, totals.total, r.id],
+        );
+      } catch (e: any) {
+        this.logger.warn(`[RECEPTION-FACTURA] ${e?.message}`);
+      }
+
       if (changesLog.length > 0) {
         try {
           await manager.query(
@@ -1931,18 +1983,35 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
          r."estadoId", er.nombre as "estadoNombre",
          e.id as "espacioId", e.nombre as "habitacionNombre", e."precioPorNoche",
          a.id as "alojamientoId", a.nombre as "alojamientoNombre", a."imagenUrl", a.codigo as "alojamientoCodigo",
+         ub.direccion_detallada as "alojamientoDireccion",
+         ub.latitud::float8 as "alojamientoLatitud",
+         ub.longitud::float8 as "alojamientoLongitud",
+         ci.nombre as "alojamientoDestino",
          COALESCE(TO_CHAR(a."horaCheckIn", 'HH24:MI'), '14:00') as "horaCheckIn",
          COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut",
+         u."nombreCompleto" as "clienteNombre", u.email as "clienteEmail", u.telefono as "clienteTelefono", u.identificacion as "clienteIdentificacion",
          c.firmado as "contratoFirmado",
          p.estado as "estadoPago", p.id as "pagoId",
-         f.id as "facturaId", f."numeroFactura"
+         COALESCE(mp.nombre, 'Tarjeta de Crédito / Débito') as "metodoPago",
+         f.id as "facturaId",
+         COALESCE(
+           f."numeroFactura",
+           CASE WHEN r."estadoId" = 'EST-002' THEN '001-002-' || LPAD((ABS(HASHTEXT(r.id)) % 1000000000)::text, 9, '0') ELSE NULL END
+         ) as "numeroFactura",
+         COALESCE(f."identificacionCliente", u.identificacion, '9999999999999') as "facturaIdentificacion",
+         COALESCE(f."nombreRazonSocial", u."nombreCompleto", 'Consumidor Final') as "facturaRazonSocial",
+         COALESCE(f.direccion, ub.direccion_detallada, 'Quito, Ecuador') as "facturaDireccion",
+         COALESCE(f."fechaEmision", p."fechaPago", r."fechaCreacion") as "facturaFechaEmision"
        FROM reservas r
        JOIN estados_reserva er ON r."estadoId" = er.id
        JOIN espacios_rentables e ON r."espacioId" = e.id
        JOIN alojamientos a ON e."alojamientoId" = a.id
+       LEFT JOIN ubicaciones ub ON a."ubicacionId" = ub.id
+       LEFT JOIN ciudades ci ON ub."ciudadId" = ci.id
        JOIN usuarios u ON r."usuarioId" = u.id
        LEFT JOIN contratos c ON c."reservaId" = r.id
        LEFT JOIN pagos p ON p."reservaId" = r.id
+       LEFT JOIN metodos_pago mp ON p."metodoPagoId" = mp.id
        LEFT JOIN facturas f ON f."pagoId" = p.id
        WHERE LOWER(TRIM(u.email)) = LOWER(TRIM($1))
        ORDER BY r."fechaCreacion" DESC`,

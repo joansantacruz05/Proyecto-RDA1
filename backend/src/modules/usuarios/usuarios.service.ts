@@ -40,7 +40,13 @@ export class UsuariosService {
     if (rol === Role.ADMIN || (typeof rol === 'string' && rol.toLowerCase().includes('admin'))) {
       rolId = 'ROL-003';
       rolNombre = 'Admin';
-    } else if (rol === Role.ANFITRION || (typeof rol === 'string' && rol.toLowerCase().includes('anfitr'))) {
+    } else if (
+      rol === Role.ANFITRION ||
+      (typeof rol === 'string' &&
+        (rol.toLowerCase().includes('anfitr') ||
+          rol.toLowerCase().includes('host') ||
+          rol.toLowerCase().includes('hotel')))
+    ) {
       rolId = 'ROL-001';
       rolNombre = 'Anfitrión';
     }
@@ -121,11 +127,92 @@ export class UsuariosService {
   // Listado para panel Admin (sin contraseñas)
   async findAll() {
     return await this.usuarioRepository.query(`
-      SELECT u.id, u."nombreCompleto" as nombre, u.email as correo, u.telefono, u.edad, u.direccion, u.pais, r.nombre as rol
+      SELECT u.id, u."nombreCompleto" as nombre, u.email as correo, u.telefono, u.edad, u.direccion, u.pais, u.identificacion, r.nombre as rol
       FROM usuarios u
       LEFT JOIN usuarios_roles ur ON u.id = ur."usuarioId"
       LEFT JOIN roles r ON ur."rolId" = r.id
       ORDER BY u."nombreCompleto" ASC
     `);
+  }
+
+  // Edición integral de usuario desde el panel Admin
+  async updateAdminUser(
+    userId: string,
+    data: {
+      nombre?: string;
+      correo?: string;
+      telefono?: string;
+      edad?: number;
+      rol?: string;
+      contrasena?: string;
+      identificacion?: string;
+    },
+  ) {
+    const existingRows = await this.usuarioRepository.query(
+      `SELECT id, "nombreCompleto" as nombre, email as correo, telefono, edad, identificacion FROM usuarios WHERE id = $1 LIMIT 1`,
+      [userId],
+    );
+    if (!existingRows || existingRows.length === 0) {
+      throw new NotFoundException('Usuario no encontrado.');
+    }
+    const existing = existingRows[0];
+
+    const nuevoNombre = data.nombre !== undefined && data.nombre.trim() ? data.nombre.trim() : existing.nombre;
+    const nuevoCorreo =
+      data.correo !== undefined && data.correo.trim()
+        ? data.correo.trim().toLowerCase()
+        : String(existing.correo || '').toLowerCase();
+    const nuevoTelefono = data.telefono !== undefined ? data.telefono.trim() || null : existing.telefono;
+    const nuevaEdad =
+      data.edad !== undefined && Number(data.edad) >= 18 && Number(data.edad) <= 120
+        ? Number(data.edad)
+        : existing.edad;
+    const nuevaIdentificacion =
+      data.identificacion !== undefined ? data.identificacion.trim() || null : existing.identificacion;
+
+    if (nuevoCorreo && nuevoCorreo !== String(existing.correo || '').toLowerCase()) {
+      const dup = await this.usuarioRepository.query(
+        `SELECT id FROM usuarios WHERE LOWER(email) = $1 AND id != $2 LIMIT 1`,
+        [nuevoCorreo, userId],
+      );
+      if (dup && dup.length > 0) {
+        throw new BadRequestException('El correo electrónico ya está en uso por otro usuario.');
+      }
+    }
+
+    if (data.contrasena && String(data.contrasena).trim().length >= 6) {
+      const hashedPassword = await bcryptjs.hash(String(data.contrasena).trim(), 10);
+      await this.usuarioRepository.query(
+        `UPDATE usuarios
+         SET "nombreCompleto" = $1, email = $2, telefono = $3, edad = $4, identificacion = $5, contrasena = $6
+         WHERE id = $7`,
+        [nuevoNombre, nuevoCorreo, nuevoTelefono, nuevaEdad, nuevaIdentificacion, hashedPassword, userId],
+      );
+    } else {
+      await this.usuarioRepository.query(
+        `UPDATE usuarios
+         SET "nombreCompleto" = $1, email = $2, telefono = $3, edad = $4, identificacion = $5
+         WHERE id = $6`,
+        [nuevoNombre, nuevoCorreo, nuevoTelefono, nuevaEdad, nuevaIdentificacion, userId],
+      );
+    }
+
+    if (data.rol !== undefined && String(data.rol).trim()) {
+      const rawRol = String(data.rol).toLowerCase().trim();
+      let rolId = 'ROL-002';
+      if (rawRol.includes('admin')) {
+        rolId = 'ROL-003';
+      } else if (rawRol.includes('anfitr') || rawRol.includes('host') || rawRol.includes('hotel')) {
+        rolId = 'ROL-001';
+      }
+
+      await this.usuarioRepository.query(`DELETE FROM usuarios_roles WHERE "usuarioId" = $1`, [userId]);
+      await this.usuarioRepository.query(
+        `INSERT INTO usuarios_roles ("usuarioId", "rolId") VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [userId, rolId],
+      );
+    }
+
+    return this.getProfile(userId);
   }
 }

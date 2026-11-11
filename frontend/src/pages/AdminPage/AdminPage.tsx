@@ -40,6 +40,8 @@ import { Modal } from '../../components/ui/Modal/Modal';
 import { formatUSD } from '../../components/ui/PriceDisplay/PriceDisplay';
 import { InteractiveMap } from '../../components/map/InteractiveMap';
 import { ReceptionModalMode, ReceptionStayModal } from '../../components/admin/ReceptionStayModal';
+import { InvoiceModal, InvoiceModalData } from '../../components/modals/InvoiceModal';
+import { ExtraCargoItem } from '../../api/types';
 import {
   formatHoraHHMM,
   getCityCenterCoords,
@@ -96,11 +98,28 @@ interface FacturaAdminItem {
   claveAcceso?: string;
   nombreRazonSocial?: string;
   identificacionCliente?: string;
+  direccion?: string;
+  subtotal?: number | string;
+  iva?: number | string;
+  tasaMunicipal?: number | string;
   total?: number | string;
   monto?: number | string;
   fechaEmision?: string;
   estado?: string;
+  estadoPago?: string;
   metodoPago?: string;
+  alojamientoNombre?: string;
+  alojamientoDireccion?: string;
+  alojamientoDestino?: string;
+  habitacionNombre?: string;
+  fechaEntrada?: string;
+  fechaSalida?: string;
+  huespedesReales?: number;
+  numeroPersonas?: number;
+  extrasCargos?: ExtraCargoItem[];
+  cargosAdicionalesTotal?: number | string;
+  ordenId?: string;
+  reservaId?: string;
 }
 
 interface CancelacionAdminItem {
@@ -365,6 +384,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
       queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
       queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
+      queryClient.invalidateQueries({ queryKey: ['misReservas'] });
+      queryClient.invalidateQueries({ queryKey: ['reservaDetail'] });
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : 'Error al guardar alojamiento', 'error');
     } finally {
@@ -452,8 +473,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     }
   };
 
-  // --- MODAL: CREAR NUEVO USUARIO ---
+  // --- MODAL: CREAR Y EDITAR USUARIO ---
   const [userModalOpen, setUserModalOpen] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [userForm, setUserForm] = useState({
     nombre: '',
@@ -464,16 +486,67 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     edad: 28,
   });
 
+  // --- MODAL: VER FACTURA SRI ---
+  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceModalData | null>(null);
+
+  const handleOpenCreateUser = () => {
+    setEditingUserId(null);
+    setUserForm({
+      nombre: '',
+      correo: '',
+      contrasena: 'Admin2026*',
+      rol: 'Admin',
+      telefono: '+593991234567',
+      edad: 28,
+    });
+    setUserModalOpen(true);
+  };
+
+  const handleOpenEditUser = (usr: UsuarioAdminItem) => {
+    setEditingUserId(usr.id);
+    const rolLower = String(usr.rol || '').toLowerCase();
+    const mappedRol = rolLower.includes('admin')
+      ? 'Admin'
+      : rolLower.includes('anfitr') || rolLower.includes('host') || rolLower.includes('hotel')
+        ? 'Anfitrión'
+        : 'Cliente';
+    setUserForm({
+      nombre: usr.nombre || '',
+      correo: usr.correo || '',
+      contrasena: '',
+      rol: mappedRol,
+      telefono: usr.telefono || '+593991234567',
+      edad: usr.edad && usr.edad >= 18 ? usr.edad : 28,
+    });
+    setUserModalOpen(true);
+  };
+
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsCreatingUser(true);
     try {
-      await api.post('/auth/register', userForm);
-      showToast(`Usuario ${userForm.correo} (${userForm.rol}) creado exitosamente`);
+      if (editingUserId) {
+        const updatePayload: Record<string, unknown> = {
+          nombre: userForm.nombre,
+          correo: userForm.correo,
+          rol: userForm.rol,
+          telefono: userForm.telefono,
+          edad: userForm.edad,
+        };
+        if (userForm.contrasena && userForm.contrasena.trim().length > 0) {
+          updatePayload.contrasena = userForm.contrasena.trim();
+        }
+        await api.patch(`/admin/usuarios/${editingUserId}`, updatePayload);
+        showToast(`Usuario ${userForm.nombre} (${userForm.rol}) actualizado exitosamente`);
+      } else {
+        await api.post('/auth/register', userForm);
+        showToast(`Usuario ${userForm.correo} (${userForm.rol}) creado exitosamente`);
+      }
       setUserModalOpen(false);
+      setEditingUserId(null);
       refetchUsuarios();
     } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : 'Error al registrar usuario', 'error');
+      showToast(err instanceof Error ? err.message : 'Error al guardar usuario', 'error');
     } finally {
       setIsCreatingUser(false);
     }
@@ -1192,7 +1265,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 Gestión de cuentas con roles administrativos, anfitriones y clientes de la plataforma.
               </p>
             </div>
-            <Button variant="gold" icon={<UserPlus size={16} />} onClick={() => setUserModalOpen(true)}>
+            <Button variant="gold" icon={<UserPlus size={16} />} onClick={handleOpenCreateUser}>
               Nuevo Usuario
             </Button>
           </div>
@@ -1206,13 +1279,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                   <th>Rol Asignado</th>
                   <th>Teléfono</th>
                   <th>Edad</th>
-                  <th>Fecha de Registro</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {usuarios.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '30px', color: '#64748B' }}>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: '#64748B' }}>
                       Cargando o no hay usuarios adicionales en la base de datos.
                     </td>
                   </tr>
@@ -1226,17 +1300,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                           variant={
                             usr.rol?.toLowerCase().includes('admin')
                               ? 'gold'
-                              : usr.rol?.toLowerCase().includes('host')
+                              : usr.rol?.toLowerCase().includes('host') || usr.rol?.toLowerCase().includes('anfitr')
                               ? 'info'
                               : 'neutral'
                           }
                         >
-                          {usr.rol}
+                          {usr.rol || 'Cliente'}
                         </Badge>
                       </td>
                       <td>{usr.telefono || 'N/A'}</td>
                       <td>{usr.edad ? `${usr.edad} años` : 'N/A'}</td>
                       <td>{usr.creadoEn ? new Date(usr.creadoEn).toLocaleDateString() : 'Activo'}</td>
+                      <td>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          icon={<Edit2 size={14} />}
+                          onClick={() => handleOpenEditUser(usr)}
+                        >
+                          Editar
+                        </Button>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -1268,15 +1352,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                   <th>Fecha Emisión</th>
                   <th>Cliente / Razón Social</th>
                   <th>Identificación (RUC/Cédula)</th>
+                  <th>Alojamiento</th>
                   <th>Método de Pago</th>
                   <th>Total Pagado</th>
                   <th>Estado Fiscal</th>
+                  <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {facturas.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: '#64748B' }}>
+                    <td colSpan={9} style={{ textAlign: 'center', padding: '30px', color: '#64748B' }}>
                       No se registran facturas emitidas todavía.
                     </td>
                   </tr>
@@ -1289,12 +1375,56 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                       <td>{fac.fechaEmision ? new Date(fac.fechaEmision).toLocaleDateString() : 'Hoy'}</td>
                       <td style={{ fontWeight: 600 }}>{fac.nombreRazonSocial || 'Consumidor Final'}</td>
                       <td>{fac.identificacionCliente || '9999999999999'}</td>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{fac.alojamientoNombre || 'Hospedaje LuxeStays'}</div>
+                        {fac.alojamientoDireccion && (
+                          <div style={{ fontSize: '11.5px', color: '#64748B' }}>{fac.alojamientoDireccion}</div>
+                        )}
+                      </td>
                       <td>{fac.metodoPago || 'Tarjeta / Transferencia'}</td>
                       <td style={{ fontWeight: 700, color: '#0F1E33' }}>
                         {formatUSD(Number(fac.total || fac.monto) || 0)}
                       </td>
                       <td>
                         <Badge variant="success">Autorizada SRI</Badge>
+                      </td>
+                      <td>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          icon={<FileText size={14} />}
+                          onClick={() => {
+                            const totalVal = Number(fac.total || fac.monto || 0);
+                            const subtotalVal = fac.subtotal !== undefined ? Number(fac.subtotal) : Number((totalVal / 1.18).toFixed(2));
+                            const ivaVal = fac.iva !== undefined ? Number(fac.iva) : Number((subtotalVal * 0.15).toFixed(2));
+                            const tasaVal = fac.tasaMunicipal !== undefined ? Number(fac.tasaMunicipal) : Math.max(0, Number((totalVal - subtotalVal - ivaVal).toFixed(2)));
+                            setSelectedInvoice({
+                              numeroFactura: fac.numeroFactura || fac.id,
+                              fechaEmision: fac.fechaEmision,
+                              razonSocial: fac.nombreRazonSocial || 'Consumidor Final',
+                              identificacion: fac.identificacionCliente || '9999999999999',
+                              direccionCliente: fac.direccion || fac.alojamientoDireccion || 'Quito, Ecuador',
+                              alojamientoNombre: fac.alojamientoNombre || 'Hospedaje LuxeStays',
+                              alojamientoDireccion: fac.alojamientoDireccion,
+                              alojamientoDestino: fac.alojamientoDestino,
+                              habitacionNombre: fac.habitacionNombre,
+                              fechaEntrada: fac.fechaEntrada,
+                              fechaSalida: fac.fechaSalida,
+                              huespedes: fac.huespedesReales ?? fac.numeroPersonas,
+                              metodoPago: fac.metodoPago || 'Tarjeta de Crédito / Débito',
+                              estadoPago: fac.estadoPago || 'Completado',
+                              subtotal: subtotalVal,
+                              iva: ivaVal,
+                              tasaMunicipal: tasaVal,
+                              total: totalVal,
+                              extrasCargos: fac.extrasCargos,
+                              cargosAdicionalesTotal: Number(fac.cargosAdicionalesTotal || 0),
+                              ordenId: fac.ordenId || fac.reservaId,
+                            });
+                          }}
+                        >
+                          Ver Factura
+                        </Button>
                       </td>
                     </tr>
                   ))
@@ -1912,12 +2042,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       </Modal>
 
       {/* ────────────────────────────────────────────────────────────
-          MODAL: CREAR NUEVO USUARIO
+          MODAL: CREAR O EDITAR USUARIO
       ────────────────────────────────────────────────────────────── */}
       <Modal
         isOpen={userModalOpen}
-        onClose={() => setUserModalOpen(false)}
-        title="Crear Nuevo Usuario"
+        onClose={() => {
+          setUserModalOpen(false);
+          setEditingUserId(null);
+        }}
+        title={editingUserId ? 'Editar Usuario' : 'Crear Nuevo Usuario'}
         size="md"
       >
         <form onSubmit={handleSaveUser}>
@@ -1947,14 +2080,20 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
             </div>
 
             <div>
-              <label className={styles.formLabel}>Contraseña Segura *</label>
+              <label className={styles.formLabel}>
+                {editingUserId ? 'Nueva Contraseña (opcional)' : 'Contraseña Segura *'}
+              </label>
               <input
                 type="password"
-                required
+                required={!editingUserId}
                 className={styles.formInput}
                 value={userForm.contrasena}
                 onChange={(e) => setUserForm({ ...userForm, contrasena: e.target.value })}
-                placeholder="Mínimo 8 caract., mayús., número y símbolo"
+                placeholder={
+                  editingUserId
+                    ? 'Dejar vacío para conservar la actual'
+                    : 'Mínimo 8 caract., mayús., número y símbolo'
+                }
               />
             </div>
 
@@ -1966,7 +2105,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 onChange={(e) => setUserForm({ ...userForm, rol: e.target.value })}
               >
                 <option value="Admin">Administrador (Acceso Total)</option>
-                <option value="Host">Anfitrión / Hotelero</option>
+                <option value="Anfitrión">Anfitrión / Hotelero</option>
                 <option value="Cliente">Cliente / Huésped</option>
               </select>
             </div>
@@ -1996,15 +2135,31 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '24px' }}>
-            <Button type="button" variant="ghost" onClick={() => setUserModalOpen(false)}>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setUserModalOpen(false);
+                setEditingUserId(null);
+              }}
+            >
               Cancelar
             </Button>
             <Button type="submit" variant="gold" loading={isCreatingUser}>
-              Registrar Usuario
+              {editingUserId ? 'Guardar Cambios' : 'Registrar Usuario'}
             </Button>
           </div>
         </form>
       </Modal>
+
+      {/* ────────────────────────────────────────────────────────────
+          MODAL: VER / IMPRIMIR FACTURA ELECTRÓNICA SRI
+      ────────────────────────────────────────────────────────────── */}
+      <InvoiceModal
+        isOpen={Boolean(selectedInvoice)}
+        onClose={() => setSelectedInvoice(null)}
+        invoice={selectedInvoice}
+      />
 
       {/* ────────────────────────────────────────────────────────────
           MODAL: CHECK-IN, GESTIÓN DE ESTANCIA Y CHECK-OUT

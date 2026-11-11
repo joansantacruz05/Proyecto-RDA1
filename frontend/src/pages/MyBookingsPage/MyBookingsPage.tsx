@@ -10,6 +10,8 @@ import {
   XCircle,
   Building,
   LogIn,
+  FileText,
+  MapPin,
 } from 'lucide-react';
 import { api, getAuthToken } from '../../api/client';
 import { ReservaUsuarioItem, UsuarioSession } from '../../api/types';
@@ -20,6 +22,7 @@ import { formatUSD } from '../../components/ui/PriceDisplay/PriceDisplay';
 import { ContractModal } from '../../components/modals/ContractModal';
 import { ReviewModal } from '../../components/modals/ReviewModal';
 import { CancelModal } from '../../components/modals/CancelModal';
+import { InvoiceModal, InvoiceModalData } from '../../components/modals/InvoiceModal';
 import { formatHoraHHMM } from '../../utils/ecuadorLocations';
 import styles from './MyBookingsPage.module.css';
 
@@ -40,6 +43,38 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
   const [contractReserva, setContractReserva] = useState<ReservaUsuarioItem | null>(null);
   const [reviewReserva, setReviewReserva] = useState<ReservaUsuarioItem | null>(null);
   const [cancelReserva, setCancelReserva] = useState<ReservaUsuarioItem | null>(null);
+  const [invoiceModalData, setInvoiceModalData] = useState<InvoiceModalData | null>(null);
+
+  const openInvoiceForReserva = (r: ReservaUsuarioItem) => {
+    const totalVal = Number(r.precioTotal || 0);
+    const subtotalVal = r.subtotal !== undefined ? Number(r.subtotal) : Number((totalVal / 1.18).toFixed(2));
+    const ivaVal = r.iva !== undefined ? Number(r.iva) : Number((subtotalVal * 0.15).toFixed(2));
+    const tasaVal = r.tasaMunicipal !== undefined ? Number(r.tasaMunicipal) : Math.max(0, Number((totalVal - subtotalVal - ivaVal).toFixed(2)));
+    setInvoiceModalData({
+      numeroFactura: r.numeroFactura || `001-002-${String(r.id || '').replace(/\D/g, '').padStart(9, '0').slice(-9)}`,
+      fechaEmision: r.facturaFechaEmision || r.fechaEntrada,
+      razonSocial: r.facturaRazonSocial || r.clienteNombre || currentUser?.nombre || 'Consumidor Final',
+      identificacion: r.facturaIdentificacion || r.clienteIdentificacion || '9999999999999',
+      clienteEmail: r.clienteEmail || currentUser?.correo,
+      direccionCliente: r.facturaDireccion || currentUser?.direccion || r.alojamientoDireccion || 'Quito, Ecuador',
+      alojamientoNombre: r.alojamientoNombre,
+      alojamientoDireccion: r.alojamientoDireccion,
+      alojamientoDestino: r.alojamientoDestino,
+      habitacionNombre: r.habitacionNombre,
+      fechaEntrada: r.fechaEntrada,
+      fechaSalida: r.fechaSalida,
+      huespedes: r.huespedesReales ?? r.numeroPersonas,
+      metodoPago: r.metodoPago || 'Tarjeta de Crédito / Débito',
+      estadoPago: r.estadoPago || 'Completado',
+      subtotal: subtotalVal,
+      iva: ivaVal,
+      tasaMunicipal: tasaVal,
+      total: totalVal,
+      extrasCargos: r.extrasCargos,
+      cargosAdicionalesTotal: Number(r.cargosAdicionalesTotal || 0),
+      ordenId: r.ordenId || r.id,
+    });
+  };
 
   // Consulta de reservas del usuario
   const {
@@ -218,6 +253,17 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
                       <span>{reserva.habitacionNombre}</span>
                     </div>
 
+                    {(reserva.alojamientoDireccion || reserva.alojamientoDestino) && (
+                      <div className={styles.metaItem}>
+                        <MapPin size={13} color="#14406B" />
+                        <span>
+                          {reserva.alojamientoDireccion
+                            ? `${reserva.alojamientoDireccion}${reserva.alojamientoDestino ? ` (${reserva.alojamientoDestino})` : ''}`
+                            : reserva.alojamientoDestino}
+                        </span>
+                      </div>
+                    )}
+
                     <div className={styles.metaItem}>
                       <Clock size={13} color="#14406B" />
                       <span>
@@ -227,7 +273,7 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
 
                     <div className={styles.metaItem}>
                       <User size={13} color="#14406B" />
-                      <span>{reserva.numeroPersonas} huésped{reserva.numeroPersonas > 1 ? 'es' : ''}</span>
+                      <span>{reserva.huespedesReales ?? reserva.numeroPersonas} huésped{(reserva.huespedesReales ?? reserva.numeroPersonas) > 1 ? 'es' : ''}</span>
                     </div>
 
                     <div className={styles.metaItem}>
@@ -265,6 +311,17 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
                     >
                       Ver Detalle
                     </Button>
+
+                    {!isCancelled && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        icon={<FileText size={14} />}
+                        onClick={() => openInvoiceForReserva(reserva)}
+                      >
+                        Ver Factura SRI
+                      </Button>
+                    )}
 
                     {canSign && (
                       <Button
@@ -341,6 +398,12 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
           onSuccess={handleModalSuccess}
         />
       )}
+
+      <InvoiceModal
+        isOpen={Boolean(invoiceModalData)}
+        onClose={() => setInvoiceModalData(null)}
+        invoice={invoiceModalData}
+      />
     </div>
   );
 };

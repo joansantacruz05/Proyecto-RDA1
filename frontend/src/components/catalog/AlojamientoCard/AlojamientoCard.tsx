@@ -111,6 +111,15 @@ export const AlojamientoCard: React.FC<AlojamientoCardProps> = ({
           <RatingStars rating={alojamiento.estrellas || 5} />
         </div>
 
+        {alojamiento.direccion && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#475569', marginBottom: '6px' }}>
+            <MapPin size={12} color="#14406B" style={{ flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {alojamiento.direccion}
+            </span>
+          </div>
+        )}
+
         <p className={styles.description}>
           {alojamiento.descripcion || 'Experiencia exclusiva de hospedaje con servicios premium y atención personalizada.'}
         </p>

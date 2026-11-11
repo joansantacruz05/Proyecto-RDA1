@@ -131,3 +131,4 @@ describe('receptionFolio utilities', () => {
     expect(items[1]).toMatchObject({ concepto: 'Parqueadero', cantidad: 1, precioUnitario: 0, subtotal: 0 });
   });
 });
+

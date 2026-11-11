@@ -58,3 +58,4 @@ export class ReceptionAdjustmentDto {
   @IsString()
   notasRecepcion?: string;
 }
+

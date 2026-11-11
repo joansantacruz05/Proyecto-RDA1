@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   FileText,
   Hotel,
+  MapPin,
 } from 'lucide-react';
 import { api, getAuthToken } from '../../api/client';
 import { ReservaUsuarioItem, UsuarioSession } from '../../api/types';
@@ -20,11 +21,13 @@ import { Badge } from '../../components/ui/Badge/Badge';
 import { Button } from '../../components/ui/Button/Button';
 import { Skeleton } from '../../components/ui/Skeleton/Skeleton';
 import { formatUSD } from '../../components/ui/PriceDisplay/PriceDisplay';
+import { InteractiveMap } from '../../components/map/InteractiveMap';
 import { ContractModal } from '../../components/modals/ContractModal';
 import { ReviewModal } from '../../components/modals/ReviewModal';
 import { CancelModal } from '../../components/modals/CancelModal';
+import { InvoiceModal } from '../../components/modals/InvoiceModal';
 import { descargarICS } from '../../utils/calendarIcs';
-import { formatHoraHHMM } from '../../utils/ecuadorLocations';
+import { formatHoraHHMM, resolveMapCoords } from '../../utils/ecuadorLocations';
 import styles from './BookingDetailPage.module.css';
 
 interface BookingDetailPageProps {
@@ -42,6 +45,7 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
   const [showContractModal, setShowContractModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
 
   const {
     data: reserva,
@@ -237,6 +241,18 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
             </div>
 
             <div className={styles.infoRow}>
+              <span className={styles.infoLabel}>Ubicación del Hotel</span>
+              <span className={styles.infoValue} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <MapPin size={14} color="#14406B" />
+                <span>
+                  {reserva.alojamientoDireccion
+                    ? `${reserva.alojamientoDireccion}${reserva.alojamientoDestino ? ` · ${reserva.alojamientoDestino}` : ''}`
+                    : reserva.alojamientoDestino || 'Ecuador'}
+                </span>
+              </span>
+            </div>
+
+            <div className={styles.infoRow}>
               <span className={styles.infoLabel}>Fecha de Entrada (Check-in)</span>
               <span className={styles.infoValue}>{checkinClean} (desde las {checkInHora})</span>
             </div>
@@ -249,7 +265,7 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
             <div className={styles.infoRow}>
               <span className={styles.infoLabel}>Número de Personas</span>
               <span className={styles.infoValue}>
-                {reserva.numeroPersonas} huésped{reserva.numeroPersonas > 1 ? 'es' : ''}
+                {reserva.huespedesReales ?? reserva.numeroPersonas} huésped{(reserva.huespedesReales ?? reserva.numeroPersonas) > 1 ? 'es' : ''}
               </span>
             </div>
 
@@ -263,51 +279,107 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
                 )}
               </span>
             </div>
+
+            {/* Mapa Interactivo con la ubicación actualizada del hotel */}
+            {(() => {
+              const mapCoords = resolveMapCoords(
+                reserva.alojamientoLatitud,
+                reserva.alojamientoLongitud,
+                reserva.alojamientoDestino || 'Quito',
+              );
+              return (
+                <div style={{ marginTop: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#0F1E33', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      <MapPin size={15} color="#14406B" /> Mapa de Ubicación del Alojamiento
+                    </span>
+                    <a
+                      href={`https://www.google.com/maps?q=${mapCoords.lat},${mapCoords.lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontSize: '12px', color: '#14406B', fontWeight: 600, textDecoration: 'underline' }}
+                    >
+                      Abrir en Google Maps
+                    </a>
+                  </div>
+                  <InteractiveMap
+                    lat={mapCoords.lat}
+                    lng={mapCoords.lng}
+                    zoom={mapCoords.zoom}
+                    height={210}
+                    editable={false}
+                    isApproximate={mapCoords.isApproximate}
+                    markerTitle={reserva.alojamientoNombre}
+                    markerSubtitle={reserva.alojamientoDireccion || `${reserva.alojamientoDestino || 'Ecuador'}`}
+                  />
+                </div>
+              );
+            })()}
           </div>
 
           {/* Tarjeta de Factura SRI */}
           <div className={styles.cardBox}>
-            <h2 className={styles.cardBoxTitle}>
-              <FileText size={20} color="#14406B" />
-              <span>Factura Electrónica y Desglose SRI</span>
-            </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
+              <h2 className={styles.cardBoxTitle} style={{ margin: 0 }}>
+                <FileText size={20} color="#14406B" />
+                <span>Factura Electrónica y Desglose SRI</span>
+              </h2>
+              <Button
+                variant="gold"
+                size="sm"
+                icon={<FileText size={15} />}
+                onClick={() => setShowInvoiceModal(true)}
+              >
+                Ver / Imprimir Factura SRI
+              </Button>
+            </div>
 
-            {reserva.numeroFactura ? (
-              <>
-                <div className={styles.infoRow}>
-                  <span className={styles.infoLabel}>N° de Autorización SRI</span>
-                  <span className={styles.infoValue}>{reserva.numeroFactura}</span>
-                </div>
+            <div className={styles.infoRow}>
+              <span className={styles.infoLabel}>N° de Factura / Autorización SRI</span>
+              <span className={styles.infoValue} style={{ fontFamily: 'monospace', fontWeight: 700 }}>
+                {reserva.numeroFactura || `001-002-${String(reserva.id || '').replace(/\D/g, '').padStart(9, '0').slice(-9)}`}
+              </span>
+            </div>
 
-                <div className={styles.infoRow}>
-                  <span className={styles.infoLabel}>Subtotal Hospedaje</span>
-                  <span className={styles.infoValue}>{formatUSD(Number(reserva.subtotal || reserva.precioTotal))}</span>
-                </div>
+            <div className={styles.infoRow}>
+              <span className={styles.infoLabel}>Cliente / Razón Social</span>
+              <span className={styles.infoValue}>
+                {reserva.facturaRazonSocial || reserva.clienteNombre || currentUser.nombre} ({reserva.facturaIdentificacion || reserva.clienteIdentificacion || '9999999999999'})
+              </span>
+            </div>
 
-                <div className={styles.infoRow}>
-                  <span className={styles.infoLabel}>IVA Ecuador (15%)</span>
-                  <span className={styles.infoValue}>{formatUSD(Number(reserva.iva || 0))}</span>
-                </div>
+            <div className={styles.infoRow}>
+              <span className={styles.infoLabel}>Subtotal Gravado (Hospedaje y Consumos)</span>
+              <span className={styles.infoValue}>{formatUSD(Number(reserva.subtotal ?? Number(reserva.precioTotal) / 1.18))}</span>
+            </div>
 
-                <div className={styles.infoRow}>
-                  <span className={styles.infoLabel}>Tasa Municipal de Turismo</span>
-                  <span className={styles.infoValue}>{formatUSD(Number(reserva.tasaMunicipal || 0))}</span>
-                </div>
-
-                <div className={styles.infoRow} style={{ borderTop: '1px dashed var(--color-border)', paddingTop: '10px', marginTop: '6px' }}>
-                  <span className={styles.infoLabel} style={{ fontWeight: 700, color: 'var(--color-midnight-blue)' }}>
-                    Total Pagado
-                  </span>
-                  <span className={styles.infoValue} style={{ fontSize: 'var(--font-size-lg)', color: 'var(--color-pacific-blue)' }}>
-                    {formatUSD(Number(reserva.precioTotal))} USD
-                  </span>
-                </div>
-              </>
-            ) : (
-              <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}>
-                Esta reserva tiene un pago de {formatUSD(Number(reserva.precioTotal))} USD registrado.
-              </p>
+            {Number(reserva.cargosAdicionalesTotal || 0) > 0 && (
+              <div className={styles.infoRow}>
+                <span className={styles.infoLabel}>Cargos Extras en Recepción (incluidos en subtotal)</span>
+                <span className={styles.infoValue} style={{ color: '#B45309', fontWeight: 600 }}>
+                  +{formatUSD(Number(reserva.cargosAdicionalesTotal))}
+                </span>
+              </div>
             )}
+
+            <div className={styles.infoRow}>
+              <span className={styles.infoLabel}>IVA Ecuador (15%)</span>
+              <span className={styles.infoValue}>{formatUSD(Number(reserva.iva || 0))}</span>
+            </div>
+
+            <div className={styles.infoRow}>
+              <span className={styles.infoLabel}>Tasa Municipal de Turismo</span>
+              <span className={styles.infoValue}>{formatUSD(Number(reserva.tasaMunicipal || 0))}</span>
+            </div>
+
+            <div className={styles.infoRow} style={{ borderTop: '1px dashed var(--color-border)', paddingTop: '10px', marginTop: '6px' }}>
+              <span className={styles.infoLabel} style={{ fontWeight: 700, color: 'var(--color-midnight-blue)' }}>
+                Total Facturado
+              </span>
+              <span className={styles.infoValue} style={{ fontSize: 'var(--font-size-lg)', color: 'var(--color-pacific-blue)', fontWeight: 800 }}>
+                {formatUSD(Number(reserva.precioTotal))} USD
+              </span>
+            </div>
           </div>
         </div>
 
@@ -316,9 +388,18 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
           <div className={styles.cardBox}>
             <h3 className={styles.cardBoxTitle}>Acciones de la Reserva</h3>
 
+            <Button
+              variant="gold"
+              icon={<FileText size={16} />}
+              fullWidth
+              onClick={() => setShowInvoiceModal(true)}
+            >
+              Ver Factura Electrónica SRI
+            </Button>
+
             {!reserva.contratoFirmado && !isCancelled && (
               <Button
-                variant="gold"
+                variant="primary"
                 icon={<FileCheck size={16} />}
                 fullWidth
                 onClick={() => setShowContractModal(true)}
@@ -405,6 +486,35 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
           onSuccess={handleModalSuccess}
         />
       )}
+
+      <InvoiceModal
+        isOpen={showInvoiceModal}
+        onClose={() => setShowInvoiceModal(false)}
+        invoice={{
+          numeroFactura: reserva.numeroFactura || `001-002-${String(reserva.id || '').replace(/\D/g, '').padStart(9, '0').slice(-9)}`,
+          fechaEmision: reserva.facturaFechaEmision || reserva.fechaEntrada,
+          razonSocial: reserva.facturaRazonSocial || reserva.clienteNombre || currentUser.nombre,
+          identificacion: reserva.facturaIdentificacion || reserva.clienteIdentificacion || '9999999999999',
+          clienteEmail: reserva.clienteEmail || currentUser.correo,
+          direccionCliente: reserva.facturaDireccion || currentUser.direccion || reserva.alojamientoDireccion || 'Quito, Ecuador',
+          alojamientoNombre: reserva.alojamientoNombre,
+          alojamientoDireccion: reserva.alojamientoDireccion,
+          alojamientoDestino: reserva.alojamientoDestino,
+          habitacionNombre: reserva.habitacionNombre,
+          fechaEntrada: reserva.fechaEntrada,
+          fechaSalida: reserva.fechaSalida,
+          huespedes: reserva.huespedesReales ?? reserva.numeroPersonas,
+          metodoPago: reserva.metodoPago || 'Tarjeta de Crédito / Débito',
+          estadoPago: reserva.estadoPago || 'Completado',
+          subtotal: Number(reserva.subtotal ?? Number(reserva.precioTotal) / 1.18),
+          iva: Number(reserva.iva ?? 0),
+          tasaMunicipal: Number(reserva.tasaMunicipal ?? 0),
+          total: Number(reserva.precioTotal || 0),
+          extrasCargos: reserva.extrasCargos,
+          cargosAdicionalesTotal: Number(reserva.cargosAdicionalesTotal || 0),
+          ordenId: reserva.ordenId || reserva.id,
+        }}
+      />
     </div>
   );
 };

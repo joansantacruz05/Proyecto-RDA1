@@ -44,3 +44,4 @@ describe('Utilidades de ubicación GPS y horarios Ecuador', () => {
     expect(formatHoraHHMM('', '11:00')).toBe('11:00');
   });
 });
+
