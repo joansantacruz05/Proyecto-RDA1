@@ -4,6 +4,7 @@ import {
   isAlojamientoInCleaning,
   liberarAlojamiento,
   markAlojamientoReserved,
+  markReservaCanceladaLocal,
   setAlojamientoEnLimpieza,
 } from './accommodationStatus';
 
@@ -101,6 +102,36 @@ describe('accommodationStatus', () => {
       ],
     });
     expect(reservedAfterClean).toBe(false);
+  });
+
+  it('libera la marca local cuando el usuario cancela su reserva reciente', () => {
+    markAlojamientoReserved({
+      id: 'RES-CANCEL-1',
+      ordenId: 'ORD-CANCEL-1',
+      alojamientoId: 'ALO-002',
+      alojamientoNombre: 'Villa Colonial Río Tomebamba',
+      habitacionNombre: 'Suite',
+    });
+
+    expect(
+      checkIsAlojamientoReserved({
+        alojamientoId: 'ALO-002',
+        alojamientoNombre: 'Villa Colonial Río Tomebamba',
+        estado: 'Activo',
+        habitacionesDisponibles: 2,
+      }),
+    ).toBe(true);
+
+    markReservaCanceladaLocal('RES-CANCEL-1', 'Villa Colonial Río Tomebamba');
+
+    expect(
+      checkIsAlojamientoReserved({
+        alojamientoId: 'ALO-002',
+        alojamientoNombre: 'Villa Colonial Río Tomebamba',
+        estado: 'Activo',
+        habitacionesDisponibles: 2,
+      }),
+    ).toBe(false);
   });
 });
 

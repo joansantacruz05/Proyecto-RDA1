@@ -182,6 +182,27 @@ export function markAlojamientoReserved(reserva: ReservaItemLike): void {
   }
 }
 
+export function markReservaCanceladaLocal(
+  reservaId?: string | null | undefined,
+  hotelNombre?: string | null | undefined,
+): void {
+  try {
+    const targetId = String(reservaId ?? '').toLowerCase().trim();
+    const targetHotel = String(hotelNombre ?? '').toLowerCase().trim();
+    const filtered = getReservadosLocales().filter((r) => {
+      const rId = String(r.id ?? r.reservaId ?? '').toLowerCase().trim();
+      const ordId = String(r.ordenId ?? '').toLowerCase().trim();
+      const rHotel = String(r.alojamientoNombre ?? '').toLowerCase().trim();
+      if (targetId && (rId === targetId || ordId === targetId)) return false;
+      if (!targetId && targetHotel && rHotel && rHotel === targetHotel) return false;
+      return true;
+    });
+    localStorage.setItem(KEY_RESERVADOS_LOCAL, JSON.stringify(filtered));
+  } catch (e) {
+    console.error('Error removiendo reserva cancelada local:', e);
+  }
+}
+
 /**
  * Determina si un alojamiento está reservado activamente cruzando:
  * 1. La respuesta de la API (/reservas de Azure)

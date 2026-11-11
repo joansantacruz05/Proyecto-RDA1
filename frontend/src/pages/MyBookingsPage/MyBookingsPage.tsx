@@ -135,6 +135,9 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
   const handleModalSuccess = () => {
     refetch();
     queryClient.invalidateQueries({ queryKey: ['misReservas'] });
+    queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
+    queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
+    queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
   };
 
   return (

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../components/ui/Button/Button';
 import { Input } from '../../components/ui/Input/Input';
-import { api } from '../../api/client';
+import { api, generateUuidV4 } from '../../api/client';
 import {
   MetodoPagoItem,
   OrderCreateResponse,
@@ -94,15 +94,7 @@ export const Step2Payment: React.FC<Step2PaymentProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Idempotency Key generada con UUID v4 persistida para reintentos (RFC4122)
-  const idempotencyKeyRef = useRef<string>(
-    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-          const r = (Math.random() * 16) | 0;
-          const v = c === 'x' ? r : (r & 0x3) | 0x8;
-          return v.toString(16);
-        }),
-  );
+  const idempotencyKeyRef = useRef<string>(generateUuidV4());
 
   const brand = detectCardBrand(cardNumber);
 

@@ -145,6 +145,9 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
   const handleModalSuccess = () => {
     refetch();
     queryClient.invalidateQueries({ queryKey: ['misReservas'] });
+    queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
+    queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
+    queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
   };
 
   return (

@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { AlertTriangle, XCircle, CheckCircle, Clock } from 'lucide-react';
 import { Modal } from '../ui/Modal/Modal';
 import { Button } from '../ui/Button/Button';
 import { Textarea } from '../ui/Textarea/Textarea';
-import { api } from '../../api/client';
+import { api, generateUuidV4 } from '../../api/client';
 import { formatUSD } from '../ui/PriceDisplay/PriceDisplay';
 import { ProblemDetailsException } from '../../api/types';
+import { markReservaCanceladaLocal } from '../../utils/accommodationStatus';
 import styles from './Modals.module.css';
 
 interface CancelModalProps {
@@ -32,6 +33,19 @@ export const CancelModal: React.FC<CancelModalProps> = ({
   const [motivo, setMotivo] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const idempotencyKeyRef = useRef<string>(generateUuidV4());
+
+  useEffect(() => {
+    if (isOpen) {
+      setError(null);
+      setMotivo('');
+      idempotencyKeyRef.current = generateUuidV4();
+    }
+  }, [isOpen, reservaId]);
+
+  useEffect(() => {
+    idempotencyKeyRef.current = generateUuidV4();
+  }, [motivo]);
 
   const inHora = (horaCheckIn || '14:00').slice(0, 5);
   // Cálculo del tramo de penalidad según la hora de check-in del alojamiento (hora de Guayaquil)
@@ -60,9 +74,18 @@ export const CancelModal: React.FC<CancelModalProps> = ({
     try {
       setLoading(true);
       setError(null);
-      await api.post(`/reservas/${reservaId}/cancelar`, {
-        motivo: motivo.trim() || 'Cancelación solicitada por el usuario en el portal',
-      });
+      await api.post(
+        `/reservas/${reservaId}/cancelar`,
+        {
+          motivo: motivo.trim() || 'Cancelación solicitada por el usuario en el portal',
+        },
+        {
+          headers: {
+            'Idempotency-Key': idempotencyKeyRef.current,
+          },
+        },
+      );
+      markReservaCanceladaLocal(reservaId, hotelNombre);
       onSuccess();
       onClose();
     } catch (err: unknown) {

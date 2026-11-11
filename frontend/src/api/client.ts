@@ -45,6 +45,17 @@ export function removeAuthToken(): void {
   }
 }
 
+export function generateUuidV4(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: BodyInit | null | undefined;
   params?: Record<string, string | number | boolean | undefined> | undefined;
@@ -77,6 +88,15 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
   }
 
   requestHeaders.set('Accept', 'application/json, application/problem+json');
+
+  const method = String(restOptions.method || 'GET').toUpperCase();
+  const isMutating = method === 'POST' || method === 'PUT' || method === 'PATCH';
+  const requiresIdempotency =
+    isMutating &&
+    /(\/orders\/(create|[^/]+\/(modify|cancel))|\/reservas\/[^/]+\/cancelar?)(\?|$)/i.test(urlPath);
+  if (requiresIdempotency && !requestHeaders.has('Idempotency-Key')) {
+    requestHeaders.set('Idempotency-Key', generateUuidV4());
+  }
 
   const token = getAuthToken();
   if (token && !requestHeaders.has('Authorization')) {
