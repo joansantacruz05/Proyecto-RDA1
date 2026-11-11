@@ -340,6 +340,49 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     }
   };
 
+  const handleChangeEstadoAlojamiento = async (aloj: AlojamientoAdmin, nuevoEstado: string) => {
+    if (nuevoEstado === 'Activo') {
+      const overrides = getEstadosOverride();
+      const prevEstado =
+        aloj.estado === 'En Limpieza' || overrides[aloj.id] === 'En Limpieza'
+          ? 'En Limpieza'
+          : overrides[aloj.id] || aloj.estado || 'Activo';
+      if (prevEstado === 'En Limpieza') {
+        await handleMarkCleanAndOnline(aloj.id, aloj.nombre);
+        return;
+      }
+      liberarAlojamiento(aloj.id, aloj.nombre);
+      setAdminAlojamientoEstado(aloj.id, 'Activo');
+    } else if (nuevoEstado === 'En Limpieza') {
+      setAlojamientoEnLimpieza(aloj.id, aloj.nombre);
+    } else {
+      setAdminAlojamientoEstado(aloj.id, nuevoEstado);
+    }
+
+    try {
+      await api.patch(`/admin/alojamientos/${aloj.id}`, {
+        estado: nuevoEstado,
+        liberarReservas: nuevoEstado === 'Activo',
+      });
+    } catch {
+      // Continuar con persistencia local
+    }
+
+    const msgMap: Record<string, string> = {
+      Activo: `"${aloj.nombre}" ahora está EN LÍNEA y disponible en el catálogo.`,
+      'En Limpieza': `"${aloj.nombre}" pasó a estado 🧹 En Limpieza (no reservable hasta confirmar limpieza).`,
+      Inactivo: `"${aloj.nombre}" ha sido pausado y ocultado del catálogo.`,
+      'En Mantenimiento': `"${aloj.nombre}" se marcó en revisión / mantenimiento.`,
+    };
+    showToast(msgMap[nuevoEstado] || `Estado de "${aloj.nombre}" actualizado a ${nuevoEstado}.`);
+
+    await Promise.all([refetchAlojamientos(), refetchReservas()]);
+    queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
+    queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
+    queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
+    queryClient.invalidateQueries({ queryKey: ['adminDashboardStats'] });
+  };
+
   const handleToggleEstadoAlojamiento = async (aloj: AlojamientoAdmin) => {
     const currentOverride = getEstadosOverride()[aloj.id];
     const currentEstado =
@@ -353,30 +396,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     }
 
     const nuevoEstado = currentEstado === 'Activo' ? 'Inactivo' : 'Activo';
-
-    setAdminAlojamientoEstado(aloj.id, nuevoEstado);
-    if (nuevoEstado === 'Activo') {
-      liberarAlojamiento(aloj.id, aloj.nombre);
-    }
-
-    try {
-      await api.patch(`/admin/alojamientos/${aloj.id}`, {
-        estado: nuevoEstado,
-        liberarReservas: nuevoEstado === 'Activo',
-      });
-    } catch {
-      // Continuar con persistencia local
-    }
-
-    showToast(
-      nuevoEstado === 'Activo'
-        ? `"${aloj.nombre}" ahora está EN LÍNEA y visible en el catálogo principal.`
-        : `"${aloj.nombre}" ha sido pausado y ocultado del catálogo.`
-    );
-    refetchAlojamientos();
-    queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
-    queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
-    queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
+    await handleChangeEstadoAlojamiento(aloj, nuevoEstado);
   };
 
   const handleLiberarAlojamiento = async (aloj: AlojamientoAdmin) => {
@@ -723,6 +743,69 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     });
   }, [reservas, searchReservaQuery, receptionFilter]);
 
+  // Buscador y filtro operativo de alojamientos (incluyendo estado En Limpieza)
+  const [alojamientoFilter, setAlojamientoFilter] = useState<
+    'todos' | 'activo' | 'limpieza' | 'reservado' | 'inactivo'
+  >('todos');
+  const [searchAlojamientoQuery, setSearchAlojamientoQuery] = useState('');
+
+  const getAlojamientoEstadoInfo = (aloj: AlojamientoAdmin) => {
+    const overrides = getEstadosOverride();
+    const currentOverride =
+      overrides[aloj.id] || overrides[aloj.nombre?.toLowerCase().trim() || ''];
+    const effEstado =
+      aloj.estado === 'En Limpieza' || currentOverride === 'En Limpieza'
+        ? 'En Limpieza'
+        : currentOverride || aloj.estado || 'Activo';
+    const isCleaningState = effEstado === 'En Limpieza';
+    const isPausedOrMaint = effEstado === 'Inactivo' || effEstado === 'En Mantenimiento';
+    const isReservedNow =
+      !isCleaningState &&
+      !isPausedOrMaint &&
+      checkIsAlojamientoReserved({
+        alojamientoId: aloj.id,
+        alojamientoNombre: aloj.nombre,
+        activeReservas: reservas,
+      });
+    return { effEstado, isCleaningState, isPausedOrMaint, isReservedNow };
+  };
+
+  const alojamientoStats = (() => {
+    let enLinea = 0;
+    let enLimpieza = 0;
+    let reservados = 0;
+    let pausados = 0;
+    for (const a of alojamientos) {
+      const { isCleaningState, isPausedOrMaint, isReservedNow } = getAlojamientoEstadoInfo(a);
+      if (isCleaningState) enLimpieza += 1;
+      else if (isPausedOrMaint) pausados += 1;
+      else if (isReservedNow) reservados += 1;
+      else enLinea += 1;
+    }
+    return { enLinea, enLimpieza, reservados, pausados };
+  })();
+
+  const filteredAlojamientos = alojamientos.filter((aloj) => {
+    const { isCleaningState, isPausedOrMaint, isReservedNow } = getAlojamientoEstadoInfo(aloj);
+    if (alojamientoFilter === 'limpieza' && !isCleaningState) return false;
+    if (alojamientoFilter === 'inactivo' && !isPausedOrMaint) return false;
+    if (alojamientoFilter === 'reservado' && !isReservedNow) return false;
+    if (alojamientoFilter === 'activo' && (isCleaningState || isPausedOrMaint || isReservedNow)) {
+      return false;
+    }
+    const q = searchAlojamientoQuery.trim().toLowerCase();
+    if (!q) return true;
+    const destName =
+      typeof aloj.destino === 'string'
+        ? aloj.destino
+        : (aloj.destino as { nombre?: string } | undefined)?.nombre || '';
+    return (
+      aloj.id?.toLowerCase().includes(q) ||
+      aloj.nombre?.toLowerCase().includes(q) ||
+      destName.toLowerCase().includes(q)
+    );
+  });
+
   // Si no está autenticado o no es admin
   if (!token || !currentUser) {
     return (
@@ -755,7 +838,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
   }
 
   return (
-    <div className={`container ${styles.adminPageContainer}`}>
+    <div className={styles.adminPageContainer}>
       {/* Encabezado Principal */}
       <div className={styles.adminHeader}>
         <div>
@@ -868,12 +951,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
               </div>
             </div>
 
-            <div className={styles.statCard}>
+            <div
+              className={styles.statCard}
+              style={{ cursor: 'pointer' }}
+              onClick={() => {
+                setActiveTab('alojamientos');
+                setAlojamientoFilter('limpieza');
+              }}
+              title="Ver alojamientos en estado de limpieza"
+            >
               <div>
                 <div className={styles.statLabel}>Alojamientos en Limpieza</div>
                 <div className={styles.statValue}>
-                  {stats?.alojamientos_en_limpieza ??
-                    alojamientos.filter((a) => a.estado === 'En Limpieza').length}
+                  {alojamientoStats.enLimpieza || stats?.alojamientos_en_limpieza || 0}
                 </div>
               </div>
               <div className={styles.statIconBox} style={{ background: 'rgba(245, 158, 11, 0.14)', color: '#B45309' }}>
@@ -936,7 +1026,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
             <div>
               <h2 className={styles.cardTitle}>Catálogo de Alojamientos ({alojamientos.length})</h2>
               <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748B' }}>
-                Administra propiedades, fotos, precios por noche, capacidad de huéspedes y habitaciones individuales.
+                Administra propiedades, habitaciones físicas, camas, precios y estado operativo (En Línea / En Limpieza / Pausado).
               </p>
             </div>
             <Button variant="gold" icon={<Plus size={16} />} onClick={handleOpenCreateAlojamiento}>
@@ -944,18 +1034,65 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
             </Button>
           </div>
 
+          <div className={styles.filterBarRow}>
+            <div className={styles.filterPills}>
+              <button
+                type="button"
+                className={`${styles.filterPill} ${alojamientoFilter === 'todos' ? styles.filterPillActive : ''}`}
+                onClick={() => setAlojamientoFilter('todos')}
+              >
+                Todos ({alojamientos.length})
+              </button>
+              <button
+                type="button"
+                className={`${styles.filterPill} ${alojamientoFilter === 'activo' ? styles.filterPillActive : ''}`}
+                onClick={() => setAlojamientoFilter('activo')}
+              >
+                🟢 En Línea ({alojamientoStats.enLinea})
+              </button>
+              <button
+                type="button"
+                className={`${styles.filterPill} ${alojamientoFilter === 'limpieza' ? styles.filterPillActive : ''}`}
+                onClick={() => setAlojamientoFilter('limpieza')}
+              >
+                🧹 En Limpieza ({alojamientoStats.enLimpieza})
+              </button>
+              <button
+                type="button"
+                className={`${styles.filterPill} ${alojamientoFilter === 'reservado' ? styles.filterPillActive : ''}`}
+                onClick={() => setAlojamientoFilter('reservado')}
+              >
+                🟡 Reservados ({alojamientoStats.reservados})
+              </button>
+              <button
+                type="button"
+                className={`${styles.filterPill} ${alojamientoFilter === 'inactivo' ? styles.filterPillActive : ''}`}
+                onClick={() => setAlojamientoFilter('inactivo')}
+              >
+                🔴 Pausados / Mant. ({alojamientoStats.pausados})
+              </button>
+            </div>
+
+            <div className={styles.searchBox}>
+              <Search size={16} color="#64748B" />
+              <input
+                type="text"
+                placeholder="Buscar por código (ALO-001), nombre o ciudad..."
+                className={styles.searchInput}
+                value={searchAlojamientoQuery}
+                onChange={(e) => setSearchAlojamientoQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
           <div className={styles.tableWrapper}>
             <table className={styles.adminTable}>
               <thead>
                 <tr>
-                  <th>Foto</th>
-                  <th>ID</th>
-                  <th>Nombre</th>
-                  <th>Destino</th>
-                  <th>Precio / Noche</th>
-                  <th>Capacidad</th>
-                  <th>Habs · Camas · Stock</th>
-                  <th>Piscina</th>
+                  <th>Alojamiento</th>
+                  <th>Destino / Horario</th>
+                  <th>Precio</th>
+                  <th>Capacidad · Habs · Camas</th>
                   <th>Estado</th>
                   <th style={{ textAlign: 'right' }}>Acciones</th>
                 </tr>
@@ -963,87 +1100,69 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
               <tbody>
                 {loadingAlojamientos ? (
                   <tr>
-                    <td colSpan={10} style={{ textAlign: 'center', padding: '30px' }}>Cargando alojamientos...</td>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '30px' }}>Cargando alojamientos...</td>
                   </tr>
-                ) : alojamientos.length === 0 ? (
+                ) : filteredAlojamientos.length === 0 ? (
                   <tr>
-                    <td colSpan={10} style={{ textAlign: 'center', padding: '30px', color: '#64748B' }}>
-                      No hay alojamientos registrados. Crea uno con el botón superior.
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '30px', color: '#64748B' }}>
+                      No hay alojamientos que coincidan con el filtro seleccionado.
                     </td>
                   </tr>
                 ) : (
-                  alojamientos.map((aloj) => {
-                    const currentOverride = getEstadosOverride()[aloj.id];
-                    const effEstado =
-                      aloj.estado === 'En Limpieza' || currentOverride === 'En Limpieza'
-                        ? 'En Limpieza'
-                        : currentOverride || aloj.estado || 'Activo';
-                    const isCleaningState = effEstado === 'En Limpieza';
-                    const isReservedNow = checkIsAlojamientoReserved({
-                      alojamientoId: aloj.id,
-                      alojamientoNombre: aloj.nombre,
-                      activeReservas: reservas,
-                    });
+                  filteredAlojamientos.map((aloj) => {
+                    const { effEstado, isCleaningState, isReservedNow } = getAlojamientoEstadoInfo(aloj);
 
                     return (
                       <tr key={aloj.id}>
                         <td>
-                          <img
-                            src={aloj.imagenUrl || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=80'}
-                            alt={aloj.nombre}
-                            className={styles.hotelThumb}
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src =
-                                'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=80';
-                            }}
-                          />
+                          <div className={styles.propertyCell}>
+                            <img
+                              src={aloj.imagenUrl || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=80'}
+                              alt={aloj.nombre}
+                              className={styles.hotelThumb}
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src =
+                                  'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=80';
+                              }}
+                            />
+                            <div>
+                              <div style={{ fontWeight: 700, color: '#0F1E33', lineHeight: 1.25 }}>{aloj.nombre}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', flexWrap: 'wrap' }}>
+                                <span style={{ fontFamily: 'monospace', fontSize: '11.5px', fontWeight: 700, color: '#64748B' }}>
+                                  {aloj.id}
+                                </span>
+                                {aloj.tienePiscina && (
+                                  <Badge variant="info" icon={<Waves size={11} />}>Piscina</Badge>
+                                )}
+                              </div>
+                            </div>
+                          </div>
                         </td>
-                        <td style={{ fontWeight: 600, color: '#64748B' }}>{aloj.id}</td>
-                        <td style={{ fontWeight: 700, color: '#0F1E33' }}>{aloj.nombre}</td>
                         <td>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
                             <MapPin size={13} color="#C9A227" />
                             {typeof aloj.destino === 'string'
                               ? aloj.destino
                               : (aloj.destino as { nombre?: string } | undefined)?.nombre || 'Ecuador'}
                           </span>
-                          <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                          <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '3px', whiteSpace: 'nowrap' }}>
                             In {formatHoraHHMM(aloj.horaCheckIn, '14:00')} · Out {formatHoraHHMM(aloj.horaCheckOut, '11:00')}
                           </div>
                         </td>
-                        <td style={{ fontWeight: 700, color: '#14406B' }}>
+                        <td style={{ fontWeight: 700, color: '#14406B', whiteSpace: 'nowrap' }}>
                           {formatUSD(Number(aloj.precioPorNoche) || 95)}
-                        </td>
-                        <td>
-                          {aloj.capacidadAdultos || 2} adultos · {aloj.capacidadNinos || 0} niños
+                          <div style={{ fontSize: '11px', fontWeight: 500, color: '#64748B' }}>/ noche</div>
                         </td>
                         <td>
                           <div style={{ fontWeight: 700, color: '#0F1E33' }}>
                             {aloj.numHabitaciones || 1} hab{(aloj.numHabitaciones || 1) === 1 ? '' : 's'}. · {aloj.numCamas || 1} cama{(aloj.numCamas || 1) === 1 ? '' : 's'}
                           </div>
-                          <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
-                            Cupos disp: {isCleaningState || isReservedNow ? 0 : (aloj.habitaciones_disponibles ?? aloj.habitaciones ?? 1)}
+                          <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '2px' }}>
+                            {aloj.capacidadAdultos || 2} ad. · {aloj.capacidadNinos || 0} niñ. · Stock: {isCleaningState || isReservedNow ? 0 : (aloj.habitaciones_disponibles ?? aloj.habitaciones ?? 1)}
                           </div>
                         </td>
                         <td>
-                          {aloj.tienePiscina ? (
-                            <Badge variant="info" icon={<Waves size={12} />}>Sí</Badge>
-                          ) : (
-                            <span style={{ color: '#94A3B8' }}>No</span>
-                          )}
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleEstadoAlojamiento(aloj)}
-                            title={isCleaningState ? 'Confirmar limpieza completada y poner en línea' : 'Haga clic para alternar entre En Línea y Pausado'}
-                            style={{
-                              border: 'none',
-                              background: 'transparent',
-                              cursor: 'pointer',
-                              padding: 0,
-                            }}
-                          >
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                             <Badge variant={effEstado === 'Inactivo' ? 'error' : isCleaningState ? 'gold' : isReservedNow ? 'gold' : 'success'}>
                               {effEstado === 'Inactivo'
                                 ? '🔴 Pausado'
@@ -1055,7 +1174,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                                       ? '🟡 Reservado'
                                       : '🟢 En Línea'}
                             </Badge>
-                          </button>
+                            <select
+                              aria-label={`Cambiar estado de ${aloj.nombre}`}
+                              className={styles.inlineStatusSelect}
+                              value={effEstado}
+                              onChange={(e) => handleChangeEstadoAlojamiento(aloj, e.target.value)}
+                            >
+                              <option value="Activo">🟢 En Línea</option>
+                              <option value="En Limpieza">🧹 En Limpieza</option>
+                              <option value="Inactivo">🔴 Pausado</option>
+                              <option value="En Mantenimiento">🛠️ Mantenimiento</option>
+                            </select>
+                          </div>
                         </td>
                         <td>
                           <div className={styles.tableActions}>
@@ -1063,21 +1193,30 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                               <Button
                                 variant="gold"
                                 size="sm"
-                                icon={<Sparkles size={14} />}
+                                icon={<Sparkles size={13} />}
                                 onClick={() => handleMarkCleanAndOnline(aloj.id, aloj.nombre)}
                                 title="Confirmar que la limpieza terminó y habilitar nuevamente en línea"
                               >
-                                Marcar Limpio → En Línea
+                                Limpio → En Línea
                               </Button>
                             ) : (
                               <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  icon={<Sparkles size={13} />}
+                                  onClick={() => handleChangeEstadoAlojamiento(aloj, 'En Limpieza')}
+                                  title="Pasar propiedad a estado En Limpieza (deshabilita reservas hasta limpiar)"
+                                >
+                                  En Limpieza
+                                </Button>
                                 <Button
                                   variant={effEstado === 'Activo' ? 'ghost' : 'gold'}
                                   size="sm"
                                   onClick={() => handleToggleEstadoAlojamiento(aloj)}
                                   title={effEstado === 'Activo' ? 'Pausar visibilidad en la página principal' : 'Poner en línea para el catálogo'}
                                 >
-                                  {effEstado === 'Activo' ? 'Pausar' : 'Poner en Línea'}
+                                  {effEstado === 'Activo' ? 'Pausar' : 'En Línea'}
                                 </Button>
                                 <Button
                                   variant="outline"
@@ -1085,40 +1224,40 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                                   onClick={() => handleLiberarAlojamiento(aloj)}
                                   title="Liberar reservas activas y habilitar cupos en la página principal"
                                 >
-                                  Liberar Cupo
+                                  Liberar
                                 </Button>
                               </>
                             )}
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            icon={<BedDouble size={14} />}
-                            onClick={() => openRoomsManager(aloj)}
-                            title="Gestionar Habitaciones"
-                          >
-                            Cuartos
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            icon={<Edit2 size={14} />}
-                            onClick={() => handleOpenEditAlojamiento(aloj)}
-                            title="Editar Alojamiento"
-                          >
-                            Editar
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            icon={<Trash2 size={14} color="#DC2626" />}
-                            onClick={() => handleDeleteAlojamiento(aloj.id, aloj.nombre)}
-                            title="Eliminar"
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              icon={<BedDouble size={13} />}
+                              onClick={() => openRoomsManager(aloj)}
+                              title="Gestionar Habitaciones"
+                            >
+                              Cuartos
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              icon={<Edit2 size={13} />}
+                              onClick={() => handleOpenEditAlojamiento(aloj)}
+                              title="Editar Alojamiento"
+                            >
+                              Editar
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              icon={<Trash2 size={13} color="#DC2626" />}
+                              onClick={() => handleDeleteAlojamiento(aloj.id, aloj.nombre)}
+                              title="Eliminar"
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
