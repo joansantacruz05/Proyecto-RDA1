@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   Query,
@@ -16,6 +17,7 @@ import {
 import { ReservasService } from './reservas.service';
 import { Public } from '../../common/decorators/public.decorator';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { ReceptionAdjustmentDto } from './dto/reception-adjustment.dto';
 import { ApiTags, ApiOperation, ApiHeader, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { IdempotencyKeyGuard } from '../../common/guards/idempotency-key.guard';
@@ -152,16 +154,27 @@ export class ReservasController {
 
   @Post([':id/check-in', ':id/checkin'])
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Confirmar check-in de una reserva' })
+  @ApiOperation({ summary: 'Confirmar check-in de una reserva (con ajustes opcionales de recepción)' })
   checkIn(@Param('id') id: string, @Body() body?: any) {
     return this.reservasService.checkInOrder(id, body);
   }
 
   @Post([':id/check-out', ':id/checkout'])
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Confirmar check-out de una reserva' })
+  @ApiOperation({ summary: 'Confirmar check-out de una reserva y liquidar folio final' })
   checkOut(@Param('id') id: string, @Body() body?: any) {
     return this.reservasService.checkOutOrder(id, body);
+  }
+
+  @Patch([':id/recepcion', ':id/ajustes'])
+  @Post([':id/recepcion', ':id/ajustes'])
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Ajustar huéspedes reales, cambiar habitación o añadir cargos adicionales en recepción',
+  })
+  adjustReceptionStay(@Param('id') id: string, @Body() dto: ReceptionAdjustmentDto) {
+    return this.reservasService.adjustReceptionStay(id, dto);
   }
 
   @Post(':id/modify')

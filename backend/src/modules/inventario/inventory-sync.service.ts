@@ -146,7 +146,8 @@ export class InventorySyncService implements OnModuleInit, OnModuleDestroy {
            SELECT COUNT(*) 
            FROM reservas r 
            WHERE r."espacioId" = e.id 
-             AND r."estadoId" IN ('EST-001', 'EST-002') 
+             AND r."estadoId" IN ('EST-001', 'EST-002')
+             AND COALESCE(r."checkoutRealizado", false) = false
              AND r."fechaEntrada" <= $2 AND r."fechaSalida" > $2
          )
        ) as disponibles

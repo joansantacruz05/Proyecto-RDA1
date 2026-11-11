@@ -354,6 +354,73 @@
   background-color: #DC2626;
 }
 
+.filterBarRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.filterPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filterPill {
+  background: #F8FAFC;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filterPill:hover {
+  border-color: #14406B;
+  color: #14406B;
+}
+
+.filterPillActive {
+  background: var(--color-midnight-blue);
+  border-color: var(--color-midnight-blue);
+  color: #FFFFFF;
+}
+
+.filterPillActive:hover {
+  color: #FFFFFF;
+}
+
+.miniStatsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.miniStatCard {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.actionBtnGroup {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 768px) {
   .formGrid2 {
     grid-template-columns: 1fr;

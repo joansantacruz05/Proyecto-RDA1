@@ -279,6 +279,7 @@ export class AlojamientosService {
               FROM reservas r
               WHERE r."espacioId" = er.id
                 AND r."estadoId" IN ('EST-001', 'EST-002')
+                AND COALESCE(r."checkoutRealizado", false) = false
                 AND r."fechaSalida" >= CURRENT_DATE
             ), 0)))
             FROM espacios_rentables er
@@ -356,12 +357,14 @@ export class AlojamientosService {
     if (dto.liberarReservas) {
       await this.alojamientoRepository.query(
         `UPDATE reservas r
-         SET "fechaEntrada" = LEAST(r."fechaEntrada", CURRENT_DATE - INTERVAL '2 days'),
-             "fechaSalida" = LEAST(r."fechaSalida", CURRENT_DATE - INTERVAL '1 day')
+         SET "checkinRealizado" = false,
+             "checkoutRealizado" = true,
+             "checkoutHora" = COALESCE(r."checkoutHora", NOW())
          FROM espacios_rentables er
          WHERE r."espacioId" = er.id 
            AND (er."alojamientoId" = $1 OR er."alojamientoId" = ('ALO-' || $1))
            AND r."estadoId" IN ('EST-001', 'EST-002')
+           AND COALESCE(r."checkoutRealizado", false) = false
            AND r."fechaSalida" >= CURRENT_DATE`,
         [id],
       );
@@ -582,6 +585,7 @@ export class AlojamientosService {
        JOIN espacios_rentables er ON er.id = r."espacioId"
        WHERE er."alojamientoId" = $1
          AND r."estadoId" IN ('EST-001', 'EST-002')
+         AND COALESCE(r."checkoutRealizado", false) = false
          AND r."fechaEntrada" < $3::date AND r."fechaSalida" > $2::date`,
       [accommodation.id, checkinClean, checkoutClean],
     );
@@ -596,6 +600,7 @@ export class AlojamientosService {
            FROM reservas r
            WHERE r."espacioId" = ANY($1)
              AND r."estadoId" IN ('EST-001', 'EST-002')
+             AND COALESCE(r."checkoutRealizado", false) = false
              AND r."fechaEntrada" < $3::date AND r."fechaSalida" > $2::date
            GROUP BY r."espacioId"`,
           [spaces.map((s: any) => s.id), checkinClean, checkoutClean],
@@ -753,6 +758,7 @@ export class AlojamientosService {
        JOIN espacios_rentables er ON er.id = r."espacioId"
        WHERE er."alojamientoId" = $2
          AND r."estadoId" IN ('EST-001', 'EST-002')
+         AND COALESCE(r."checkoutRealizado", false) = false
          AND r."fechaEntrada" < $4::date AND r."fechaSalida" > $3::date`,
       [room.id, accommodation.id, checkinClean, checkoutClean],
     );
@@ -1087,6 +1093,7 @@ export class AlojamientosService {
        JOIN espacios_rentables er ON er.id = r."espacioId"
        WHERE (er."alojamientoId" = $1 OR er."alojamientoId" = ('ALO-' || $1))
          AND r."estadoId" IN ('EST-001', 'EST-002')
+         AND COALESCE(r."checkoutRealizado", false) = false
          AND r."fechaEntrada" < $3::date AND r."fechaSalida" > $2::date`,
       [alojamientoId, fechaDesde, fechaHasta],
     );
@@ -1197,6 +1204,7 @@ export class AlojamientosService {
                  SELECT COALESCE(SUM(COALESCE(r."cantidadHabitaciones", 1)), 0) FROM reservas r
                  WHERE r."espacioId" = er.id
                    AND r."estadoId" IN ('EST-001', 'EST-002')
+                   AND COALESCE(r."checkoutRealizado", false) = false
                    AND r."fechaSalida" >= CURRENT_DATE
                )::int AS ocupadas
         FROM espacios_rentables er
@@ -1416,39 +1424,7 @@ export class AlojamientosService {
   }
 
   async checkOutOrder(orderId: string, body?: any): Promise<any> {
-    catalogCache.invalidate();
-    const order = await this.reservasService.getOrder(orderId);
-
-    await this.alojamientoRepository.query(
-      `UPDATE reservas 
-       SET "fechaEntrada" = LEAST("fechaEntrada", CURRENT_DATE - INTERVAL '2 days'),
-           "fechaSalida" = LEAST("fechaSalida", CURRENT_DATE - INTERVAL '1 day')
-       WHERE id = $1 OR "ordenId"::text = $1`,
-      [order.id],
-    );
-    catalogCache.invalidate();
-
-    try {
-      const hisId = `HIS-${Math.floor(1000 + Math.random() * 9000)}`;
-      await this.alojamientoRepository.query(
-        `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
-         VALUES ($1, $2, $3, $3, $4)`,
-        [hisId, order.id, order.estadoId || 'EST-002', 'Check-out completado. Habitación y alojamiento liberados para nuevas reservas.'],
-      );
-    } catch (e: any) {
-      console.warn(`[CHECKOUT-HISTORIAL] Advertencia: ${e?.message}`);
-    }
-
-    return {
-      orderId: order.ordenId || order.id,
-      reservaId: order.ordenId || order.id,
-      estado: 'CHECKED_OUT',
-      habitacionLiberada: order.habitacionNombre || 'Habitación Estándar',
-      checkOutHora: new Date().toISOString(),
-      consumosAdicionales: '0.00',
-      claveDigitalRevocada: true,
-      mensaje: 'Check-out completado con éxito. ¡El alojamiento ha sido liberado y vuelve a estar en línea!',
-    };
+    return this.reservasService.checkOutOrder(orderId, body);
   }
 
   async setEarlyCheckin(orderId: string, body?: any): Promise<any> {

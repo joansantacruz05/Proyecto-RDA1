@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { CrearReservaDto } from './dto/crear-reserva.dto';
+import { ReceptionAdjustmentDto } from './dto/reception-adjustment.dto';
 import { ProblemDetailsException } from '../../common/exceptions/problem-details.exception';
 import { PricingService } from '../../common/services/pricing.service';
 import { InventorySyncService } from '../inventario/inventory-sync.service';
@@ -48,6 +49,14 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "checkinRealizado" BOOLEAN NOT NULL DEFAULT false`,
       `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "checkinHora" TIMESTAMPTZ`,
       `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "earlyCheckinAutorizado" BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "checkoutRealizado" BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "checkoutHora" TIMESTAMPTZ`,
+      `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "huespedesReales" INT`,
+      `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "espacioOriginalId" VARCHAR(50)`,
+      `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "extrasCargos" JSONB NOT NULL DEFAULT '[]'::jsonb`,
+      `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "cargosAdicionalesTotal" NUMERIC(10,2) NOT NULL DEFAULT 0`,
+      `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "montoPagadoInicial" NUMERIC(10,2)`,
+      `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "notasRecepcion" TEXT`,
       `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "idempotencyKey" UUID`,
       `CREATE UNIQUE INDEX IF NOT EXISTS uq_reservas_idempotency ON reservas ("idempotencyKey", "usuarioId") WHERE "idempotencyKey" IS NOT NULL`,
       `CREATE INDEX IF NOT EXISTS idx_reservas_espacio_fechas ON reservas ("espacioId", "fechaEntrada", "fechaSalida") WHERE "estadoId" IN ('EST-001', 'EST-002')`,
@@ -178,6 +187,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
        JOIN espacios_rentables er ON er.id = r."espacioId"
        WHERE er."alojamientoId" = $2
          AND r."estadoId" IN ('EST-001', 'EST-002')
+         AND COALESCE(r."checkoutRealizado", false) = false
          AND r."fechaEntrada" < $4::date AND r."fechaSalida" > $3::date`,
       [espacio.id, espacio.alojamientoId, checkinClean, checkoutClean],
     );
@@ -596,6 +606,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
          JOIN espacios_rentables er ON er.id = r."espacioId"
          WHERE er."alojamientoId" = $1
            AND r."estadoId" IN ('EST-001', 'EST-002')
+           AND COALESCE(r."checkoutRealizado", false) = false
            AND r."fechaEntrada" < $4::date AND r."fechaSalida" > $3::date`,
         [espacio.alojamientoId, espacio.id, checkinClean, checkoutClean],
       );
@@ -840,6 +851,13 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       `SELECT 
          r.id, r."ordenId", r."fechaEntrada", r."fechaSalida", r."precioTotal", 
          r.subtotal, r.iva, r."tasaMunicipal", r."numeroPersonas", r.calificacion, r.comentario,
+         COALESCE(r."huespedesReales", r."numeroPersonas")::int as "huespedesReales",
+         COALESCE(r."extrasCargos", '[]'::jsonb) as "extrasCargos",
+         COALESCE(r."cargosAdicionalesTotal", 0)::numeric(10,2) as "cargosAdicionalesTotal",
+         COALESCE(r."montoPagadoInicial", p.monto, r."precioTotal")::numeric(10,2) as "montoPagadoInicial",
+         COALESCE(r."checkinRealizado", false) as "checkinRealizado",
+         COALESCE(r."checkoutRealizado", false) as "checkoutRealizado",
+         r."checkoutHora", r."notasRecepcion",
          r."estadoId", er.nombre as "estadoNombre",
          e.id as "espacioId", e.nombre as "habitacionNombre", e."precioPorNoche",
          a.id as "alojamientoId", a.nombre as "alojamientoNombre", a."imagenUrl", a.codigo as "alojamientoCodigo",
@@ -866,6 +884,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     const baseSelect = `SELECT
          r.*, er.nombre as "estadoNombre",
          e.nombre as "habitacionNombre", e."precioPorNoche", e.codigo as "habitacionCodigo",
+         e."capacidadAdultos", e."capacidadNinos",
          a.id as "alojamientoId", a.nombre as "alojamientoNombre", a."imagenUrl", a.codigo as "alojamientoCodigo",
          COALESCE(TO_CHAR(a."horaCheckIn", 'HH24:MI'), '14:00') as "horaCheckIn",
          COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut",
@@ -907,14 +926,22 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       externalOrderId: row.ordenId || row.id,
       cantidadHabitaciones: Number(row.cantidadHabitaciones || 1),
       rooms: Number(row.cantidadHabitaciones || 1),
+      huespedesReales:
+        row.huespedesReales != null ? Number(row.huespedesReales) : Number(row.numeroPersonas || 1),
+      extrasCargos: Array.isArray(row.extrasCargos) ? row.extrasCargos : [],
+      cargosAdicionalesTotal: Number(row.cargosAdicionalesTotal || 0),
+      montoPagadoInicial: Number(row.montoPagadoInicial ?? row.pagoMonto ?? row.precioTotal ?? 0),
+      checkoutRealizado: Boolean(row.checkoutRealizado),
       estado:
         row.estadoId === 'EST-003'
           ? 'CANCELLED'
-          : row.checkinRealizado === true
-            ? 'CHECKED_IN'
-            : row.estadoId === 'EST-002'
-              ? 'CONFIRMED'
-              : 'PENDING',
+          : row.checkoutRealizado === true
+            ? 'CHECKED_OUT'
+            : row.checkinRealizado === true
+              ? 'CHECKED_IN'
+              : row.estadoId === 'EST-002'
+                ? 'CONFIRMED'
+                : 'PENDING',
       totalPagar: String(Number(row.precioTotal || 0).toFixed(2)),
     };
   }
@@ -927,6 +954,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         COALESCE(r."cantidadHabitaciones", 1)::int as "cantidadHabitaciones",
         r."estadoId",
         CASE 
+          WHEN r."estadoId" = 'EST-003' THEN er.nombre
+          WHEN COALESCE(r."checkoutRealizado", false) = true THEN 'Check-out Realizado'
           WHEN COALESCE(r."checkinRealizado", false) = true THEN 'Llegada Confirmada'
           WHEN EXISTS(
             SELECT 1 FROM booking.evento_outbox eo 
@@ -934,25 +963,42 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
               AND eo.tipo = 'RESERVA_CHECKIN_CONFIRMADO'
           ) OR EXISTS(
             SELECT 1 FROM historial_reservas hr
-            WHERE hr."reservaId" = r.id AND hr.notas ILIKE '%check-in%'
+            WHERE hr."reservaId" = r.id
+              AND hr.notas ILIKE '%check-in%'
+              AND hr.notas NOT ILIKE '%check-out%'
           ) THEN 'Llegada Confirmada'
           ELSE er.nombre
         END as "estadoNombre",
-        e.nombre as "habitacionNombre",
-        a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo",
+        r."espacioId", r."espacioOriginalId",
+        e.nombre as "habitacionNombre", e."precioPorNoche",
+        e."capacidadAdultos", e."capacidadNinos",
+        a.id as "alojamientoId", a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo",
         COALESCE(TO_CHAR(a."horaCheckIn", 'HH24:MI'), '14:00') as "horaCheckIn",
         COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut",
         u."nombreCompleto" as "clienteNombre", u.email as "clienteEmail", u.identificacion as "clienteIdentificacion",
         p.id as "pagoId", p.estado as "estadoPago", p.monto as "pagoMonto",
+        COALESCE(r."huespedesReales", r."numeroPersonas")::int as "huespedesReales",
+        COALESCE(r."extrasCargos", '[]'::jsonb) as "extrasCargos",
+        COALESCE(r."cargosAdicionalesTotal", 0)::numeric(10,2) as "cargosAdicionalesTotal",
+        COALESCE(r."montoPagadoInicial", p.monto, r."precioTotal")::numeric(10,2) as "montoPagadoInicial",
+        r."notasRecepcion",
+        r."checkinHora",
+        COALESCE(r."checkoutRealizado", false) as "checkoutRealizado",
+        r."checkoutHora",
         (
-          COALESCE(r."checkinRealizado", false) = true
-          OR EXISTS(
-            SELECT 1 FROM booking.evento_outbox eo 
-            WHERE (eo.agregado_id::text = r."ordenId"::text OR eo.agregado_id::text = r.id::text)
-              AND eo.tipo = 'RESERVA_CHECKIN_CONFIRMADO'
-          ) OR EXISTS(
-            SELECT 1 FROM historial_reservas hr
-            WHERE hr."reservaId" = r.id AND hr.notas ILIKE '%check-in%'
+          COALESCE(r."checkoutRealizado", false) = false
+          AND (
+            COALESCE(r."checkinRealizado", false) = true
+            OR EXISTS(
+              SELECT 1 FROM booking.evento_outbox eo 
+              WHERE (eo.agregado_id::text = r."ordenId"::text OR eo.agregado_id::text = r.id::text)
+                AND eo.tipo = 'RESERVA_CHECKIN_CONFIRMADO'
+            ) OR EXISTS(
+              SELECT 1 FROM historial_reservas hr
+              WHERE hr."reservaId" = r.id
+                AND hr.notas ILIKE '%check-in%'
+                AND hr.notas NOT ILIKE '%check-out%'
+            )
           )
         ) as "checkinRealizado"
       FROM reservas r
@@ -1245,13 +1291,15 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
        JOIN espacios_rentables e ON r."espacioId" = e.id
        JOIN alojamientos a ON e."alojamientoId" = a.id
        JOIN estados_reserva er ON r."estadoId" = er.id
-       WHERE r."estadoId" IN ('EST-001', 'EST-002') AND r."fechaSalida" >= CURRENT_DATE
+       WHERE r."estadoId" IN ('EST-001', 'EST-002')
+         AND COALESCE(r."checkoutRealizado", false) = false
+         AND r."fechaSalida" >= CURRENT_DATE
        ORDER BY r."fechaEntrada" ASC`,
     );
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  //  CHECK-IN PRESENCIAL (Flujo 2) + AVISO A BOOKING CORE
+  //  CHECK-IN PRESENCIAL (Flujo 2) + AJUSTES EN RECEPCIÓN
   // ═══════════════════════════════════════════════════════════════════════
 
   private invalidTransition(detail: string): ProblemDetailsException {
@@ -1267,11 +1315,231 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  private parseReceptionExtras(rawExtras: any): Array<{
+    id: string;
+    concepto: string;
+    cantidad: number;
+    precioUnitario: number;
+    subtotal: number;
+  }> {
+    if (!Array.isArray(rawExtras)) return [];
+    return rawExtras.map((item, idx) => {
+      const concepto = String(item?.concepto || '').trim();
+      if (!concepto) {
+        throw new BadRequestException(`El cargo adicional #${idx + 1} debe incluir una descripción o concepto.`);
+      }
+      const cantidad = Number(item?.cantidad ?? 1);
+      if (!Number.isInteger(cantidad) || cantidad < 1) {
+        throw new BadRequestException(`La cantidad de "${concepto}" debe ser un entero mayor o igual a 1.`);
+      }
+      const precioUnitario = Number(item?.precioUnitario ?? 0);
+      if (!Number.isFinite(precioUnitario) || precioUnitario < 0) {
+        throw new BadRequestException(`El precio unitario de "${concepto}" no puede ser negativo.`);
+      }
+      const unitRounded = Number(precioUnitario.toFixed(2));
+      const subtotal = Number((cantidad * unitRounded).toFixed(2));
+      return {
+        id: String(item?.id || `EXT-${randomUUID().slice(0, 8)}`),
+        concepto,
+        cantidad,
+        precioUnitario: unitRounded,
+        subtotal,
+      };
+    });
+  }
+
+  async adjustReceptionStay(orderIdOrReservaId: string, dto: ReceptionAdjustmentDto | any): Promise<any> {
+    const updatedOrderId = await this.dataSource.transaction(async (manager) => {
+      const rows = await manager.query(
+        `SELECT r.*, e."alojamientoId", e.nombre as "habitacionNombre", e."precioPorNoche",
+                (SELECT p.monto FROM pagos p WHERE p."reservaId" = r.id LIMIT 1) as "pagoMonto"
+         FROM reservas r
+         JOIN espacios_rentables e ON r."espacioId" = e.id
+         WHERE r.id::text = $1 OR r."ordenId"::text = $1
+         LIMIT 1
+         FOR UPDATE OF r`,
+        [orderIdOrReservaId],
+      );
+
+      if (!rows || rows.length === 0) {
+        throw new NotFoundException(`No se encontró la reserva u orden ${orderIdOrReservaId}`);
+      }
+
+      const r = rows[0];
+      if (r.estadoId === 'EST-003') {
+        throw this.invalidTransition('No se pueden realizar ajustes en recepción sobre una reserva cancelada.');
+      }
+      if (r.checkoutRealizado === true) {
+        throw this.invalidTransition('La estancia ya fue cerrada mediante check-out.');
+      }
+
+      const changesLog: string[] = [];
+      const montoPagadoInicial = Number(r.montoPagadoInicial ?? r.pagoMonto ?? r.precioTotal ?? 0);
+      let targetEspacioId = String(r.espacioId);
+      let newEspacioOriginalId: string | null = r.espacioOriginalId || null;
+      let tasaMunicipal = Number(r.tasaMunicipal || 0);
+      const currentExtrasTotal = Number(r.cargosAdicionalesTotal || 0);
+      let baseRoomSubtotal = Math.max(0, Number((Number(r.subtotal || 0) - currentExtrasTotal).toFixed(2)));
+
+      let targetHuespedesReales: number | null =
+        r.huespedesReales != null ? Number(r.huespedesReales) : null;
+      const rawGuests = dto?.huespedesReales ?? dto?.huespedes_reales ?? dto?.numero_personas_reales;
+      if (rawGuests !== undefined && rawGuests !== null && rawGuests !== '') {
+        const parsed = Number(rawGuests);
+        if (!Number.isInteger(parsed) || parsed < 1) {
+          throw new BadRequestException('huespedesReales debe ser un entero mayor o igual a 1.');
+        }
+        if (parsed !== (targetHuespedesReales ?? Number(r.numeroPersonas || 1))) {
+          changesLog.push(`Huéspedes reales: ${parsed} (estimado: ${Number(r.numeroPersonas || 1)})`);
+        }
+        targetHuespedesReales = parsed;
+      }
+
+      const requestedEspacioId = dto?.espacioId ? String(dto.espacioId).trim() : '';
+      if (requestedEspacioId && requestedEspacioId !== targetEspacioId) {
+        const roomRows = await manager.query(
+          `SELECT id, "alojamientoId", nombre, "precioPorNoche", "cantidadDisponible", estado
+           FROM espacios_rentables
+           WHERE id = $1
+           FOR UPDATE`,
+          [requestedEspacioId],
+        );
+        if (!roomRows.length) {
+          throw new NotFoundException(`La habitación ${requestedEspacioId} no existe.`);
+        }
+        const newRoom = roomRows[0];
+        if (String(newRoom.alojamientoId) !== String(r.alojamientoId)) {
+          throw new BadRequestException('Solo es posible cambiar a una habitación del mismo alojamiento.');
+        }
+        if (newRoom.estado && newRoom.estado !== 'Activo') {
+          throw new ConflictException(`La habitación "${newRoom.nombre}" se encuentra inactiva.`);
+        }
+
+        const fechaEntradaStr = r.fechaEntrada instanceof Date
+          ? r.fechaEntrada.toISOString().split('T')[0]
+          : String(r.fechaEntrada || '').split('T')[0];
+        const fechaSalidaStr = r.fechaSalida instanceof Date
+          ? r.fechaSalida.toISOString().split('T')[0]
+          : String(r.fechaSalida || '').split('T')[0];
+        const roomsNeeded = Math.max(1, Number(r.cantidadHabitaciones || 1));
+
+        const overlapRes = await manager.query(
+          `SELECT COALESCE(SUM(COALESCE(r2."cantidadHabitaciones", 1)), 0)::int as ocupadas
+           FROM reservas r2
+           WHERE r2."espacioId" = $1
+             AND r2.id != $2
+             AND r2."estadoId" IN ('EST-001', 'EST-002')
+             AND COALESCE(r2."checkoutRealizado", false) = false
+             AND r2."fechaEntrada" < $4::date AND r2."fechaSalida" > $3::date`,
+          [newRoom.id, r.id, fechaEntradaStr, fechaSalidaStr],
+        );
+        const ocupadas = Number(overlapRes[0]?.ocupadas || 0);
+        const disponibles = Math.max(0, Number(newRoom.cantidadDisponible || 0) - ocupadas);
+        if (disponibles < roomsNeeded) {
+          throw new ConflictException(
+            `La habitación "${newRoom.nombre}" no tiene suficiente cupo disponible (${disponibles} disp., requeridas: ${roomsNeeded}).`,
+          );
+        }
+
+        try {
+          const priceCalc = this.pricingService.calculatePrice(
+            Number(newRoom.precioPorNoche || 0),
+            fechaEntradaStr,
+            fechaSalidaStr,
+            roomsNeeded,
+          );
+          baseRoomSubtotal = priceCalc.subtotal;
+          tasaMunicipal = priceCalc.tasaMunicipal;
+        } catch {
+          baseRoomSubtotal = Number((Number(newRoom.precioPorNoche || 0) * roomsNeeded).toFixed(2));
+        }
+
+        newEspacioOriginalId = newEspacioOriginalId || String(r.espacioId);
+        targetEspacioId = String(newRoom.id);
+        changesLog.push(`Cambio de habitación: ${r.habitacionNombre} -> ${newRoom.nombre}`);
+      }
+
+      const existingExtras = Array.isArray(r.extrasCargos) ? r.extrasCargos : [];
+      const parsedExtras =
+        dto?.extras !== undefined ? this.parseReceptionExtras(dto.extras) : existingExtras;
+      const cargosAdicionalesTotal = Number(
+        parsedExtras.reduce((sum: number, item: any) => sum + Number(item.subtotal || 0), 0).toFixed(2),
+      );
+      if (dto?.extras !== undefined && cargosAdicionalesTotal !== currentExtrasTotal) {
+        changesLog.push(`Extras actualizados: $${cargosAdicionalesTotal.toFixed(2)} (${parsedExtras.length} ítem(s))`);
+      }
+
+      const notasProvided = dto?.notasRecepcion !== undefined;
+      const targetNotas = notasProvided
+        ? String(dto.notasRecepcion ?? '').trim() || null
+        : r.notasRecepcion ?? null;
+      if (notasProvided && targetNotas !== (r.notasRecepcion ?? null)) {
+        changesLog.push(`Nota recepción actualizada`);
+      }
+
+      const totals = this.pricingService.recalculateWithExtras(
+        baseRoomSubtotal,
+        cargosAdicionalesTotal,
+        tasaMunicipal,
+      );
+
+      await manager.query(
+        `UPDATE reservas
+         SET "espacioId" = $1,
+             "espacioOriginalId" = $2,
+             "huespedesReales" = $3,
+             "extrasCargos" = $4::jsonb,
+             "cargosAdicionalesTotal" = $5,
+             "montoPagadoInicial" = $6,
+             "notasRecepcion" = $7,
+             subtotal = $8,
+             iva = $9,
+             "tasaMunicipal" = $10,
+             "precioTotal" = $11
+         WHERE id = $12`,
+        [
+          targetEspacioId,
+          newEspacioOriginalId,
+          targetHuespedesReales,
+          JSON.stringify(parsedExtras),
+          cargosAdicionalesTotal,
+          Number(montoPagadoInicial.toFixed(2)),
+          targetNotas,
+          totals.subtotal,
+          totals.iva,
+          totals.tasaMunicipal,
+          totals.total,
+          r.id,
+        ],
+      );
+
+      if (changesLog.length > 0) {
+        try {
+          await manager.query(
+            `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
+             VALUES ($1, $2, $3, $3, $4)`,
+            [generateEntityId('HIS'), r.id, r.estadoId || 'EST-002', `Ajuste en recepción: ${changesLog.join(' | ')}`],
+          );
+        } catch (e: any) {
+          this.logger.warn(`[RECEPTION-HISTORIAL] ${e?.message}`);
+        }
+      }
+
+      return r.id;
+    });
+
+    catalogCache.invalidate();
+    return this.getOrder(updatedOrderId);
+  }
+
   async checkInOrder(orderId: string, body?: any): Promise<any> {
-    const order = await this.getOrder(orderId);
+    let order = await this.getOrder(orderId);
 
     if (order.estadoId === 'EST-003' || order.estado === 'CANCELLED') {
       throw this.invalidTransition('No se puede realizar check-in en una reserva cancelada.');
+    }
+    if (order.checkoutRealizado === true || order.estado === 'CHECKED_OUT') {
+      throw this.invalidTransition('No se puede confirmar check-in de una estancia que ya realizó check-out.');
     }
     if (order.checkinRealizado === true || order.estado === 'CHECKED_IN') {
       throw this.invalidTransition('La reserva ya cuenta con check-in registrado previamente (estado actual: CHECKED_IN).');
@@ -1298,8 +1566,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     }
 
     // Huéspedes reales presentes en recepción (entero >= 1)
-    let huespedesReales = Number(order.numeroPersonas) || 1;
-    const rawGuests = body?.huespedes_reales ?? body?.numero_personas_reales;
+    let huespedesReales = Number(order.huespedesReales || order.numeroPersonas || 1);
+    const rawGuests = body?.huespedesReales ?? body?.huespedes_reales ?? body?.numero_personas_reales;
     if (rawGuests !== undefined && rawGuests !== null && rawGuests !== '') {
       const n = Number(rawGuests);
       if (!Number.isInteger(n) || n < 1) {
@@ -1365,13 +1633,33 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    // Aplicar ajustes opcionales en recepción antes de sellar la entrada (cambio de habitación, extras, personas reales)
+    const rawEspacioId = body?.espacioId ? String(body.espacioId).trim() : undefined;
+    const hasExtras = Array.isArray(body?.extras);
+    const rawNotas = body?.notasRecepcion ?? body?.observaciones;
+    const hasNotas = rawNotas !== undefined && String(rawNotas).trim() !== '';
+    const hasGuestsOverride = rawGuests !== undefined && rawGuests !== null && rawGuests !== '';
+    if (rawEspacioId || hasExtras || hasNotas || hasGuestsOverride) {
+      order = await this.adjustReceptionStay(order.id, {
+        huespedesReales,
+        espacioId: rawEspacioId,
+        extras: hasExtras ? body.extras : undefined,
+        notasRecepcion: rawNotas !== undefined ? String(rawNotas) : undefined,
+      });
+    }
+
     // Transición ATÓMICA: solo una petición puede pasar de CONFIRMED a CHECKED_IN (la 2.ª recibe 409)
     const updated = await this.dataSource.query(
       `UPDATE reservas
-       SET "checkinRealizado" = true, "checkinHora" = NOW()
-       WHERE id = $1 AND "estadoId" = 'EST-002' AND COALESCE("checkinRealizado", false) = false
+       SET "checkinRealizado" = true,
+           "checkinHora" = NOW(),
+           "huespedesReales" = COALESCE($2, "huespedesReales", "numeroPersonas")
+       WHERE id = $1
+         AND "estadoId" = 'EST-002'
+         AND COALESCE("checkinRealizado", false) = false
+         AND COALESCE("checkoutRealizado", false) = false
        RETURNING id`,
-      [order.id],
+      [order.id, huespedesReales],
     );
     if (!updated || updated.length === 0) {
       throw this.invalidTransition('La reserva ya cuenta con check-in registrado previamente (estado actual: CHECKED_IN).');
@@ -1452,8 +1740,14 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       estado: 'CHECKED_IN',
       status: 'CHECKED_IN',
       checkinRealizado: true,
+      espacioId: order.espacioId,
+      espacioOriginalId: order.espacioOriginalId || null,
       huespedes_reales: huespedesReales,
-      habitacionAsignada: `${order.habitacionNombre || 'Suite Deluxe'} - Piso 2`,
+      huespedesReales,
+      extrasCargos: order.extrasCargos || [],
+      cargosAdicionalesTotal: Number(order.cargosAdicionalesTotal || 0).toFixed(2),
+      totalPagar: String(Number(order.precioTotal || 0).toFixed(2)),
+      habitacionAsignada: `${order.habitacionNombre || 'Suite Deluxe'}`,
       checkInHora: new Date().toISOString(),
       instruccionesAcceso: 'Presente su identificación en la recepción o use su PIN digital en la cerradura.',
       sincronizacionBooking: sync,
@@ -1545,23 +1839,80 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
   }
 
   async checkOutOrder(orderId: string, body?: any): Promise<any> {
-    const order = await this.getOrder(orderId);
+    let order = await this.getOrder(orderId);
+
+    if (order.estadoId === 'EST-003' || order.estado === 'CANCELLED') {
+      throw this.invalidTransition('No se puede realizar check-out sobre una reserva cancelada.');
+    }
+
+    const rawExtras = body?.extras;
+    const rawNotas = body?.notasRecepcion ?? body?.observaciones;
+    const rawGuests = body?.huespedesReales ?? body?.huespedes_reales ?? body?.numero_personas_reales;
+    const rawEspacioId = body?.espacioId ? String(body.espacioId).trim() : undefined;
+    const hasAdjustments =
+      !order.checkoutRealizado &&
+      (Array.isArray(rawExtras) ||
+        rawNotas !== undefined ||
+        (rawGuests !== undefined && rawGuests !== null && rawGuests !== '') ||
+        Boolean(rawEspacioId));
+
+    if (hasAdjustments) {
+      order = await this.adjustReceptionStay(order.id, {
+        huespedesReales:
+          rawGuests !== undefined && rawGuests !== null && rawGuests !== '' ? Number(rawGuests) : undefined,
+        espacioId: rawEspacioId,
+        extras: Array.isArray(rawExtras) ? rawExtras : undefined,
+        notasRecepcion: rawNotas !== undefined ? String(rawNotas) : undefined,
+      });
+    }
+
     await this.dataSource.query(
       `UPDATE reservas 
        SET "checkinRealizado" = false,
-           "fechaSalida" = LEAST("fechaSalida", CURRENT_DATE - INTERVAL '1 day')
-       WHERE id = $1 OR "ordenId"::text = $1`,
+           "checkoutRealizado" = true,
+           "checkoutHora" = COALESCE("checkoutHora", NOW())
+       WHERE id = $1`,
       [order.id],
     );
+
+    try {
+      await this.dataSource.query(
+        `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
+         VALUES ($1, $2, $3, $3, $4)`,
+        [
+          generateEntityId('HIS'),
+          order.id,
+          order.estadoId || 'EST-002',
+          `Check-out completado en recepción. Folio final: $${Number(order.precioTotal || 0).toFixed(2)}. Habitación liberada para nuevas reservas.`,
+        ],
+      );
+    } catch (e: any) {
+      this.logger.warn(`[CHECKOUT-HISTORIAL] ${e?.message}`);
+    }
+
     catalogCache.invalidate();
+
+    const extrasTotal = Number(order.cargosAdicionalesTotal || 0);
+    const totalFinal = Number(order.precioTotal || 0);
 
     return {
       orderId: order.ordenId || order.id,
       reservation_id: order.ordenId || order.id,
+      reservaId: order.id,
       estado: 'CHECKED_OUT',
       status: 'CHECKED_OUT',
       checkinRealizado: false,
-      mensaje: 'Check-out completado exitosamente y propiedad liberada para el catálogo.',
+      checkoutRealizado: true,
+      habitacionLiberada: order.habitacionNombre || 'Habitación Estándar',
+      checkOutHora: new Date().toISOString(),
+      huespedesReales: Number(order.huespedesReales || order.numeroPersonas || 1),
+      extrasCargos: order.extrasCargos || [],
+      consumosAdicionales: extrasTotal.toFixed(2),
+      cargosAdicionalesTotal: extrasTotal.toFixed(2),
+      totalFinal: totalFinal.toFixed(2),
+      montoPagadoInicial: Number(order.montoPagadoInicial ?? totalFinal).toFixed(2),
+      claveDigitalRevocada: true,
+      mensaje: 'Check-out completado exitosamente y habitación liberada para el catálogo.',
     };
   }
 
@@ -1570,6 +1921,13 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       `SELECT 
          r.id, r."ordenId", r."fechaEntrada", r."fechaSalida", r."precioTotal", 
          r.subtotal, r.iva, r."tasaMunicipal", r."numeroPersonas", r.calificacion, r.comentario,
+         COALESCE(r."huespedesReales", r."numeroPersonas")::int as "huespedesReales",
+         COALESCE(r."extrasCargos", '[]'::jsonb) as "extrasCargos",
+         COALESCE(r."cargosAdicionalesTotal", 0)::numeric(10,2) as "cargosAdicionalesTotal",
+         COALESCE(r."montoPagadoInicial", p.monto, r."precioTotal")::numeric(10,2) as "montoPagadoInicial",
+         COALESCE(r."checkinRealizado", false) as "checkinRealizado",
+         COALESCE(r."checkoutRealizado", false) as "checkoutRealizado",
+         r."checkoutHora", r."notasRecepcion",
          r."estadoId", er.nombre as "estadoNombre",
          e.id as "espacioId", e.nombre as "habitacionNombre", e."precioPorNoche",
          a.id as "alojamientoId", a.nombre as "alojamientoNombre", a."imagenUrl", a.codigo as "alojamientoCodigo",
@@ -1629,7 +1987,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       : String(reserva.fechaSalida).split('T')[0];
     const horaCheckOut = normalizeHoraHHMM(reserva.horaCheckOut, '11:00');
     const checkoutDate = new Date(buildEcuadorHourTimestamp(fechaSalidaStr, horaCheckOut, '11:00')).getTime();
-    if (Date.now() < checkoutDate) {
+    if (!reserva.checkoutRealizado && Date.now() < checkoutDate) {
       throw new ConflictException('Solo se puede emitir una reseña una vez concluida la estancia (fecha de check-out).');
     }
 

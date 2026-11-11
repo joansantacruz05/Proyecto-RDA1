@@ -22,9 +22,12 @@ import {
   Waves,
   AlertCircle,
   UserPlus,
+  DoorOpen,
+  SlidersHorizontal,
+  Receipt,
 } from 'lucide-react';
 import { api, getAuthToken } from '../../api/client';
-import { UsuarioSession } from '../../api/types';
+import { HabitacionAdmin, ReservaAdminItem, UsuarioSession } from '../../api/types';
 import {
   setAdminAlojamientoEstado,
   liberarAlojamiento,
@@ -36,11 +39,13 @@ import { Badge } from '../../components/ui/Badge/Badge';
 import { Modal } from '../../components/ui/Modal/Modal';
 import { formatUSD } from '../../components/ui/PriceDisplay/PriceDisplay';
 import { InteractiveMap } from '../../components/map/InteractiveMap';
+import { ReceptionModalMode, ReceptionStayModal } from '../../components/admin/ReceptionStayModal';
 import {
   formatHoraHHMM,
   getCityCenterCoords,
   hasValidCoordinates,
 } from '../../utils/ecuadorLocations';
+import { toIsoDateOnly } from '../../utils/receptionFolio';
 import styles from './AdminPage.module.css';
 
 interface AdminPageProps {
@@ -73,41 +78,6 @@ interface AlojamientoAdmin {
   tienePiscina?: boolean;
   estado?: string;
   propietario?: string;
-}
-
-interface HabitacionAdmin {
-  id: string;
-  nombre: string;
-  precioPorNoche: number | string;
-  capacidadAdultos: number;
-  capacidadNinos: number;
-  cantidadDisponible: number;
-  imagenesUrls?: string;
-  estado?: string;
-}
-
-interface ReservaAdminItem {
-  id: string;
-  ordenId: string;
-  external_order_id?: string;
-  alojamientoId?: string;
-  alojamientoCodigo?: string;
-  alojamientoNombre: string;
-  habitacionNombre: string;
-  fechaEntrada: string;
-  fechaSalida: string;
-  precioTotal: number | string;
-  estadoId: string;
-  estadoNombre: string;
-  usuarioNombre?: string;
-  usuarioEmail?: string;
-  clienteNombre?: string;
-  clienteEmail?: string;
-  clienteIdentificacion?: string;
-  horaCheckIn?: string;
-  horaCheckOut?: string;
-  numeroPersonas?: number;
-  checkinRealizado?: boolean;
 }
 
 interface UsuarioAdminItem {
@@ -509,149 +479,84 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     }
   };
 
-  // --- MODAL: CHECK-IN / CONFIRMAR LLEGADA RECEPCIÓN ---
-  const CHECKED_IN_KEY = 'luxestays_checked_in_orders';
-  const [checkedInIds, setCheckedInIds] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem(CHECKED_IN_KEY);
-      if (stored) {
-        return new Set(JSON.parse(stored));
-      }
-    } catch {
-      // Ignorar error de parsing
-    }
-    return new Set<string>();
-  });
+  // --- CONTROL OPERATIVO DE CHECK-IN, ESTANCIA Y CHECK-OUT ---
+  const [receptionModalState, setReceptionModalState] = useState<{
+    mode: ReceptionModalMode;
+    reserva: ReservaAdminItem;
+  } | null>(null);
+  const [receptionFilter, setReceptionFilter] = useState<
+    'todos' | 'pendientes' | 'estancia' | 'finalizados'
+  >('todos');
 
-  const saveCheckedInId = (id: string, ordenId?: string) => {
-    setCheckedInIds((prev) => {
-      const updated = new Set(prev);
-      if (id) updated.add(id);
-      if (ordenId) updated.add(ordenId);
-      try {
-        localStorage.setItem(CHECKED_IN_KEY, JSON.stringify(Array.from(updated)));
-      } catch {
-        // Ignorar
-      }
-      return updated;
-    });
+  const getReservaLifecycle = (res: ReservaAdminItem) => {
+    const isCancelled = res.estadoNombre === 'Cancelada' || res.estadoId === 'EST-003';
+    const isCheckedOut =
+      !isCancelled &&
+      (Boolean(res.checkoutRealizado) ||
+        res.estadoNombre === 'Checked-Out' ||
+        res.estadoNombre === 'Check-out Realizado' ||
+        res.estadoNombre === 'Estancia Finalizada');
+    const isCheckedIn =
+      !isCancelled &&
+      !isCheckedOut &&
+      (Boolean(res.checkinRealizado) ||
+        res.estadoNombre === 'Checked-In' ||
+        res.estadoNombre === 'Check-in Realizado' ||
+        res.estadoNombre === 'Llegada Confirmada' ||
+        Boolean(res.estadoNombre?.toLowerCase().includes('llegada')));
+    return { isCancelled, isCheckedOut, isCheckedIn };
   };
 
-  const [checkinModalReserva, setCheckinModalReserva] = useState<ReservaAdminItem | null>(null);
-  const [cedulaCheckin, setCedulaCheckin] = useState('');
-  const [cedulaError, setCedulaError] = useState<string | null>(null);
-  const [huespedesReales, setHuespedesReales] = useState(1);
-  const [observacionesCheckin, setObservacionesCheckin] = useState('Huésped presentado en recepción');
-  const [isSubmittingCheckin, setIsSubmittingCheckin] = useState(false);
+  const receptionStats = useMemo(() => {
+    let pendientes = 0;
+    let enEstancia = 0;
+    let finalizados = 0;
+    let totalExtras = 0;
 
-  const handleConfirmCheckin = async () => {
-    if (!checkinModalReserva) return;
-    const cedulaLimpia = cedulaCheckin.trim();
-    if (!cedulaLimpia || cedulaLimpia.length < 5) {
-      setCedulaError('Debes ingresar el número de cédula o identificación del huésped para confirmar el check-in.');
-      return;
+    for (const r of reservas) {
+      const { isCancelled, isCheckedOut, isCheckedIn } = getReservaLifecycle(r);
+      if (isCancelled) continue;
+      if (isCheckedOut) finalizados += 1;
+      else if (isCheckedIn) enEstancia += 1;
+      else pendientes += 1;
+      totalExtras += Number(r.cargosAdicionalesTotal || 0);
     }
-    const cedulaTitular = (checkinModalReserva.clienteIdentificacion || '').trim();
-    const esGenerica = !cedulaTitular || cedulaTitular === '1710034065' || cedulaTitular === '9999999999999';
-    if (!esGenerica && cedulaLimpia !== cedulaTitular) {
-      setCedulaError(`La cédula ingresada (${cedulaLimpia}) no coincide con la cédula registrada del titular (${cedulaTitular}).`);
-      return;
-    }
-    setCedulaError(null);
-    setIsSubmittingCheckin(true);
-    try {
-      const orderIdentifier = checkinModalReserva.ordenId || checkinModalReserva.id;
-      await api.post(`/orders/${orderIdentifier}/check-in`, {
-        cedula: cedulaLimpia,
-        identificacion: cedulaLimpia,
-        earlyCheckinAutorizado: true,
-        numero_personas_reales: huespedesReales,
-        observaciones: `${observacionesCheckin} (Cédula verificada: ${cedulaLimpia})`,
-        external_order_id: checkinModalReserva.external_order_id || undefined,
-      });
 
-      saveCheckedInId(checkinModalReserva.id, checkinModalReserva.ordenId);
-      queryClient.setQueryData<ReservaAdminItem[]>(['adminReservasTodas'], (old) => {
-        if (!old) return old;
-        return old.map((r) =>
-          r.id === checkinModalReserva.id || r.ordenId === checkinModalReserva.ordenId
-            ? { ...r, checkinRealizado: true, estadoNombre: 'Llegada Confirmada', clienteIdentificacion: cedulaLimpia }
-            : r,
-        );
-      });
-      showToast(`Check-in confirmado con cédula ${cedulaLimpia} para ${checkinModalReserva.clienteNombre || checkinModalReserva.usuarioNombre || 'huésped'}.`);
-      setCheckinModalReserva(null);
-      refetchReservas();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error al registrar check-in';
-      setCedulaError(msg);
-      showToast(msg, 'error');
-    } finally {
-      setIsSubmittingCheckin(false);
-    }
-  };
+    return {
+      pendientes,
+      enEstancia,
+      finalizados,
+      totalExtras: Number(totalExtras.toFixed(2)),
+    };
+  }, [reservas]);
 
-  const [checkedOutIds, setCheckedOutIds] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem('luxestays_checked_out_orders');
-      if (stored) return new Set(JSON.parse(stored));
-    } catch {
-      // Ignorar
-    }
-    return new Set<string>();
-  });
-
-  const handleCheckoutReserva = async (res: ReservaAdminItem) => {
-    try {
-      if (res.alojamientoId || res.alojamientoNombre) {
-        liberarAlojamiento(res.alojamientoId || '', res.alojamientoNombre);
-      }
-
-      const orderIdentifier = res.ordenId || res.id;
-      try {
-        await api.post(`/orders/${orderIdentifier}/check-out`, {});
-      } catch {
-        // Continuar con persistencia local
-      }
-
-      setCheckedOutIds((prev) => {
-        const next = new Set(prev);
-        next.add(res.id);
-        if (res.ordenId) next.add(res.ordenId);
-        try {
-          localStorage.setItem('luxestays_checked_out_orders', JSON.stringify(Array.from(next)));
-        } catch {
-          // Ignorar
-        }
-        return next;
-      });
-
-      showToast(`Check-out completado para ${res.clienteNombre || res.usuarioNombre || 'huésped'}. La propiedad ha sido liberada y ya está disponible en la página principal.`);
-      refetchReservas();
-      refetchAlojamientos();
-      queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
-      queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
-      queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
-    } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : 'Error al registrar check-out', 'error');
-    }
-  };
-
-  // Buscador de reservas
+  // Buscador y filtro operativo de reservas
   const [searchReservaQuery, setSearchReservaQuery] = useState('');
   const filteredReservas = useMemo(() => {
-    if (!searchReservaQuery.trim()) return reservas;
-    const q = searchReservaQuery.toLowerCase();
-    return reservas.filter(
-      (r) =>
+    const q = searchReservaQuery.trim().toLowerCase();
+    return reservas.filter((r) => {
+      const { isCancelled, isCheckedOut, isCheckedIn } = getReservaLifecycle(r);
+      if (receptionFilter === 'pendientes' && (isCancelled || isCheckedIn || isCheckedOut)) {
+        return false;
+      }
+      if (receptionFilter === 'estancia' && !isCheckedIn) {
+        return false;
+      }
+      if (receptionFilter === 'finalizados' && !isCheckedOut) {
+        return false;
+      }
+      if (!q) return true;
+      return (
         r.ordenId?.toLowerCase().includes(q) ||
         r.id?.toLowerCase().includes(q) ||
         r.alojamientoNombre?.toLowerCase().includes(q) ||
+        r.habitacionNombre?.toLowerCase().includes(q) ||
         (r.clienteIdentificacion && r.clienteIdentificacion.toLowerCase().includes(q)) ||
         (r.clienteNombre && r.clienteNombre.toLowerCase().includes(q)) ||
-        (r.usuarioNombre && r.usuarioNombre.toLowerCase().includes(q)),
-    );
-  }, [reservas, searchReservaQuery]);
+        (r.usuarioNombre && r.usuarioNombre.toLowerCase().includes(q))
+      );
+    });
+  }, [reservas, searchReservaQuery, receptionFilter]);
 
   // Si no está autenticado o no es admin
   if (!token || !currentUser) {
@@ -740,7 +645,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
           className={`${styles.tabBtn} ${activeTab === 'recepcion' ? styles.tabBtnActive : ''}`}
           onClick={() => setActiveTab('recepcion')}
         >
-          <CheckCircle2 size={16} /> Recepción & Check-in ({reservas.length})
+          <DoorOpen size={16} /> Check-in & Check-out ({reservas.length})
         </button>
         <button
           className={`${styles.tabBtn} ${activeTab === 'usuarios' ? styles.tabBtnActive : ''}`}
@@ -1013,22 +918,87 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       )}
 
       {/* ────────────────────────────────────────────────────────────
-          TAB 3: RECEPCIÓN & CHECK-IN
+          TAB 3: CHECK-IN, ESTANCIA & CHECK-OUT OPERATIVO
       ────────────────────────────────────────────────────────────── */}
       {activeTab === 'recepcion' && (
         <div className={styles.contentCard}>
           <div className={styles.cardHeaderRow}>
             <div>
-              <h2 className={styles.cardTitle}>Control de Recepción y Registro de Huéspedes</h2>
+              <h2 className={styles.cardTitle}>Operación de Check-in y Check-out</h2>
               <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748B' }}>
-                Confirma la llegada de huéspedes. Las órdenes se sincronizan en tiempo real mediante la tabla outbox con Booking Core API.
+                Confirma llegadas con cédula, ajusta el número real de personas, cambia habitaciones o añade consumos extras antes y durante la estancia, y liquida el check-out.
               </p>
             </div>
+          </div>
+
+          {/* Resumen Operativo */}
+          <div className={styles.miniStatsGrid}>
+            <div className={styles.miniStatCard}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
+                Pendientes de Check-in
+              </span>
+              <strong style={{ fontSize: '1.5rem', color: '#92400E' }}>{receptionStats.pendientes}</strong>
+            </div>
+            <div className={styles.miniStatCard}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
+                En Estancia (Listos p/ Check-out)
+              </span>
+              <strong style={{ fontSize: '1.5rem', color: '#059669' }}>{receptionStats.enEstancia}</strong>
+            </div>
+            <div className={styles.miniStatCard}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
+                Check-out Completados
+              </span>
+              <strong style={{ fontSize: '1.5rem', color: '#14406B' }}>{receptionStats.finalizados}</strong>
+            </div>
+            <div className={styles.miniStatCard}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
+                Cargos Extras Registrados
+              </span>
+              <strong style={{ fontSize: '1.5rem', color: '#0F1E33' }}>
+                {formatUSD(receptionStats.totalExtras)}
+              </strong>
+            </div>
+          </div>
+
+          {/* Filtros de estado y buscador */}
+          <div className={styles.filterBarRow}>
+            <div className={styles.filterPills}>
+              <button
+                type="button"
+                className={`${styles.filterPill} ${receptionFilter === 'todos' ? styles.filterPillActive : ''}`}
+                onClick={() => setReceptionFilter('todos')}
+              >
+                Todos ({reservas.length})
+              </button>
+              <button
+                type="button"
+                className={`${styles.filterPill} ${receptionFilter === 'pendientes' ? styles.filterPillActive : ''}`}
+                onClick={() => setReceptionFilter('pendientes')}
+              >
+                Pendientes Check-in ({receptionStats.pendientes})
+              </button>
+              <button
+                type="button"
+                className={`${styles.filterPill} ${receptionFilter === 'estancia' ? styles.filterPillActive : ''}`}
+                onClick={() => setReceptionFilter('estancia')}
+              >
+                En Estancia / Check-out ({receptionStats.enEstancia})
+              </button>
+              <button
+                type="button"
+                className={`${styles.filterPill} ${receptionFilter === 'finalizados' ? styles.filterPillActive : ''}`}
+                onClick={() => setReceptionFilter('finalizados')}
+              >
+                Finalizados ({receptionStats.finalizados})
+              </button>
+            </div>
+
             <div className={styles.searchBox}>
               <Search size={16} color="#64748B" />
               <input
                 type="text"
-                placeholder="Buscar por cédula, huésped, localizador u hotel..."
+                placeholder="Buscar por cédula, huésped, localizador, habitación u hotel..."
                 className={styles.searchInput}
                 value={searchReservaQuery}
                 onChange={(e) => setSearchReservaQuery(e.target.value)}
@@ -1040,13 +1010,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
             <table className={styles.adminTable}>
               <thead>
                 <tr>
-                  <th>Código / Localizador</th>
-                  <th>Huésped Titular</th>
+                  <th>Código</th>
+                  <th>Huésped y Personas</th>
                   <th>Alojamiento y Habitación</th>
                   <th>Check-in / Check-out</th>
-                  <th>Total</th>
+                  <th>Folio y Extras</th>
                   <th>Estado</th>
-                  <th style={{ textAlign: 'right' }}>Acción de Recepción</th>
+                  <th style={{ textAlign: 'right' }}>Operación de Recepción</th>
                 </tr>
               </thead>
               <tbody>
@@ -1057,27 +1027,23 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 ) : filteredReservas.length === 0 ? (
                   <tr>
                     <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: '#64748B' }}>
-                      No se encontraron reservas con los criterios de búsqueda.
+                      No se encontraron reservas con los criterios seleccionados.
                     </td>
                   </tr>
                 ) : (
                   filteredReservas.map((res) => {
-                    const isCheckedOut =
-                      checkedOutIds.has(res.id) ||
-                      checkedOutIds.has(res.ordenId) ||
-                      res.estadoNombre === 'Checked-Out' ||
-                      res.estadoNombre === 'Check-out Realizado' ||
-                      res.estadoNombre === 'Estancia Finalizada';
-                    const isCheckedIn =
-                      !isCheckedOut &&
-                      (checkedInIds.has(res.id) ||
-                        checkedInIds.has(res.ordenId) ||
-                        Boolean(res.checkinRealizado) ||
-                        res.estadoNombre === 'Checked-In' ||
-                        res.estadoNombre === 'Check-in Realizado' ||
-                        res.estadoNombre === 'Llegada Confirmada' ||
-                        res.estadoNombre?.toLowerCase().includes('llegada'));
-                    const isCancelled = res.estadoNombre === 'Cancelada' || res.estadoId === 'EST-003';
+                    const { isCancelled, isCheckedOut, isCheckedIn } = getReservaLifecycle(res);
+                    const estPersonas = Number(res.numeroPersonas || 1);
+                    const realPersonas = Number(res.huespedesReales ?? estPersonas);
+                    const personasDifieren = realPersonas !== estPersonas;
+                    const extrasTotal = Number(res.cargosAdicionalesTotal || 0);
+                    const roomWasChanged = Boolean(
+                      res.espacioOriginalId && res.espacioId && res.espacioOriginalId !== res.espacioId,
+                    );
+                    const initialPaid = Number(res.montoPagadoInicial ?? res.precioTotal ?? 0);
+                    const totalActual = Number(res.precioTotal || 0);
+                    const folioDiff = Number((totalActual - initialPaid).toFixed(2));
+
                     return (
                       <tr key={res.id}>
                         <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#14406B' }}>
@@ -1088,74 +1054,120 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                           <div style={{ fontSize: '12px', color: '#64748B' }}>
                             {res.clienteEmail || res.usuarioEmail || 'huesped@luxestays.ec'}
                           </div>
-                          {res.clienteIdentificacion && (
-                            <div style={{ fontSize: '11.5px', color: '#14406B', fontWeight: 600, marginTop: '2px' }}>
-                              Cédula/ID: {res.clienteIdentificacion}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px', alignItems: 'center' }}>
+                            {res.clienteIdentificacion && (
+                              <span style={{ fontSize: '11.5px', color: '#14406B', fontWeight: 600 }}>
+                                ID: {res.clienteIdentificacion}
+                              </span>
+                            )}
+                            <Badge variant={personasDifieren ? 'gold' : 'neutral'}>
+                              {personasDifieren
+                                ? `Pers: ${realPersonas} real (est. ${estPersonas})`
+                                : `${estPersonas} pers.`}
+                            </Badge>
+                          </div>
+                        </td>
+                        <td>
+                          <strong>{res.alojamientoNombre}</strong>
+                          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
+                            {res.habitacionNombre}
+                          </div>
+                          {roomWasChanged && (
+                            <div style={{ marginTop: '4px' }}>
+                              <Badge variant="info">Habitación cambiada</Badge>
                             </div>
                           )}
                         </td>
                         <td>
-                          <strong>{res.alojamientoNombre}</strong>
-                          <div style={{ fontSize: '12px', color: '#64748B' }}>{res.habitacionNombre}</div>
+                          <div style={{ fontWeight: 500 }}>
+                            In: {toIsoDateOnly(res.fechaEntrada)} ({formatHoraHHMM(res.horaCheckIn, '14:00')})
+                          </div>
+                          <div style={{ fontWeight: 500 }}>
+                            Out: {toIsoDateOnly(res.fechaSalida)} ({formatHoraHHMM(res.horaCheckOut, '11:00')})
+                          </div>
                         </td>
                         <td>
-                          <div style={{ fontWeight: 500 }}>
-                            In: {String(res.fechaEntrada || '').split('T')[0]} ({formatHoraHHMM(res.horaCheckIn, '14:00')})
+                          <div style={{ fontWeight: 700, color: '#0F1E33' }}>
+                            {formatUSD(totalActual)}
                           </div>
-                          <div style={{ fontWeight: 500 }}>
-                            Out: {String(res.fechaSalida || '').split('T')[0]} ({formatHoraHHMM(res.horaCheckOut, '11:00')})
-                          </div>
-                        </td>
-                        <td style={{ fontWeight: 700, color: '#0F1E33' }}>
-                          {formatUSD(Number(res.precioTotal) || 0)}
+                          {extrasTotal > 0 && (
+                            <div style={{ fontSize: '11.5px', color: '#92400E', fontWeight: 600 }}>
+                              Extras: +{formatUSD(extrasTotal)} ({Array.isArray(res.extrasCargos) ? res.extrasCargos.length : 1})
+                            </div>
+                          )}
+                          {Math.abs(folioDiff) >= 0.01 && (
+                            <div style={{ fontSize: '11.5px', color: folioDiff > 0 ? '#B42318' : '#059669', fontWeight: 600 }}>
+                              Dif: {folioDiff > 0 ? '+' : ''}
+                              {formatUSD(folioDiff)}
+                            </div>
+                          )}
                         </td>
                         <td>
                           <Badge variant={isCheckedOut ? 'info' : isCheckedIn ? 'success' : isCancelled ? 'error' : 'gold'}>
-                            {isCheckedOut ? 'Check-out / Liberada' : isCheckedIn ? 'Llegada Confirmada' : (res.estadoNombre || 'Confirmada')}
+                            {isCheckedOut
+                              ? 'Check-out Realizado'
+                              : isCheckedIn
+                                ? 'En Estancia'
+                                : isCancelled
+                                  ? 'Cancelada'
+                                  : 'Pendiente Check-in'}
                           </Badge>
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           {isCheckedOut ? (
-                            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
-                              Liberada en Catálogo
-                            </span>
-                          ) : isCheckedIn ? (
-                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ fontSize: '12px', color: '#059669', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                <CheckCircle2 size={14} /> En estancia
-                              </span>
+                            <div className={styles.actionBtnGroup}>
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => handleCheckoutReserva(res)}
-                                title="Registrar salida de huésped y liberar la propiedad para el catálogo"
+                                icon={<Receipt size={14} />}
+                                onClick={() => setReceptionModalState({ mode: 'view', reserva: res })}
                               >
-                                Check-out y Liberar
+                                Ver Folio
+                              </Button>
+                            </div>
+                          ) : isCheckedIn ? (
+                            <div className={styles.actionBtnGroup}>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                icon={<SlidersHorizontal size={14} />}
+                                onClick={() => setReceptionModalState({ mode: 'adjust', reserva: res })}
+                                title="Cambiar habitación, ajustar número de huéspedes o añadir consumos/extras"
+                              >
+                                Hab. / Extras
+                              </Button>
+                              <Button
+                                variant="gold"
+                                size="sm"
+                                icon={<DoorOpen size={14} />}
+                                onClick={() => setReceptionModalState({ mode: 'checkout', reserva: res })}
+                                title="Liquidar folio final, registrar salida y liberar habitación"
+                              >
+                                Check-out
                               </Button>
                             </div>
                           ) : isCancelled ? (
                             <span style={{ fontSize: '13px', color: '#94A3B8' }}>Cancelada</span>
                           ) : (
-                            <Button
-                              variant="gold"
-                              size="sm"
-                              icon={<CheckCircle2 size={14} />}
-                              onClick={() => {
-                                setCheckinModalReserva(res);
-                                setCedulaCheckin(
-                                  res.clienteIdentificacion &&
-                                    res.clienteIdentificacion !== '1710034065' &&
-                                    res.clienteIdentificacion !== '9999999999999'
-                                    ? res.clienteIdentificacion
-                                    : '',
-                                );
-                                setCedulaError(null);
-                                setHuespedesReales(res.numeroPersonas || 2);
-                                setObservacionesCheckin('Huésped presentado en recepción');
-                              }}
-                            >
-                              Confirmar llegada
-                            </Button>
+                            <div className={styles.actionBtnGroup}>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                icon={<SlidersHorizontal size={14} />}
+                                onClick={() => setReceptionModalState({ mode: 'adjust', reserva: res })}
+                                title="Ajustar habitación, personas o añadir extras antes del check-in"
+                              >
+                                Ajustar
+                              </Button>
+                              <Button
+                                variant="gold"
+                                size="sm"
+                                icon={<CheckCircle2 size={14} />}
+                                onClick={() => setReceptionModalState({ mode: 'checkin', reserva: res })}
+                              >
+                                Check-in
+                              </Button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -1995,90 +2007,33 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       </Modal>
 
       {/* ────────────────────────────────────────────────────────────
-          MODAL: CHECK-IN / CONFIRMAR LLEGADA
+          MODAL: CHECK-IN, GESTIÓN DE ESTANCIA Y CHECK-OUT
       ────────────────────────────────────────────────────────────── */}
-      <Modal
-        isOpen={Boolean(checkinModalReserva)}
-        onClose={() => setCheckinModalReserva(null)}
-        title="Confirmar Llegada de Huésped (Check-in)"
-        size="md"
-      >
-        {checkinModalReserva && (
-          <div>
-            <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <div><strong>Huésped Titular:</strong> {checkinModalReserva.clienteNombre || checkinModalReserva.usuarioNombre || 'Cliente Registrado'}</div>
-              <div>
-                <strong>Cédula / Identificación Registrada:</strong>{' '}
-                <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#14406B' }}>
-                  {checkinModalReserva.clienteIdentificacion || 'Por registrar en recepción'}
-                </span>
-              </div>
-              <div><strong>Alojamiento:</strong> {checkinModalReserva.alojamientoNombre} ({checkinModalReserva.habitacionNombre})</div>
-              <div>
-                <strong>Horario Oficial:</strong> Check-in {String(checkinModalReserva.fechaEntrada || '').split('T')[0]} (desde las {formatHoraHHMM(checkinModalReserva.horaCheckIn, '14:00')}) · Check-out {String(checkinModalReserva.fechaSalida || '').split('T')[0]} (hasta las {formatHoraHHMM(checkinModalReserva.horaCheckOut, '11:00')})
-              </div>
-              <div><strong>Localizador:</strong> <span style={{ fontFamily: 'monospace' }}>{checkinModalReserva.ordenId || checkinModalReserva.id}</span></div>
-            </div>
-
-            <div style={{ marginBottom: '14px' }}>
-              <label className={styles.formLabel}>
-                Número de Cédula / Identificación del Huésped (Confirmación Obligatoria) *
-              </label>
-              <input
-                type="text"
-                placeholder="Ingrese o confirme el número de cédula (ej. 1712345678)"
-                className={styles.formInput}
-                value={cedulaCheckin}
-                onChange={(e) => {
-                  setCedulaCheckin(e.target.value);
-                  if (cedulaError) setCedulaError(null);
-                }}
-              />
-              {cedulaError && (
-                <div style={{ color: '#B42318', fontSize: '12.5px', fontWeight: 600, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <AlertCircle size={14} />
-                  <span>{cedulaError}</span>
-                </div>
-              )}
-            </div>
-
-            <div style={{ marginBottom: '14px' }}>
-              <label className={styles.formLabel}>Número de Personas Reales en Check-in</label>
-              <input
-                type="number"
-                min="1"
-                max="10"
-                className={styles.formInput}
-                value={huespedesReales}
-                onChange={(e) => setHuespedesReales(parseInt(e.target.value, 10) || 1)}
-              />
-            </div>
-
-            <div style={{ marginBottom: '18px' }}>
-              <label className={styles.formLabel}>Observaciones de Recepción</label>
-              <textarea
-                rows={3}
-                className={styles.formTextarea}
-                value={observacionesCheckin}
-                onChange={(e) => setObservacionesCheckin(e.target.value)}
-              />
-            </div>
-
-            <p style={{ fontSize: '12.5px', color: '#64748B', lineHeight: '1.4' }}>
-              Al confirmar, el sistema registrará el evento de check-in y lo despachará mediante el transactional outbox hacia el microservicio central de Booking.
-            </p>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
-              <Button variant="ghost" onClick={() => setCheckinModalReserva(null)}>
-                Cancelar
-              </Button>
-              <Button variant="gold" icon={<CheckCircle2 size={16} />} loading={isSubmittingCheckin} onClick={handleConfirmCheckin}>
-                Confirmar Check-in
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
+      <ReceptionStayModal
+        isOpen={Boolean(receptionModalState)}
+        mode={receptionModalState?.mode || 'checkin'}
+        reserva={receptionModalState?.reserva || null}
+        fallbackAlojamientoId={
+          receptionModalState?.reserva
+            ? alojamientos.find((a) => a.nombre === receptionModalState.reserva.alojamientoNombre)?.id
+            : undefined
+        }
+        onClose={() => setReceptionModalState(null)}
+        onSuccess={(message) => {
+          const closedMode = receptionModalState?.mode;
+          const res = receptionModalState?.reserva;
+          if (closedMode === 'checkout' && res && (res.alojamientoId || res.alojamientoNombre)) {
+            liberarAlojamiento(res.alojamientoId || '', res.alojamientoNombre);
+          }
+          showToast(message);
+          refetchReservas();
+          refetchAlojamientos();
+          queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
+          queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
+          queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
+        }}
+        onError={(message) => showToast(message, 'error')}
+      />
 
       {/* Toast de notificación */}
       {toast && (

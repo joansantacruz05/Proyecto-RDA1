@@ -255,6 +255,75 @@ export interface ReservaUsuarioItem {
   numeroFactura?: string;
   calificacion?: number;
   comentario?: string;
+  huespedesReales?: number;
+  extrasCargos?: ExtraCargoItem[];
+  cargosAdicionalesTotal?: number | string;
+  montoPagadoInicial?: number | string;
+  checkinRealizado?: boolean;
+  checkoutRealizado?: boolean;
+  checkoutHora?: string;
+  notasRecepcion?: string;
+}
+
+export interface ExtraCargoItem {
+  id: string;
+  concepto: string;
+  cantidad: number;
+  precioUnitario: number;
+  subtotal: number;
+}
+
+export interface HabitacionAdmin {
+  id: string;
+  nombre: string;
+  precioPorNoche: number | string;
+  capacidadAdultos: number;
+  capacidadNinos: number;
+  cantidadDisponible: number;
+  imagenesUrls?: string;
+  estado?: string;
+}
+
+export interface ReservaAdminItem {
+  id: string;
+  ordenId: string;
+  external_order_id?: string;
+  alojamientoId?: string;
+  alojamientoCodigo?: string;
+  alojamientoNombre: string;
+  espacioId?: string;
+  espacioOriginalId?: string;
+  habitacionNombre: string;
+  precioPorNoche?: number | string;
+  capacidadAdultos?: number;
+  capacidadNinos?: number;
+  cantidadHabitaciones?: number;
+  fechaEntrada: string;
+  fechaSalida: string;
+  subtotal?: number | string;
+  iva?: number | string;
+  tasaMunicipal?: number | string;
+  precioTotal: number | string;
+  estadoId: string;
+  estadoNombre: string;
+  estadoPago?: string;
+  usuarioNombre?: string;
+  usuarioEmail?: string;
+  clienteNombre?: string;
+  clienteEmail?: string;
+  clienteIdentificacion?: string;
+  horaCheckIn?: string;
+  horaCheckOut?: string;
+  numeroPersonas?: number;
+  huespedesReales?: number;
+  extrasCargos?: ExtraCargoItem[];
+  cargosAdicionalesTotal?: number | string;
+  montoPagadoInicial?: number | string;
+  notasRecepcion?: string;
+  checkinHora?: string;
+  checkinRealizado?: boolean;
+  checkoutRealizado?: boolean;
+  checkoutHora?: string;
 }
 
 export interface DashboardStats {

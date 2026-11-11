@@ -127,4 +127,26 @@ export class PricingService {
       nightlyRates,
     };
   }
+
+  /**
+   * Recalcula subtotal, IVA y total neto al sumar cargos adicionales de recepción.
+   */
+  recalculateWithExtras(
+    baseRoomSubtotal: number,
+    extrasSubtotal: number,
+    tasaMunicipal: number,
+  ): { subtotal: number; iva: number; tasaMunicipal: number; total: number } {
+    const cleanBase = Math.max(0, Number(baseRoomSubtotal || 0));
+    const cleanExtras = Math.max(0, Number(extrasSubtotal || 0));
+    const cleanTasa = Math.max(0, Number(tasaMunicipal || 0));
+    const subtotal = Number((cleanBase + cleanExtras).toFixed(2));
+    const iva = Number((subtotal * this.defaultIvaRate).toFixed(2));
+    const total = Number((subtotal + iva + cleanTasa).toFixed(2));
+    return {
+      subtotal,
+      iva,
+      tasaMunicipal: Number(cleanTasa.toFixed(2)),
+      total,
+    };
+  }
 }
