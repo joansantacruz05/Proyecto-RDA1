@@ -3,6 +3,7 @@ import {
   computeReceptionFolioPreview,
   computeRoomBaseSubtotal,
   computeStayNights,
+  isBookingOriginReserva,
   normalizeExtraItems,
 } from './receptionFolio';
 
@@ -129,6 +130,37 @@ describe('receptionFolio utilities', () => {
     expect(items).toHaveLength(2);
     expect(items[0]).toMatchObject({ concepto: 'Cama adicional', cantidad: 2, precioUnitario: 25, subtotal: 50 });
     expect(items[1]).toMatchObject({ concepto: 'Parqueadero', cantidad: 1, precioUnitario: 0, subtotal: 0 });
+  });
+
+  it('identifies Booking Core origin vs direct LuxeStays orders accurately', () => {
+    expect(isBookingOriginReserva({ canalOrigen: 'BOOKING_HUB' })).toBe(true);
+    expect(isBookingOriginReserva({ canalOrigen: 'WEB_DIRECT' })).toBe(false);
+    expect(isBookingOriginReserva({ canalOrigen: 'WEB_DIRECT', esReservaBooking: true })).toBe(true);
+    expect(isBookingOriginReserva({ esReservaBooking: false, canalOrigen: 'BOOKING_HUB' })).toBe(false);
+    expect(isBookingOriginReserva(null)).toBe(false);
+  });
+
+  it('locks financial folio with zero reception balance when reservation was paid in Booking Core', () => {
+    const bookingFolio = computeReceptionFolioPreview({
+      currentSubtotal: 200,
+      currentTasaMunicipal: 4,
+      currentCargosAdicionalesTotal: 0,
+      montoPagadoInicial: 234,
+      precioTotal: 234,
+      currentEspacioId: 'ESP-001',
+      targetRoom: { id: 'ESP-002', precioPorNoche: 150 },
+      fechaEntrada: '2026-05-10',
+      fechaSalida: '2026-05-12',
+      extras: [{ id: '1', concepto: 'Desayuno buffet', cantidad: 2, precioUnitario: 12, subtotal: 24 }],
+      estadoPago: undefined,
+      esReservaBooking: true,
+    });
+
+    expect(bookingFolio.roomChanged).toBe(false);
+    expect(bookingFolio.extrasSubtotal).toBe(0);
+    expect(bookingFolio.newTotal).toBe(234);
+    expect(bookingFolio.diferenciaTotal).toBe(0);
+    expect(bookingFolio.saldoACobrarEnHotel).toBe(0);
   });
 });
 

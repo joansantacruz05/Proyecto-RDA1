@@ -16,6 +16,7 @@ import type { ExtraCargoItem, HabitacionAdmin, ReservaAdminItem } from '../../ap
 import {
   computeReceptionFolioPreview,
   computeRoomBaseSubtotal,
+  isBookingOriginReserva,
   normalizeExtraItems,
   RECEPTION_EXTRA_PRESETS,
   toIsoDateOnly,
@@ -49,6 +50,7 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
   onError,
 }) => {
   const isReadOnly = mode === 'view';
+  const isBookingOrder = isBookingOriginReserva(reserva);
   const [cedula, setCedula] = useState('');
   const [huespedesReales, setHuespedesReales] = useState(1);
   const [selectedEspacioId, setSelectedEspacioId] = useState('');
@@ -81,7 +83,7 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
   }, [isOpen, reserva, mode]);
 
   useEffect(() => {
-    if (!isOpen || !alojamientoId) {
+    if (!isOpen || !alojamientoId || isReadOnly || isBookingOrder) {
       setRooms([]);
       return;
     }
@@ -101,7 +103,7 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, alojamientoId]);
+  }, [isOpen, alojamientoId, isReadOnly, isBookingOrder]);
 
   const estimatedGuests = Number(reserva?.numeroPersonas || 1);
   const guestDiff = huespedesReales - estimatedGuests;
@@ -135,8 +137,9 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
       cantidadHabitaciones: reserva.cantidadHabitaciones || 1,
       extras,
       estadoPago: reserva.estadoPago,
+      esReservaBooking: isBookingOrder,
     });
-  }, [reserva, selectedRoom, extras]);
+  }, [reserva, selectedRoom, extras, isBookingOrder]);
 
   if (!reserva || !folio) return null;
 
@@ -217,12 +220,18 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
 
   const modalTitle =
     mode === 'checkin'
-      ? 'Confirmar Check-in · Recepción y Ajustes'
+      ? isBookingOrder
+        ? 'Confirmar Check-in · Reserva Booking Core'
+        : 'Confirmar Check-in · Recepción y Ajustes'
       : mode === 'checkout'
-        ? 'Confirmar Check-out · Liquidación Final'
+        ? isBookingOrder
+          ? 'Confirmar Check-out · Reserva Booking Core'
+          : 'Confirmar Check-out · Liquidación Final'
         : mode === 'view'
-          ? 'Detalle de Folio · Estancia Cerrada'
-          : 'Gestionar Estancia en Curso';
+          ? 'Detalle de Folio · Estancia'
+          : isBookingOrder
+            ? 'Observaciones · Reserva Booking Core'
+            : 'Gestionar Estancia en Curso';
 
   const handleSubmit = async () => {
     if (isReadOnly) {
@@ -232,14 +241,18 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
 
     const orderIdentifier = reserva.ordenId || reserva.id;
     const targetId = reserva.id;
-    const sanitizedExtras = extras.map((e) => ({
-      id: e.id,
-      concepto: e.concepto,
-      cantidad: e.cantidad,
-      precioUnitario: e.precioUnitario,
-    }));
+    const sanitizedExtras = isBookingOrder
+      ? undefined
+      : extras.map((e) => ({
+          id: e.id,
+          concepto: e.concepto,
+          cantidad: e.cantidad,
+          precioUnitario: e.precioUnitario,
+        }));
     const spaceToSend =
-      selectedEspacioId && selectedEspacioId !== reserva.espacioId ? selectedEspacioId : undefined;
+      !isBookingOrder && selectedEspacioId && selectedEspacioId !== reserva.espacioId
+        ? selectedEspacioId
+        : undefined;
 
     if (mode === 'checkin') {
       const cedulaLimpia = cedula.trim();
@@ -262,36 +275,62 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
     setIsSubmitting(true);
     try {
       if (mode === 'checkin') {
-        await api.post(`/orders/${orderIdentifier}/check-in`, {
-          cedula: cedula.trim(),
-          identificacion: cedula.trim(),
-          earlyCheckinAutorizado: true,
-          huespedesReales,
-          numero_personas_reales: huespedesReales,
-          espacioId: spaceToSend,
-          extras: sanitizedExtras,
-          notasRecepcion: notasRecepcion.trim(),
-          observaciones: notasRecepcion.trim() || `Cédula verificada: ${cedula.trim()}`,
-          external_order_id: reserva.external_order_id || undefined,
-        });
+        await api.post(
+          `/orders/${orderIdentifier}/check-in`,
+          isBookingOrder
+            ? {
+                cedula: cedula.trim(),
+                identificacion: cedula.trim(),
+                earlyCheckinAutorizado: true,
+                notasRecepcion: notasRecepcion.trim(),
+                observaciones: notasRecepcion.trim() || `Cédula verificada: ${cedula.trim()}`,
+                external_order_id: reserva.external_order_id || undefined,
+              }
+            : {
+                cedula: cedula.trim(),
+                identificacion: cedula.trim(),
+                earlyCheckinAutorizado: true,
+                huespedesReales,
+                numero_personas_reales: huespedesReales,
+                espacioId: spaceToSend,
+                extras: sanitizedExtras,
+                notasRecepcion: notasRecepcion.trim(),
+                observaciones: notasRecepcion.trim() || `Cédula verificada: ${cedula.trim()}`,
+                external_order_id: reserva.external_order_id || undefined,
+              },
+        );
         onSuccess(
           `Check-in confirmado para ${reserva.clienteNombre || reserva.usuarioNombre || 'huésped'}${spaceToSend ? ' con cambio de habitación' : ''}.`,
         );
       } else if (mode === 'adjust') {
-        await api.patch(`/reservas/${targetId}/recepcion`, {
-          huespedesReales,
-          espacioId: spaceToSend,
-          extras: sanitizedExtras,
-          notasRecepcion: notasRecepcion.trim(),
-        });
-        onSuccess('Cambios de estancia, habitación y cargos adicionales guardados.');
+        await api.patch(
+          `/reservas/${targetId}/recepcion`,
+          isBookingOrder
+            ? { notasRecepcion: notasRecepcion.trim() }
+            : {
+                huespedesReales,
+                espacioId: spaceToSend,
+                extras: sanitizedExtras,
+                notasRecepcion: notasRecepcion.trim(),
+              },
+        );
+        onSuccess(
+          isBookingOrder
+            ? 'Observación operativa guardada.'
+            : 'Cambios de estancia, habitación y cargos adicionales guardados.',
+        );
       } else if (mode === 'checkout') {
-        await api.post(`/orders/${orderIdentifier}/check-out`, {
-          huespedesReales,
-          espacioId: spaceToSend,
-          extras: sanitizedExtras,
-          notasRecepcion: notasRecepcion.trim(),
-        });
+        await api.post(
+          `/orders/${orderIdentifier}/check-out`,
+          isBookingOrder
+            ? { notasRecepcion: notasRecepcion.trim() }
+            : {
+                huespedesReales,
+                espacioId: spaceToSend,
+                extras: sanitizedExtras,
+                notasRecepcion: notasRecepcion.trim(),
+              },
+        );
         onSuccess(
           `Check-out completado para ${reserva.clienteNombre || reserva.usuarioNombre || 'huésped'}. El alojamiento pasó automáticamente a estado En Limpieza.`,
         );
@@ -343,7 +382,25 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
               {toIsoDateOnly(reserva.fechaSalida)} ({formatHoraHHMM(reserva.horaCheckOut, '11:00')})
             </span>
           </div>
+          <div>
+            <span className={styles.summaryLabel}>Canal y Cobro:</span>
+            <Badge variant={isBookingOrder ? 'info' : 'success'}>
+              {isBookingOrder ? '🌐 Booking Core (Cobrado allá)' : '🏨 LuxeStays Directa'}
+            </Badge>
+          </div>
+          <div>
+            <span className={styles.summaryLabel}>Huéspedes Registrados:</span>
+            <span>{estimatedGuests} persona(s)</span>
+          </div>
         </div>
+
+        {isBookingOrder && (
+          <div className={`${styles.alertBox} ${styles.alertBlue}`}>
+            <span>
+              <strong>Reserva cobrada directamente en Booking Core:</strong> el cliente ya efectuó el pago en Booking Core. Por acuerdo operativo de integración, los cambios de habitación, variación de personas y cargos adicionales están deshabilitados en recepción; únicamente confirma check-in, observaciones o check-out (envío a limpieza).
+            </span>
+          </div>
+        )}
 
         {formError && (
           <div className={`${styles.alertBox} ${styles.alertError}`}>
@@ -386,8 +443,8 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
           </div>
         )}
 
-        {/* Personas Reales + Cambio de Habitación */}
-        {!isReadOnly && (
+        {/* Personas Reales + Cambio de Habitación (solo reservas directas LuxeStays) */}
+        {!isReadOnly && !isBookingOrder && (
           <div className={styles.sectionBox}>
             <div className={styles.sectionHeader}>
               <h4 className={styles.sectionTitle}>
@@ -502,7 +559,8 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
           </div>
         )}
 
-        {/* Extras / Servicios Adicionales */}
+        {/* Extras / Servicios Adicionales (bloqueados cuando el cobro vino de Booking Core) */}
+        {(!isBookingOrder || extras.length > 0) && (
         <div className={styles.sectionBox}>
           <div className={styles.sectionHeader}>
             <h4 className={styles.sectionTitle}>
@@ -516,7 +574,7 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
             </span>
           </div>
 
-          {!isReadOnly && (
+          {!isReadOnly && !isBookingOrder && (
             <>
               <div className={styles.presetChips}>
                 {RECEPTION_EXTRA_PRESETS.map((preset) => (
@@ -585,7 +643,7 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
                       {formatUSD(item.precioUnitario)} c/u
                     </div>
                   </div>
-                  {!isReadOnly ? (
+                  {!isReadOnly && !isBookingOrder ? (
                     <div className={styles.stepper} style={{ transform: 'scale(0.88)' }}>
                       <button
                         type="button"
@@ -607,7 +665,7 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
                     <span>× {item.cantidad}</span>
                   )}
                   <strong>{formatUSD(item.subtotal)}</strong>
-                  {!isReadOnly && (
+                  {!isReadOnly && !isBookingOrder && (
                     <button
                       type="button"
                       className={styles.removeExtraBtn}
@@ -622,6 +680,7 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
             </div>
           )}
         </div>
+        )}
 
         {/* Notas */}
         {!isReadOnly ? (
@@ -629,7 +688,11 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
             <label className={styles.label}>Notas / Observaciones de Recepción</label>
             <textarea
               rows={2}
-              placeholder="Ej. Llegaron 3 huéspedes, cambio autorizado a Suite Vista al Mar, pago adicional en recepción..."
+              placeholder={
+                isBookingOrder
+                  ? 'Ej. Hora de llegada registrada, entrega de llaves, estado de la habitación al check-out...'
+                  : 'Ej. Llegaron 3 huéspedes, cambio autorizado a Suite Vista al Mar, pago adicional en recepción...'
+              }
               className={styles.textarea}
               value={notasRecepcion}
               onChange={(e) => setNotasRecepcion(e.target.value)}
@@ -650,11 +713,21 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
             <span className={styles.sectionTitle}>
               <CreditCard size={16} color="#14406B" /> Desglose y Liquidación de Estancia
             </span>
-            <Badge variant={String(reserva.estadoPago || '').toUpperCase() === 'COMPLETADO' ? 'success' : 'gold'}>
+            <Badge
+              variant={
+                isBookingOrder
+                  ? 'info'
+                  : String(reserva.estadoPago || '').toUpperCase() === 'COMPLETADO'
+                    ? 'success'
+                    : 'gold'
+              }
+            >
               Pago inicial:{' '}
-              {String(reserva.estadoPago || '').toUpperCase() === 'COMPLETADO'
-                ? 'Pagado Online'
-                : 'Pendiente / Efectivo en Hotel'}
+              {isBookingOrder
+                ? 'Pagado en Booking Core'
+                : String(reserva.estadoPago || '').toUpperCase() === 'COMPLETADO'
+                  ? 'Pagado Online'
+                  : 'Pendiente / Efectivo en Hotel'}
             </Badge>
           </div>
 
@@ -662,7 +735,7 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
             <span>Hospedaje base ({folio.nights} noche{folio.nights > 1 ? 's' : ''})</span>
             <span>{formatUSD(folio.previousRoomSubtotal)}</span>
           </div>
-          {folio.roomChanged && (
+          {!isBookingOrder && folio.roomChanged && (
             <div className={styles.folioRow} style={{ color: folio.roomDifference >= 0 ? '#92400E' : '#059669', fontWeight: 600 }}>
               <span>Ajuste por cambio de habitación</span>
               <span>
@@ -671,10 +744,12 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
               </span>
             </div>
           )}
-          <div className={styles.folioRow}>
-            <span>Extras y consumos adicionales ({extras.length} ítem(s))</span>
-            <span>{formatUSD(folio.extrasSubtotal)}</span>
-          </div>
+          {(!isBookingOrder || folio.extrasSubtotal > 0) && (
+            <div className={styles.folioRow}>
+              <span>Extras y consumos adicionales ({extras.length} ítem(s))</span>
+              <span>{formatUSD(folio.extrasSubtotal)}</span>
+            </div>
+          )}
           <div className={styles.folioRow}>
             <span>IVA (15%) + Tasa Municipal (${folio.tasaMunicipal.toFixed(2)})</span>
             <span>{formatUSD(folio.newIva + folio.tasaMunicipal)}</span>
@@ -687,16 +762,25 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
             <span>{formatUSD(folio.newTotal)}</span>
           </div>
           <div className={styles.folioRow} style={{ fontWeight: 700, color: '#14406B' }}>
-            <span>
-              {String(reserva.estadoPago || '').toUpperCase() === 'COMPLETADO'
-                ? `Diferencia adicional a cobrar en recepción (pagado: ${formatUSD(folio.montoInicial)})`
-                : 'Total a cobrar en recepción'}
-            </span>
-            <span>
-              {folio.diferenciaTotal < 0 && String(reserva.estadoPago || '').toUpperCase() === 'COMPLETADO'
-                ? `Saldo a favor ${formatUSD(Math.abs(folio.diferenciaTotal))}`
-                : formatUSD(folio.saldoACobrarEnHotel)}
-            </span>
+            {isBookingOrder ? (
+              <>
+                <span>Cobro adicional en recepción (pagado en Booking: {formatUSD(folio.montoInicial)})</span>
+                <span>$0.00 (Liquidado en Booking Core)</span>
+              </>
+            ) : (
+              <>
+                <span>
+                  {String(reserva.estadoPago || '').toUpperCase() === 'COMPLETADO'
+                    ? `Diferencia adicional a cobrar en recepción (pagado: ${formatUSD(folio.montoInicial)})`
+                    : 'Total a cobrar en recepción'}
+                </span>
+                <span>
+                  {folio.diferenciaTotal < 0 && String(reserva.estadoPago || '').toUpperCase() === 'COMPLETADO'
+                    ? `Saldo a favor ${formatUSD(Math.abs(folio.diferenciaTotal))}`
+                    : formatUSD(folio.saldoACobrarEnHotel)}
+                </span>
+              </>
+            )}
           </div>
         </div>
 

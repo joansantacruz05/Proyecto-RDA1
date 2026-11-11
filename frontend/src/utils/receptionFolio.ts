@@ -110,6 +110,7 @@ export interface ReceptionFolioInput {
   cantidadHabitaciones?: number | undefined;
   extras: ExtraCargoItem[];
   estadoPago?: string | undefined;
+  esReservaBooking?: boolean | undefined;
 }
 
 export interface ReceptionFolioPreview {
@@ -128,6 +129,16 @@ export interface ReceptionFolioPreview {
   saldoACobrarEnHotel: number;
 }
 
+export function isBookingOriginReserva(
+  reserva?: { canalOrigen?: string | null; esReservaBooking?: boolean | null } | null,
+): boolean {
+  if (!reserva) return false;
+  if (typeof reserva.esReservaBooking === 'boolean') return reserva.esReservaBooking;
+  const canal = String(reserva.canalOrigen || '').trim().toUpperCase();
+  if (!canal) return false;
+  return canal !== 'WEB_DIRECT' && canal !== 'LUXESTAYS_WEB';
+}
+
 export function computeReceptionFolioPreview(input: ReceptionFolioInput): ReceptionFolioPreview {
   const nights = computeStayNights(input.fechaEntrada, input.fechaSalida);
   const currentTotal = Number(input.precioTotal || 0);
@@ -143,6 +154,26 @@ export function computeReceptionFolioPreview(input: ReceptionFolioInput): Recept
     input.currentTasaMunicipal != null
       ? Number(input.currentTasaMunicipal)
       : Number((nights * RECEPTION_TASA_MUNICIPAL_POR_NOCHE * Math.max(1, input.cantidadHabitaciones || 1)).toFixed(2));
+
+  if (input.esReservaBooking) {
+    const lockedIva = Number((rawSubtotal * RECEPTION_IVA_RATE).toFixed(2));
+    const totalPaidBooking = Number(input.montoPagadoInicial ?? currentTotal);
+    return {
+      nights,
+      roomChanged: false,
+      previousRoomSubtotal,
+      baseRoomSubtotal: previousRoomSubtotal,
+      roomDifference: 0,
+      extrasSubtotal: Number(currentExtras.toFixed(2)),
+      newSubtotal: Number(rawSubtotal.toFixed(2)),
+      newIva: lockedIva,
+      tasaMunicipal: Number(tasaMunicipal.toFixed(2)),
+      newTotal: Number(currentTotal.toFixed(2)),
+      montoInicial: Number(totalPaidBooking.toFixed(2)),
+      diferenciaTotal: 0,
+      saldoACobrarEnHotel: 0,
+    };
+  }
 
   const roomChanged = Boolean(
     input.targetRoom && input.currentEspacioId && input.targetRoom.id !== input.currentEspacioId,

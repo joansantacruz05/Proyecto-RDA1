@@ -49,7 +49,7 @@ import {
   getCityCenterCoords,
   hasValidCoordinates,
 } from '../../utils/ecuadorLocations';
-import { toIsoDateOnly } from '../../utils/receptionFolio';
+import { isBookingOriginReserva, toIsoDateOnly } from '../../utils/receptionFolio';
 import styles from './AdminPage.module.css';
 
 interface AdminPageProps {
@@ -1394,12 +1394,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 ) : (
                   filteredReservas.map((res) => {
                     const { isCancelled, isCleaning, isCheckedOut, isCheckedIn } = getReservaLifecycle(res);
+                    const isBookingOrder = isBookingOriginReserva(res);
                     const estPersonas = Number(res.numeroPersonas || 1);
                     const realPersonas = Number(res.huespedesReales ?? estPersonas);
-                    const personasDifieren = realPersonas !== estPersonas;
+                    const personasDifieren = !isBookingOrder && realPersonas !== estPersonas;
                     const extrasTotal = Number(res.cargosAdicionalesTotal || 0);
                     const roomWasChanged = Boolean(
-                      res.espacioOriginalId && res.espacioId && res.espacioOriginalId !== res.espacioId,
+                      !isBookingOrder &&
+                        res.espacioOriginalId &&
+                        res.espacioId &&
+                        res.espacioOriginalId !== res.espacioId,
                     );
                     const initialPaid = Number(res.montoPagadoInicial ?? res.precioTotal ?? 0);
                     const totalActual = Number(res.precioTotal || 0);
@@ -1408,7 +1412,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                     return (
                       <tr key={res.id}>
                         <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#14406B' }}>
-                          {res.ordenId || res.id}
+                          <div>{res.ordenId || res.id}</div>
+                          <div style={{ marginTop: '4px', fontFamily: 'inherit' }}>
+                            <Badge variant={isBookingOrder ? 'info' : 'neutral'}>
+                              {isBookingOrder ? '🌐 Booking Core' : '🏨 Directa Web'}
+                            </Badge>
+                          </div>
                         </td>
                         <td>
                           <strong>{res.clienteNombre || res.usuarioNombre || 'Huésped Registrado'}</strong>
@@ -1451,16 +1460,24 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                           <div style={{ fontWeight: 700, color: '#0F1E33' }}>
                             {formatUSD(totalActual)}
                           </div>
-                          {extrasTotal > 0 && (
-                            <div style={{ fontSize: '11.5px', color: '#92400E', fontWeight: 600 }}>
-                              Extras: +{formatUSD(extrasTotal)} ({Array.isArray(res.extrasCargos) ? res.extrasCargos.length : 1})
+                          {isBookingOrder ? (
+                            <div style={{ fontSize: '11.5px', color: '#1D4ED8', fontWeight: 600 }}>
+                              Cobrado en Booking Core
                             </div>
-                          )}
-                          {Math.abs(folioDiff) >= 0.01 && (
-                            <div style={{ fontSize: '11.5px', color: folioDiff > 0 ? '#B42318' : '#059669', fontWeight: 600 }}>
-                              Dif: {folioDiff > 0 ? '+' : ''}
-                              {formatUSD(folioDiff)}
-                            </div>
+                          ) : (
+                            <>
+                              {extrasTotal > 0 && (
+                                <div style={{ fontSize: '11.5px', color: '#92400E', fontWeight: 600 }}>
+                                  Extras: +{formatUSD(extrasTotal)} ({Array.isArray(res.extrasCargos) ? res.extrasCargos.length : 1})
+                                </div>
+                              )}
+                              {Math.abs(folioDiff) >= 0.01 && (
+                                <div style={{ fontSize: '11.5px', color: folioDiff > 0 ? '#B42318' : '#059669', fontWeight: 600 }}>
+                                  Dif: {folioDiff > 0 ? '+' : ''}
+                                  {formatUSD(folioDiff)}
+                                </div>
+                              )}
+                            </>
                           )}
                         </td>
                         <td>
@@ -1508,15 +1525,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                             </div>
                           ) : isCheckedIn ? (
                             <div className={styles.actionBtnGroup}>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                icon={<SlidersHorizontal size={14} />}
-                                onClick={() => setReceptionModalState({ mode: 'adjust', reserva: res })}
-                                title="Cambiar habitación, ajustar número de huéspedes o añadir consumos/extras"
-                              >
-                                Hab. / Extras
-                              </Button>
+                              {!isBookingOrder ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  icon={<SlidersHorizontal size={14} />}
+                                  onClick={() => setReceptionModalState({ mode: 'adjust', reserva: res })}
+                                  title="Cambiar habitación, ajustar número de huéspedes o añadir consumos/extras"
+                                >
+                                  Hab. / Extras
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  icon={<Receipt size={14} />}
+                                  onClick={() => setReceptionModalState({ mode: 'view', reserva: res })}
+                                  title="Ver detalle de reserva pagada en Booking Core"
+                                >
+                                  Ver Folio
+                                </Button>
+                              )}
                               <Button
                                 variant="gold"
                                 size="sm"
@@ -1531,15 +1560,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                             <span style={{ fontSize: '13px', color: '#94A3B8' }}>Cancelada</span>
                           ) : (
                             <div className={styles.actionBtnGroup}>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                icon={<SlidersHorizontal size={14} />}
-                                onClick={() => setReceptionModalState({ mode: 'adjust', reserva: res })}
-                                title="Ajustar habitación, personas o añadir extras antes del check-in"
-                              >
-                                Ajustar
-                              </Button>
+                              {!isBookingOrder && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  icon={<SlidersHorizontal size={14} />}
+                                  onClick={() => setReceptionModalState({ mode: 'adjust', reserva: res })}
+                                  title="Ajustar habitación, personas o añadir extras antes del check-in"
+                                >
+                                  Ajustar
+                                </Button>
+                              )}
                               <Button
                                 variant="gold"
                                 size="sm"

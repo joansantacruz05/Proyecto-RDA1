@@ -88,10 +88,10 @@ export class PagosService {
         [pagoId, realReservaId, metodoPagoId, montoTotal, estadoPago],
       );
 
-      // Si el pago es completado, actualizar la reserva a Confirmada (EST-002) y registrar historial
+      // Si el pago es completado, actualizar la reserva a Confirmada (EST-002), marcar origen directo y registrar historial
       if (estadoPago === 'Completado') {
         await manager.query(
-          `UPDATE reservas SET "estadoId" = 'EST-002' WHERE id = $1`,
+          `UPDATE reservas SET "estadoId" = 'EST-002', "canalOrigen" = 'WEB_DIRECT' WHERE id = $1`,
           [realReservaId],
         );
 
@@ -106,6 +106,11 @@ export class PagosService {
           ],
         );
       } else {
+        await manager.query(
+          `UPDATE reservas SET "canalOrigen" = 'WEB_DIRECT' WHERE id = $1 AND ("canalOrigen" IS NULL OR TRIM("canalOrigen") = '')`,
+          [realReservaId],
+        );
+
         await manager.query(
           `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
            VALUES ($1, $2, $3, $3, $4)`,

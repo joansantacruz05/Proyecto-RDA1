@@ -288,6 +288,8 @@ export interface ReservaUsuarioItem {
   checkoutRealizado?: boolean;
   checkoutHora?: string;
   limpiezaCompletada?: boolean;
+  canalOrigen?: string;
+  esReservaBooking?: boolean;
   alojamientoEstado?: string;
   habitacionEstado?: string;
   numHabitaciones?: number;
@@ -365,6 +367,8 @@ export interface ReservaAdminItem {
   checkoutRealizado?: boolean;
   checkoutHora?: string;
   limpiezaCompletada?: boolean;
+  canalOrigen?: string;
+  esReservaBooking?: boolean;
 }
 
 export interface DashboardStats {

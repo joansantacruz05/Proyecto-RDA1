@@ -23,6 +23,11 @@ import { buildEcuadorHourTimestamp, normalizeHoraHHMM, parseHoraMinutes } from '
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const CANAL_ORIGEN_SQL = `COALESCE(
+  NULLIF(r."canalOrigen", ''),
+  CASE WHEN EXISTS (SELECT 1 FROM pagos px WHERE px."reservaId" = r.id) THEN 'WEB_DIRECT' ELSE 'BOOKING_HUB' END
+)`;
+
 @Injectable()
 export class ReservasService implements OnModuleInit, OnModuleDestroy {
   // Caché en memoria para previsualizaciones temporales de órdenes (15 min)
@@ -84,6 +89,9 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       `CREATE UNIQUE INDEX IF NOT EXISTS uq_checkin_notif_reserva ON checkin_notificaciones (reserva_id)`,
       `INSERT INTO estados_reserva (id, nombre) VALUES ('EST-004', 'En Limpieza'), ('EST-005', 'Finalizada') ON CONFLICT (id) DO NOTHING`,
       `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "limpiezaCompletada" BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE reservas ADD COLUMN IF NOT EXISTS "canalOrigen" VARCHAR(40)`,
+      `UPDATE reservas r SET "canalOrigen" = CASE WHEN EXISTS (SELECT 1 FROM pagos p WHERE p."reservaId" = r.id) THEN 'WEB_DIRECT' WHEN EXISTS (SELECT 1 FROM usuarios u WHERE u.id = r."usuarioId" AND COALESCE(u.contrasena, '') <> 'EXTERNAL_JWT_USER' AND u.id NOT LIKE 'CLI-%') THEN 'WEB_DIRECT' ELSE 'BOOKING_HUB' END WHERE r."canalOrigen" IS NULL OR TRIM(r."canalOrigen") = ''`,
+      `CREATE INDEX IF NOT EXISTS idx_reservas_canal_origen ON reservas ("canalOrigen")`,
       `ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS "enLimpiezaDesde" TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS "numHabitaciones" INT NOT NULL DEFAULT 1, ADD COLUMN IF NOT EXISTS "numCamas" INT NOT NULL DEFAULT 1`,
       `ALTER TABLE espacios_rentables ADD COLUMN IF NOT EXISTS "numHabitaciones" INT NOT NULL DEFAULT 1, ADD COLUMN IF NOT EXISTS "numCamas" INT NOT NULL DEFAULT 1, ADD COLUMN IF NOT EXISTS "tipoCamas" VARCHAR(100) NOT NULL DEFAULT '1 Cama Doble / Queen', ADD COLUMN IF NOT EXISTS "enLimpiezaDesde" TIMESTAMPTZ`,
     ];
@@ -280,6 +288,61 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         penalty_percentage: 100.0,
       },
     };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  CLASIFICACIÓN DE CANAL DE ORIGEN (BOOKING CORE VS DIRECTA WEB)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  private async resolveCreateOrderChannel(
+    manager: any,
+    createRequest: any,
+    userIdFromToken: string,
+    clientIdHeader: string | undefined,
+    clientId: string,
+  ): Promise<'WEB_DIRECT' | 'BOOKING_HUB'> {
+    const explicit = String(
+      createRequest?.canalOrigen ||
+      createRequest?.canal_origen ||
+      createRequest?.channel ||
+      '',
+    ).trim().toUpperCase();
+
+    if (explicit === 'WEB_DIRECT' || explicit === 'LUXESTAYS_WEB') {
+      return 'WEB_DIRECT';
+    }
+    if (explicit === 'BOOKING_HUB' || explicit === 'BOOKING' || explicit === 'GDS') {
+      return 'BOOKING_HUB';
+    }
+
+    const hasBookingIdentifiers = Boolean(
+      createRequest?.saga_id ||
+      createRequest?.sagaId ||
+      clientIdHeader ||
+      userIdFromToken === 'NODE_SYSTEM_HUB' ||
+      String(clientId).startsWith('CLI-'),
+    );
+    if (hasBookingIdentifiers) {
+      return 'BOOKING_HUB';
+    }
+
+    const existingUsers = await manager.query(
+      `SELECT contrasena FROM usuarios WHERE id = $1 LIMIT 1`,
+      [clientId],
+    );
+    const existing = existingUsers?.[0];
+    if (existing && String(existing.contrasena || '') !== 'EXTERNAL_JWT_USER') {
+      return 'WEB_DIRECT';
+    }
+    return 'BOOKING_HUB';
+  }
+
+  private isBookingOriginOrder(row: any): boolean {
+    if (!row) return false;
+    if (typeof row.esReservaBooking === 'boolean') return row.esReservaBooking;
+    const canal = String(row.canalOrigen || '').trim().toUpperCase();
+    if (!canal) return !row.pagoId && !row.pagoMonto;
+    return canal !== 'WEB_DIRECT' && canal !== 'LUXESTAYS_WEB';
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -680,6 +743,14 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       const guestPhone = huespedTitular?.telefono || '+593991234567';
       const guestDoc = huespedTitular?.identificacion || '1710034065';
 
+      const canalOrigen = await this.resolveCreateOrderChannel(
+        manager,
+        createRequest,
+        userIdFromToken,
+        clientIdHeader,
+        clientId,
+      );
+
       await manager.query(
         `INSERT INTO usuarios (id, "nombreCompleto", email, telefono, identificacion, contrasena)
          VALUES ($1, $2, $3, $4, $5, 'EXTERNAL_JWT_USER')
@@ -708,9 +779,9 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
            id, "ordenId", "usuarioId", "espacioId", "estadoId", 
            "fechaEntrada", "fechaSalida", "precioTotal", subtotal, iva, "tasaMunicipal", 
            moneda, "numeroPersonas", "fechaCreacion", "checkinRealizado", "earlyCheckinAutorizado", "idempotencyKey",
-           "cantidadHabitaciones"
+           "cantidadHabitaciones", "canalOrigen"
          )
-         VALUES ($1, $2, $3, $4, 'EST-002', $5, $6, $7, $8, $9, $10, 'USD', $11, CURRENT_TIMESTAMP, false, false, $12, $13)`,
+         VALUES ($1, $2, $3, $4, 'EST-002', $5, $6, $7, $8, $9, $10, 'USD', $11, CURRENT_TIMESTAMP, false, false, $12, $13, $14)`,
         [
           reservaId,
           orderId,
@@ -725,6 +796,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
           totalPersonas,
           idemKey,
           cantidadHabitaciones,
+          canalOrigen,
         ],
       );
 
@@ -766,6 +838,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         external_order_id: externalOrderId,
         externalOrderId: externalOrderId,
         codigoReserva: codigoReserva,
+        canalOrigen: canalOrigen,
+        esReservaBooking: canalOrigen !== 'WEB_DIRECT',
         estado: 'CONFIRMED',
         status: 'CONFIRMED',
         saga_id: sagaId || randomUUID(),
@@ -868,6 +942,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
          COALESCE(r."checkoutRealizado", false) as "checkoutRealizado",
          COALESCE(r."limpiezaCompletada", false) as "limpiezaCompletada",
          r."checkoutHora", r."notasRecepcion",
+         ${CANAL_ORIGEN_SQL} as "canalOrigen",
+         (${CANAL_ORIGEN_SQL} <> 'WEB_DIRECT') as "esReservaBooking",
          r."estadoId", er.nombre as "estadoNombre",
          e.id as "espacioId", e.nombre as "habitacionNombre", e."precioPorNoche", e.estado as "habitacionEstado",
          COALESCE(e."numHabitaciones", 1)::int as "numHabitaciones",
@@ -916,6 +992,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     const baseSelect = `SELECT
          r.*, er.nombre as "estadoNombre",
          COALESCE(r."limpiezaCompletada", false) as "limpiezaCompletada",
+         ${CANAL_ORIGEN_SQL} as "canalOrigen",
+         (${CANAL_ORIGEN_SQL} <> 'WEB_DIRECT') as "esReservaBooking",
          e.nombre as "habitacionNombre", e."precioPorNoche", e.codigo as "habitacionCodigo",
          e.estado as "habitacionEstado",
          COALESCE(e."numHabitaciones", 1)::int as "numHabitaciones",
@@ -975,11 +1053,16 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     }
 
     const row = rows[0];
+    const canalOrigen = String(row.canalOrigen || 'BOOKING_HUB');
+    const esReservaBooking = this.isBookingOriginOrder({ ...row, canalOrigen });
     return {
       ...row,
       orderId: row.ordenId || row.id,
       reservaId: row.ordenId || row.id,
       externalOrderId: row.ordenId || row.id,
+      canalOrigen,
+      esReservaBooking,
+      soloLecturaFinanciera: esReservaBooking,
       cantidadHabitaciones: Number(row.cantidadHabitaciones || 1),
       rooms: Number(row.cantidadHabitaciones || 1),
       huespedesReales:
@@ -1041,6 +1124,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         a.id as "alojamientoId", a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo",
         a.estado as "alojamientoEstado",
         COALESCE(r."limpiezaCompletada", false) as "limpiezaCompletada",
+        ${CANAL_ORIGEN_SQL} as "canalOrigen",
+        (${CANAL_ORIGEN_SQL} <> 'WEB_DIRECT') as "esReservaBooking",
         COALESCE(TO_CHAR(a."horaCheckIn", 'HH24:MI'), '14:00') as "horaCheckIn",
         COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut",
         u."nombreCompleto" as "clienteNombre", u.email as "clienteEmail", u.identificacion as "clienteIdentificacion",
@@ -1420,6 +1505,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     const updatedOrderId = await this.dataSource.transaction(async (manager) => {
       const rows = await manager.query(
         `SELECT r.*, e."alojamientoId", e.nombre as "habitacionNombre", e."precioPorNoche",
+                ${CANAL_ORIGEN_SQL} as "canalOrigen",
+                (SELECT p.id FROM pagos p WHERE p."reservaId" = r.id LIMIT 1) as "pagoId",
                 (SELECT p.monto FROM pagos p WHERE p."reservaId" = r.id LIMIT 1) as "pagoMonto"
          FROM reservas r
          JOIN espacios_rentables e ON r."espacioId" = e.id
@@ -1441,7 +1528,66 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         throw this.invalidTransition('La estancia ya fue cerrada mediante check-out.');
       }
 
+      const isBookingOrigin = this.isBookingOriginOrder(r);
+      const requestedEspacioId = dto?.espacioId ? String(dto.espacioId).trim() : '';
+      const rawGuests = dto?.huespedesReales ?? dto?.huespedes_reales ?? dto?.numero_personas_reales;
+      const hasRawGuests = rawGuests !== undefined && rawGuests !== null && rawGuests !== '';
+      const parsedRawGuests = hasRawGuests ? Number(rawGuests) : null;
+      const existingExtras = Array.isArray(r.extrasCargos) ? r.extrasCargos : [];
+
+      const triesRoomChange = Boolean(requestedEspacioId && requestedEspacioId !== String(r.espacioId));
+      const triesGuestChange = Boolean(
+        hasRawGuests &&
+        (parsedRawGuests === null ||
+          !Number.isInteger(parsedRawGuests) ||
+          parsedRawGuests !== Number(r.numeroPersonas || 1)),
+      );
+      const triesExtrasChange = Boolean(
+        dto?.extras !== undefined &&
+        (Array.isArray(dto.extras)
+          ? dto.extras.length > 0 || existingExtras.length > 0
+          : true),
+      );
+
+      if (isBookingOrigin && (triesRoomChange || triesGuestChange || triesExtrasChange)) {
+        throw new ProblemDetailsException(
+          {
+            type: 'https://api.booking-hub.com/errors/booking-core-managed-payment',
+            title: 'Reserva gestionada por Booking Core',
+            status: HttpStatus.CONFLICT,
+            code: 'BOOKING_CORE_MANAGED_PAYMENT',
+            detail:
+              'Esta reserva fue pagada directamente en Booking Core. Por regla de integración, no se permiten cambios de habitación, modificación de huéspedes ni cargos adicionales desde la recepción del hotel.',
+          },
+          HttpStatus.CONFLICT,
+        );
+      }
+
       const changesLog: string[] = [];
+
+      if (isBookingOrigin) {
+        const notasProvided = dto?.notasRecepcion !== undefined;
+        const targetNotas = notasProvided
+          ? String(dto.notasRecepcion ?? '').trim() || null
+          : r.notasRecepcion ?? null;
+        if (notasProvided && targetNotas !== (r.notasRecepcion ?? null)) {
+          await manager.query(
+            `UPDATE reservas SET "notasRecepcion" = $1 WHERE id = $2`,
+            [targetNotas, r.id],
+          );
+          try {
+            await manager.query(
+              `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
+               VALUES ($1, $2, $3, $3, $4)`,
+              [generateEntityId('HIS'), r.id, r.estadoId || 'EST-002', 'Nota de recepción actualizada (Reserva Booking Core)'],
+            );
+          } catch (e: any) {
+            this.logger.warn(`[RECEPTION-HISTORIAL] ${e?.message}`);
+          }
+        }
+        return r.id;
+      }
+
       const montoPagadoInicial = Number(r.montoPagadoInicial ?? r.pagoMonto ?? r.precioTotal ?? 0);
       let targetEspacioId = String(r.espacioId);
       let newEspacioOriginalId: string | null = r.espacioOriginalId || null;
@@ -1451,8 +1597,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
 
       let targetHuespedesReales: number | null =
         r.huespedesReales != null ? Number(r.huespedesReales) : null;
-      const rawGuests = dto?.huespedesReales ?? dto?.huespedes_reales ?? dto?.numero_personas_reales;
-      if (rawGuests !== undefined && rawGuests !== null && rawGuests !== '') {
+      if (hasRawGuests) {
         const parsed = Number(rawGuests);
         if (!Number.isInteger(parsed) || parsed < 1) {
           throw new BadRequestException('huespedesReales debe ser un entero mayor o igual a 1.');
@@ -1463,7 +1608,6 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         targetHuespedesReales = parsed;
       }
 
-      const requestedEspacioId = dto?.espacioId ? String(dto.espacioId).trim() : '';
       if (requestedEspacioId && requestedEspacioId !== targetEspacioId) {
         const roomRows = await manager.query(
           `SELECT id, "alojamientoId", nombre, "precioPorNoche", "cantidadDisponible", estado
@@ -1527,7 +1671,6 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         changesLog.push(`Cambio de habitación: ${r.habitacionNombre} -> ${newRoom.nombre}`);
       }
 
-      const existingExtras = Array.isArray(r.extrasCargos) ? r.extrasCargos : [];
       const parsedExtras =
         dto?.extras !== undefined ? this.parseReceptionExtras(dto.extras) : existingExtras;
       const cargosAdicionalesTotal = Number(
@@ -2043,6 +2186,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
          COALESCE(r."checkoutRealizado", false) as "checkoutRealizado",
          COALESCE(r."limpiezaCompletada", false) as "limpiezaCompletada",
          r."checkoutHora", r."notasRecepcion",
+         ${CANAL_ORIGEN_SQL} as "canalOrigen",
+         (${CANAL_ORIGEN_SQL} <> 'WEB_DIRECT') as "esReservaBooking",
          r."estadoId", er.nombre as "estadoNombre",
          e.id as "espacioId", e.nombre as "habitacionNombre", e."precioPorNoche", e.estado as "habitacionEstado",
          COALESCE(e."numHabitaciones", 1)::int as "numHabitaciones",

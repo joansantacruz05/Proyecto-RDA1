@@ -189,6 +189,7 @@ export const Step2Payment: React.FC<Step2PaymentProps> = ({
 
       // Paso 1: Enviar POST /orders/create con Idempotency-Key
       const orderPayload = {
+        canalOrigen: 'WEB_DIRECT',
         accommodation_id: hotelId,
         alojamientoId: hotelId,
         tipoHabitacionCodigo: roomCode || 'SUITE_DELUXE',
