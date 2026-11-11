@@ -906,12 +906,13 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       SELECT 
         r.id, r."ordenId", r."fechaEntrada", r."fechaSalida", r."precioTotal", 
         r.subtotal, r.iva, r."tasaMunicipal", r."numeroPersonas", r.calificacion,
+        COALESCE(r."cantidadHabitaciones", 1)::int as "cantidadHabitaciones",
         r."estadoId",
         CASE 
           WHEN COALESCE(r."checkinRealizado", false) = true THEN 'Llegada Confirmada'
           WHEN EXISTS(
             SELECT 1 FROM booking.evento_outbox eo 
-            WHERE (eo.agregado_id = r."ordenId"::text OR eo.agregado_id = r.id::text)
+            WHERE (eo.agregado_id::text = r."ordenId"::text OR eo.agregado_id::text = r.id::text)
               AND eo.tipo = 'RESERVA_CHECKIN_CONFIRMADO'
           ) OR EXISTS(
             SELECT 1 FROM historial_reservas hr
@@ -927,7 +928,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
           COALESCE(r."checkinRealizado", false) = true
           OR EXISTS(
             SELECT 1 FROM booking.evento_outbox eo 
-            WHERE (eo.agregado_id = r."ordenId"::text OR eo.agregado_id = r.id::text)
+            WHERE (eo.agregado_id::text = r."ordenId"::text OR eo.agregado_id::text = r.id::text)
               AND eo.tipo = 'RESERVA_CHECKIN_CONFIRMADO'
           ) OR EXISTS(
             SELECT 1 FROM historial_reservas hr

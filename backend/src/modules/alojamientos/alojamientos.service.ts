@@ -83,21 +83,50 @@ export class AlojamientosService {
   }
 
   async createAdmin(dto: any): Promise<any> {
-    const id = `ALO-${Math.floor(Math.random() * 900) + 100}`;
-    const ubicacionId = await this.resolveUbicacion(dto.ubicacionId, dto.destino);
+    catalogCache.invalidate();
+    const id = dto.id || `ALO-${Math.floor(Math.random() * 900) + 100}`;
+    const ubicacionId = await this.resolveUbicacion(dto.ubicacionId, dto.destino || dto.ciudad);
+    const estado = dto.estado || 'Activo';
 
     await this.alojamientoRepository.query(
-      'INSERT INTO alojamientos (id, nombre, descripcion, "imagenUrl", "ubicacionId") VALUES ($1, $2, $3, $4, $5)',
-      [id, dto.nombre || 'Nuevo Alojamiento', dto.descripcion || '', dto.imagenUrl || '/villa.jpg', ubicacionId]
+      'INSERT INTO alojamientos (id, nombre, descripcion, "imagenUrl", "ubicacionId", estado) VALUES ($1, $2, $3, $4, $5, $6)',
+      [id, dto.nombre || 'Nuevo Alojamiento', dto.descripcion || '', dto.imagenUrl || '/villa.jpg', ubicacionId, estado]
     );
 
     const habId = `HAB-${Math.floor(Math.random() * 900) + 100}`;
     await this.alojamientoRepository.query(
-        'INSERT INTO espacios_rentables (id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible") VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [habId, id, 'Habitación Estándar', dto.capacidadAdultos || 2, dto.capacidadNinos || 0, dto.precioPorNoche || 100, dto.habitaciones || 1]
+      'INSERT INTO espacios_rentables (id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible", estado) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [habId, id, 'Habitación Estándar', dto.capacidadAdultos || 2, dto.capacidadNinos ?? 0, dto.precioPorNoche || 100, dto.habitaciones || 1, estado === 'Inactivo' ? 'Inactivo' : 'Activo']
     );
 
-    return { id, nombre: dto.nombre, descripcion: dto.descripcion, imagenUrl: dto.imagenUrl };
+    if (dto.tienePiscina) {
+      try {
+        const srv = await this.alojamientoRepository.query(`SELECT id FROM servicios WHERE nombre ILIKE '%piscina%' LIMIT 1`);
+        if (srv && srv.length > 0) {
+          await this.alojamientoRepository.query(
+            `INSERT INTO alojamientos_servicios ("alojamientoId", "servicioId") VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [id, srv[0].id]
+          );
+        }
+      } catch {
+        // Ignorar si la tabla intermedia no aplica
+      }
+    }
+
+    catalogCache.invalidate();
+    return {
+      id,
+      nombre: dto.nombre,
+      descripcion: dto.descripcion,
+      destino: dto.destino || 'Quito',
+      precioPorNoche: dto.precioPorNoche || 100,
+      capacidadAdultos: dto.capacidadAdultos || 2,
+      capacidadNinos: dto.capacidadNinos ?? 0,
+      habitaciones: dto.habitaciones || 1,
+      imagenUrl: dto.imagenUrl,
+      tienePiscina: Boolean(dto.tienePiscina),
+      estado,
+    };
   }
 
   async findAllAdmin(): Promise<any[]> {
@@ -113,8 +142,8 @@ export class AlojamientosService {
         (SELECT "precioPorNoche" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "precioPorNoche",
         (SELECT "capacidadAdultos" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "capacidadAdultos",
         (SELECT "capacidadNinos" FROM espacios_rentables er WHERE er."alojamientoId" = a.id LIMIT 1) as "capacidadNinos",
-        (SELECT COUNT(*) FROM espacios_rentables er WHERE er."alojamientoId" = a.id)::int as habitaciones,
-        (SELECT COUNT(*) FROM espacios_rentables er WHERE er."alojamientoId" = a.id AND er.estado = 'Activo')::int as habitaciones_disponibles,
+        COALESCE((SELECT SUM(COALESCE(er."cantidadDisponible", 1)) FROM espacios_rentables er WHERE er."alojamientoId" = a.id), 0)::int as habitaciones,
+        COALESCE((SELECT SUM(COALESCE(er."cantidadDisponible", 1)) FROM espacios_rentables er WHERE er."alojamientoId" = a.id AND (er.estado = 'Activo' OR er.estado IS NULL)), 0)::int as habitaciones_disponibles,
         EXISTS (
           SELECT 1 FROM alojamientos_servicios aser 
           JOIN servicios s ON s.id = aser."servicioId"
@@ -206,6 +235,8 @@ export class AlojamientosService {
 
   async removeAdmin(id: string): Promise<void> {
     catalogCache.invalidate();
+    await this.alojamientoRepository.query('DELETE FROM alojamientos_servicios WHERE "alojamientoId" = $1', [id]).catch(() => {});
+    await this.alojamientoRepository.query('DELETE FROM espacios_rentables WHERE "alojamientoId" = $1', [id]).catch(() => {});
     await this.alojamientoRepository.query('DELETE FROM alojamientos WHERE id = $1', [id]);
   }
 
@@ -218,6 +249,7 @@ export class AlojamientosService {
   }
 
   async createRoomAdmin(alojamientoId: string, dto: any): Promise<any> {
+    catalogCache.invalidate();
     const habId = `HAB-${Math.floor(Math.random() * 900) + 100}`;
     await this.alojamientoRepository.query(
         'INSERT INTO espacios_rentables (id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible", "imagenesUrls", estado) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',

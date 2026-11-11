@@ -24,7 +24,8 @@ export class CrearAlojamientoDto {
 
   @ApiProperty({ example: 1, description: 'Capacidad máxima de niños' })
   @IsInt()
-  capacidadNinos: number;
+  @IsOptional()
+  capacidadNinos?: number;
 
   @ApiProperty({ example: 1, description: 'Cantidad de habitaciones' })
   @IsInt()
@@ -33,7 +34,13 @@ export class CrearAlojamientoDto {
 
   @ApiProperty({ example: true, description: 'Indica si tiene piscina' })
   @IsBoolean()
-  tienePiscina: boolean;
+  @IsOptional()
+  tienePiscina?: boolean;
+
+  @ApiProperty({ example: true, description: 'Habilitar para Paquete Exclusivo LuxeStays' })
+  @IsBoolean()
+  @IsOptional()
+  permitePaquete?: boolean;
 
   @ApiProperty({ example: 'Activo', description: 'Estado del alojamiento' })
   @IsString()
@@ -46,6 +53,10 @@ export class CrearAlojamientoDto {
 
   @IsString()
   @IsOptional()
+  codigo?: string;
+
+  @IsString()
+  @IsOptional()
   descripcion?: string;
 
   @IsString()
@@ -54,7 +65,31 @@ export class CrearAlojamientoDto {
 
   @IsString()
   @IsOptional()
+  imagenesUrls?: string;
+
+  @IsString()
+  @IsOptional()
   ubicacionId?: string;
+
+  @IsString()
+  @IsOptional()
+  ciudad?: string;
+
+  @IsString()
+  @IsOptional()
+  direccion?: string;
+
+  @IsString()
+  @IsOptional()
+  categoria?: string;
+
+  @IsString()
+  @IsOptional()
+  tipo?: string;
+
+  @IsNumber()
+  @IsOptional()
+  estrellas?: number;
 
   @IsString()
   @IsOptional()
