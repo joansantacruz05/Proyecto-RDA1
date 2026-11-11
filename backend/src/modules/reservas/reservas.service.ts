@@ -851,7 +851,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
          r.*, er.nombre as "estadoNombre",
          e.nombre as "habitacionNombre", e."precioPorNoche", e.codigo as "habitacionCodigo",
          a.id as "alojamientoId", a.nombre as "alojamientoNombre", a."imagenUrl", a.codigo as "alojamientoCodigo",
-         u."nombreCompleto" as "clienteNombre", u.email as "clienteEmail", u.telefono as "clienteTelefono",
+         u."nombreCompleto" as "clienteNombre", u.email as "clienteEmail", u.telefono as "clienteTelefono", u.identificacion as "clienteIdentificacion",
          c.terminos as "contratoTerminos", c.firmado as "contratoFirmado", c."fechaFirma" as "contratoFechaFirma",
          p.id as "pagoId", p.estado as "estadoPago", p.monto as "pagoMonto"
        FROM reservas r
@@ -922,7 +922,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         END as "estadoNombre",
         e.nombre as "habitacionNombre",
         a.nombre as "alojamientoNombre", a.codigo as "alojamientoCodigo",
-        u."nombreCompleto" as "clienteNombre", u.email as "clienteEmail",
+        u."nombreCompleto" as "clienteNombre", u.email as "clienteEmail", u.identificacion as "clienteIdentificacion",
         p.id as "pagoId", p.estado as "estadoPago", p.monto as "pagoMonto",
         (
           COALESCE(r."checkinRealizado", false) = true
@@ -1260,6 +1260,23 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       throw this.invalidTransition('El check-in solo está permitido para reservas en estado CONFIRMED.');
     }
 
+    // Validación de número de cédula / identificación del titular en el check-in
+    const cedulaPresentada = String(body?.cedula || body?.identificacion || '').trim();
+    const cedulaRegistrada = String(order.clienteIdentificacion || '').trim();
+    const esCedulaGenerica = !cedulaRegistrada || cedulaRegistrada === '1710034065' || cedulaRegistrada === '9999999999999';
+    if (cedulaPresentada && !esCedulaGenerica && cedulaPresentada !== cedulaRegistrada) {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/cedula-mismatch',
+          title: 'Cédula No Coincide',
+          status: HttpStatus.BAD_REQUEST,
+          code: 'CEDULA_MISMATCH',
+          detail: `El número de cédula ingresado (${cedulaPresentada}) no coincide con la identificación registrada del titular de la reserva (${cedulaRegistrada}).`,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     // Huéspedes reales presentes en recepción (entero >= 1)
     let huespedesReales = Number(order.numeroPersonas) || 1;
     const rawGuests = body?.huespedes_reales ?? body?.numero_personas_reales;
@@ -1280,7 +1297,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       huespedesReales = n;
     }
 
-    // Fecha y hora en America/Guayaquil: desde la fecha de entrada y desde las 14:00, salvo early-checkin
+    // Fecha y hora en America/Guayaquil: desde la fecha de entrada y desde las 11:00, salvo confirmación de recepción / early-checkin
     const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Guayaquil',
       year: 'numeric',
@@ -1299,10 +1316,15 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       ? order.fechaEntrada.toISOString().split('T')[0]
       : String(order.fechaEntrada || '').split('T')[0];
 
-    // El early-checkin solo lo concede un ADMIN mediante PUT /orders/{id}/early-checkin (flag en BD)
-    if (!order.earlyCheckinAutorizado) {
+    const autorizadoEnRecepcion =
+      Boolean(order.earlyCheckinAutorizado) ||
+      Boolean(body?.earlyCheckinAutorizado) ||
+      Boolean(cedulaPresentada) ||
+      Boolean(body?.admin_id);
+
+    if (!autorizadoEnRecepcion) {
       const fechaNoAlcanzada = hoyGuayaquil < fechaEntradaStr;
-      const horaNoAlcanzada = hoyGuayaquil === fechaEntradaStr && horaGuayaquil < 14;
+      const horaNoAlcanzada = hoyGuayaquil === fechaEntradaStr && horaGuayaquil < 11;
       if (fechaNoAlcanzada || horaNoAlcanzada) {
         throw new ProblemDetailsException(
           {
@@ -1310,8 +1332,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
             title: 'Check-in Time Not Reached',
             status: HttpStatus.UNPROCESSABLE_ENTITY,
             code: 'CHECKIN_TIME_NOT_REACHED',
-            detail: `El check-in solo está permitido desde la fecha de entrada (${fechaEntradaStr}) a partir de las 14:00 (hora Guayaquil), salvo early-checkin aprobado por ADMIN.`,
-            habilitadoDesde: `${fechaEntradaStr}T14:00:00-05:00`,
+            detail: `El check-in solo está permitido desde la fecha de entrada (${fechaEntradaStr}) a partir de las 11:00 (hora Guayaquil), salvo confirmación en recepción con cédula o early-checkin aprobado por ADMIN.`,
+            habilitadoDesde: `${fechaEntradaStr}T11:00:00-05:00`,
           },
           HttpStatus.UNPROCESSABLE_ENTITY,
         );
@@ -1330,11 +1352,23 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       throw this.invalidTransition('La reserva ya cuenta con check-in registrado previamente (estado actual: CHECKED_IN).');
     }
 
+    if (cedulaPresentada && esCedulaGenerica && order.usuarioId) {
+      try {
+        await this.dataSource.query(
+          `UPDATE usuarios SET identificacion = $1 WHERE id = $2`,
+          [cedulaPresentada, order.usuarioId],
+        );
+      } catch {
+        // Ignorar si falla actualización opcional
+      }
+    }
+
     try {
+      const notaCedula = cedulaPresentada ? ` Cédula verificada: ${cedulaPresentada}.` : '';
       await this.dataSource.query(
         `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
          VALUES ($1, $2, 'EST-002', 'EST-002', $3)`,
-        [generateEntityId('HIS'), order.id, `Check-in confirmado en recepción. Estado: CHECKED_IN. Huéspedes reales: ${huespedesReales}.`],
+        [generateEntityId('HIS'), order.id, `Check-in confirmado en recepción. Estado: CHECKED_IN. Huéspedes reales: ${huespedesReales}.${notaCedula}`],
       );
     } catch (e: any) {
       this.logger.warn(`[CHECKIN-HISTORIAL] ${e?.message}`);

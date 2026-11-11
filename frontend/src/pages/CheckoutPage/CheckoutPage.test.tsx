@@ -68,8 +68,8 @@ describe('Fase 3: Asistente de Checkout y Pasos de Reserva', () => {
       expect(screen.getByText('Suite Ejecutiva')).toBeInTheDocument();
       expect(screen.getByText('2026-11-20')).toBeInTheDocument();
       expect(screen.getByText('2026-11-22')).toBeInTheDocument();
-      expect(screen.getByText('Desde las 14:00 (Guayaquil)')).toBeInTheDocument();
-      expect(screen.getByText('Hasta las 11:00 (Guayaquil)')).toBeInTheDocument();
+      expect(screen.getByText('Desde las 11:00 (Guayaquil)')).toBeInTheDocument();
+      expect(screen.getByText('Hasta las 15:00 (Guayaquil)')).toBeInTheDocument();
       expect(screen.getByText('15%')).toBeInTheDocument();
       expect(screen.getByText('USD 2/noche')).toBeInTheDocument();
       expect(screen.getByText(/234/)).toBeInTheDocument();

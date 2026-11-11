@@ -1,100 +1,104 @@
 .paymentContainer {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-6);
+  gap: 24px;
 }
 
 .stepHeading {
-  margin-bottom: var(--spacing-2);
+  margin-bottom: 4px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #E2E8F0;
 }
 
 .stepTitle {
   font-family: var(--font-heading);
-  font-size: var(--font-size-xl);
-  color: var(--color-midnight-blue);
-  margin-bottom: var(--spacing-1);
+  font-size: 1.5rem;
+  color: #0F1E33;
+  margin-bottom: 6px;
 }
 
 .stepSubtitle {
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  color: #4A5568;
+  line-height: 1.5;
 }
 
 .methodsGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--spacing-3);
-  margin-bottom: var(--spacing-4);
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+  margin-bottom: 8px;
 }
 
 .methodCard {
   display: flex;
   align-items: center;
-  gap: var(--spacing-3);
-  padding: var(--spacing-4);
-  background-color: var(--color-surface);
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  gap: 14px;
+  padding: 16px 18px;
+  background-color: #FFFFFF;
+  border: 2px solid #E2E8F0;
+  border-radius: 16px;
   cursor: pointer;
   transition: all var(--transition-normal);
   user-select: none;
 }
 
 .methodCard:hover {
-  border-color: var(--color-pacific-blue);
-  background-color: var(--color-surface-hover);
+  border-color: #14406B;
+  background-color: #F8FAFC;
 }
 
 .methodCardActive {
-  border-color: var(--color-gold);
-  background-color: var(--color-gold-light);
-  box-shadow: 0 0 0 1px var(--color-gold);
+  border-color: #C9A227;
+  background-color: #FDF8E7;
+  box-shadow: 0 2px 10px rgba(201, 162, 39, 0.18);
 }
 
 .methodIcon {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--color-border-light);
-  color: var(--color-pacific-blue);
+  background-color: #EDF2F7;
+  color: #14406B;
   flex-shrink: 0;
 }
 
 .methodCardActive .methodIcon {
-  background-color: var(--color-pacific-blue);
-  color: #FFFFFF;
+  background-color: #0F1E33 !important;
+  color: #FFFFFF !important;
 }
 
 .methodDetails {
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 
 .methodName {
-  font-size: var(--font-size-sm);
+  font-size: 14px;
   font-weight: 700;
-  color: var(--color-midnight-blue);
+  color: #0F1E33;
 }
 
 .methodNote {
-  font-size: 11px;
-  color: var(--color-text-secondary);
+  font-size: 12px;
+  color: #64748B;
 }
 
 .paymentDetailsBox {
-  padding: var(--spacing-5);
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  padding: 28px;
+  background-color: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 18px;
 }
 
 .cardFormGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--spacing-4);
+  gap: 20px;
 }
 
 .fullCol {
@@ -112,8 +116,8 @@
   transform: translateY(-50%);
   font-size: var(--font-size-xs);
   font-weight: 700;
-  color: var(--color-pacific-blue);
-  background-color: var(--color-pacific-blue-light);
+  color: #14406B;
+  background-color: #EBF4FF;
   padding: 2px 8px;
   border-radius: var(--radius-sm);
 }
@@ -121,14 +125,14 @@
 .transferBox {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3);
+  gap: 16px;
 }
 
 .bankDetailsCard {
-  background-color: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-4);
+  background-color: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 18px;
   font-size: var(--font-size-sm);
   line-height: 1.6;
 }
@@ -136,13 +140,13 @@
 .securityNote {
   display: flex;
   align-items: center;
-  gap: var(--spacing-2);
-  margin-top: var(--spacing-4);
-  padding: var(--spacing-3);
+  gap: 10px;
+  margin-top: 8px;
+  padding: 14px 18px;
   background-color: #F0FDF4;
   border: 1px solid #BBF7D0;
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-xs);
+  border-radius: 12px;
+  font-size: 13px;
   color: #166534;
 }
 
@@ -150,7 +154,11 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: var(--spacing-4);
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 12px;
+  padding-top: 20px;
+  border-top: 1px solid #E2E8F0;
 }
 
 .errorBanner {

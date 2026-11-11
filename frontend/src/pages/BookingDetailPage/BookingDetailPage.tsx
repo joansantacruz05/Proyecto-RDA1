@@ -189,7 +189,7 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
                   <Hotel size={20} />
                 </div>
                 <span className={isCheckedIn ? styles.stepTextActive : styles.stepText}>
-                  Check-in (14:00)
+                  Check-in (11:00)
                 </span>
               </div>
 
@@ -201,7 +201,7 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
                   <Clock size={20} />
                 </div>
                 <span className={isPast ? styles.stepTextActive : styles.stepText}>
-                  Check-out (11:00)
+                  Check-out (15:00)
                 </span>
               </div>
             </>
@@ -233,12 +233,12 @@ export const BookingDetailPage: React.FC<BookingDetailPageProps> = ({ currentUse
 
             <div className={styles.infoRow}>
               <span className={styles.infoLabel}>Fecha de Entrada (Check-in)</span>
-              <span className={styles.infoValue}>{checkinClean} (desde las 14:00)</span>
+              <span className={styles.infoValue}>{checkinClean} (desde las 11:00)</span>
             </div>
 
             <div className={styles.infoRow}>
               <span className={styles.infoLabel}>Fecha de Salida (Check-out)</span>
-              <span className={styles.infoValue}>{checkoutClean} (hasta las 11:00)</span>
+              <span className={styles.infoValue}>{checkoutClean} (hasta las 15:00)</span>
             </div>
 
             <div className={styles.infoRow}>

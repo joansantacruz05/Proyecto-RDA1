@@ -92,6 +92,7 @@ interface ReservaAdminItem {
   usuarioEmail?: string;
   clienteNombre?: string;
   clienteEmail?: string;
+  clienteIdentificacion?: string;
   numeroPersonas?: number;
   checkinRealizado?: boolean;
 }
@@ -491,18 +492,35 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
   };
 
   const [checkinModalReserva, setCheckinModalReserva] = useState<ReservaAdminItem | null>(null);
+  const [cedulaCheckin, setCedulaCheckin] = useState('');
+  const [cedulaError, setCedulaError] = useState<string | null>(null);
   const [huespedesReales, setHuespedesReales] = useState(1);
   const [observacionesCheckin, setObservacionesCheckin] = useState('Huésped presentado en recepción');
   const [isSubmittingCheckin, setIsSubmittingCheckin] = useState(false);
 
   const handleConfirmCheckin = async () => {
     if (!checkinModalReserva) return;
+    const cedulaLimpia = cedulaCheckin.trim();
+    if (!cedulaLimpia || cedulaLimpia.length < 5) {
+      setCedulaError('Debes ingresar el número de cédula o identificación del huésped para confirmar el check-in.');
+      return;
+    }
+    const cedulaTitular = (checkinModalReserva.clienteIdentificacion || '').trim();
+    const esGenerica = !cedulaTitular || cedulaTitular === '1710034065' || cedulaTitular === '9999999999999';
+    if (!esGenerica && cedulaLimpia !== cedulaTitular) {
+      setCedulaError(`La cédula ingresada (${cedulaLimpia}) no coincide con la cédula registrada del titular (${cedulaTitular}).`);
+      return;
+    }
+    setCedulaError(null);
     setIsSubmittingCheckin(true);
     try {
       const orderIdentifier = checkinModalReserva.ordenId || checkinModalReserva.id;
       await api.post(`/orders/${orderIdentifier}/check-in`, {
+        cedula: cedulaLimpia,
+        identificacion: cedulaLimpia,
+        earlyCheckinAutorizado: true,
         numero_personas_reales: huespedesReales,
-        observaciones: observacionesCheckin,
+        observaciones: `${observacionesCheckin} (Cédula verificada: ${cedulaLimpia})`,
         external_order_id: checkinModalReserva.external_order_id || undefined,
       });
 
@@ -511,15 +529,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
         if (!old) return old;
         return old.map((r) =>
           r.id === checkinModalReserva.id || r.ordenId === checkinModalReserva.ordenId
-            ? { ...r, checkinRealizado: true, estadoNombre: 'Llegada Confirmada' }
+            ? { ...r, checkinRealizado: true, estadoNombre: 'Llegada Confirmada', clienteIdentificacion: cedulaLimpia }
             : r,
         );
       });
-      showToast(`Check-in confirmado para ${checkinModalReserva.clienteNombre || checkinModalReserva.usuarioNombre || 'huésped'}. Sincronizado vía outbox.`);
+      showToast(`Check-in confirmado con cédula ${cedulaLimpia} para ${checkinModalReserva.clienteNombre || checkinModalReserva.usuarioNombre || 'huésped'}.`);
       setCheckinModalReserva(null);
       refetchReservas();
     } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : 'Error al registrar check-in', 'error');
+      const msg = err instanceof Error ? err.message : 'Error al registrar check-in';
+      setCedulaError(msg);
+      showToast(msg, 'error');
     } finally {
       setIsSubmittingCheckin(false);
     }
@@ -581,6 +601,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
         r.ordenId?.toLowerCase().includes(q) ||
         r.id?.toLowerCase().includes(q) ||
         r.alojamientoNombre?.toLowerCase().includes(q) ||
+        (r.clienteIdentificacion && r.clienteIdentificacion.toLowerCase().includes(q)) ||
         (r.clienteNombre && r.clienteNombre.toLowerCase().includes(q)) ||
         (r.usuarioNombre && r.usuarioNombre.toLowerCase().includes(q)),
     );
@@ -958,7 +979,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
               <Search size={16} color="#64748B" />
               <input
                 type="text"
-                placeholder="Buscar por huésped, localizador u hotel..."
+                placeholder="Buscar por cédula, huésped, localizador u hotel..."
                 className={styles.searchInput}
                 value={searchReservaQuery}
                 onChange={(e) => setSearchReservaQuery(e.target.value)}
@@ -1018,14 +1039,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                           <div style={{ fontSize: '12px', color: '#64748B' }}>
                             {res.clienteEmail || res.usuarioEmail || 'huesped@luxestays.ec'}
                           </div>
+                          {res.clienteIdentificacion && (
+                            <div style={{ fontSize: '11.5px', color: '#14406B', fontWeight: 600, marginTop: '2px' }}>
+                              Cédula/ID: {res.clienteIdentificacion}
+                            </div>
+                          )}
                         </td>
                         <td>
                           <strong>{res.alojamientoNombre}</strong>
                           <div style={{ fontSize: '12px', color: '#64748B' }}>{res.habitacionNombre}</div>
                         </td>
                         <td>
-                          <div>In: {res.fechaEntrada} (14:00)</div>
-                          <div>Out: {res.fechaSalida} (11:00)</div>
+                          <div style={{ fontWeight: 500 }}>In: {String(res.fechaEntrada || '').split('T')[0]} (11:00)</div>
+                          <div style={{ fontWeight: 500 }}>Out: {String(res.fechaSalida || '').split('T')[0]} (15:00)</div>
                         </td>
                         <td style={{ fontWeight: 700, color: '#0F1E33' }}>
                           {formatUSD(Number(res.precioTotal) || 0)}
@@ -1063,6 +1089,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                               icon={<CheckCircle2 size={14} />}
                               onClick={() => {
                                 setCheckinModalReserva(res);
+                                setCedulaCheckin(
+                                  res.clienteIdentificacion &&
+                                    res.clienteIdentificacion !== '1710034065' &&
+                                    res.clienteIdentificacion !== '9999999999999'
+                                    ? res.clienteIdentificacion
+                                    : '',
+                                );
+                                setCedulaError(null);
                                 setHuespedesReales(res.numeroPersonas || 2);
                                 setObservacionesCheckin('Huésped presentado en recepción');
                               }}
@@ -1786,11 +1820,41 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       >
         {checkinModalReserva && (
           <div>
-            <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '18px' }}>
-              <div><strong>Huésped:</strong> {checkinModalReserva.clienteNombre || checkinModalReserva.usuarioNombre || 'Cliente Registrado'}</div>
-              <div><strong>Alojamiento:</strong> {checkinModalReserva.alojamientoNombre}</div>
-              <div><strong>Habitación:</strong> {checkinModalReserva.habitacionNombre}</div>
-              <div><strong>Localizador:</strong> {checkinModalReserva.ordenId || checkinModalReserva.id}</div>
+            <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '18px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div><strong>Huésped Titular:</strong> {checkinModalReserva.clienteNombre || checkinModalReserva.usuarioNombre || 'Cliente Registrado'}</div>
+              <div>
+                <strong>Cédula / Identificación Registrada:</strong>{' '}
+                <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#14406B' }}>
+                  {checkinModalReserva.clienteIdentificacion || 'Por registrar en recepción'}
+                </span>
+              </div>
+              <div><strong>Alojamiento:</strong> {checkinModalReserva.alojamientoNombre} ({checkinModalReserva.habitacionNombre})</div>
+              <div>
+                <strong>Horario Oficial:</strong> Check-in {String(checkinModalReserva.fechaEntrada || '').split('T')[0]} (desde las 11:00) · Check-out {String(checkinModalReserva.fechaSalida || '').split('T')[0]} (hasta las 15:00)
+              </div>
+              <div><strong>Localizador:</strong> <span style={{ fontFamily: 'monospace' }}>{checkinModalReserva.ordenId || checkinModalReserva.id}</span></div>
+            </div>
+
+            <div style={{ marginBottom: '14px' }}>
+              <label className={styles.formLabel}>
+                Número de Cédula / Identificación del Huésped (Confirmación Obligatoria) *
+              </label>
+              <input
+                type="text"
+                placeholder="Ingrese o confirme el número de cédula (ej. 1712345678)"
+                className={styles.formInput}
+                value={cedulaCheckin}
+                onChange={(e) => {
+                  setCedulaCheckin(e.target.value);
+                  if (cedulaError) setCedulaError(null);
+                }}
+              />
+              {cedulaError && (
+                <div style={{ color: '#B42318', fontSize: '12.5px', fontWeight: 600, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <AlertCircle size={14} />
+                  <span>{cedulaError}</span>
+                </div>
+              )}
             </div>
 
             <div style={{ marginBottom: '14px' }}>

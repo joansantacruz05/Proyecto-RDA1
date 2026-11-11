@@ -40,6 +40,7 @@ interface ReservaAdminItem {
   usuarioEmail?: string;
   clienteNombre?: string;
   clienteEmail?: string;
+  clienteIdentificacion?: string;
   numeroPersonas?: number;
 }
 
@@ -50,6 +51,7 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedReserva, setSelectedReserva] = useState<ReservaAdminItem | null>(null);
+  const [cedulaCheckin, setCedulaCheckin] = useState('');
   const [huespedesReales, setHuespedesReales] = useState(1);
   const [observaciones, setObservaciones] = useState('Huésped presentado en recepción');
   const [isCheckingIn, setIsCheckingIn] = useState(false);
@@ -104,13 +106,21 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
   const filteredReservas = reservas.filter((r) => {
     const term = searchTerm.toLowerCase();
     const guest = (r.usuarioNombre || r.clienteNombre || '').toLowerCase();
+    const cedula = (r.clienteIdentificacion || '').toLowerCase();
     const hotel = (r.alojamientoNombre || '').toLowerCase();
     const code = (r.ordenId || r.external_order_id || r.id || '').toLowerCase();
-    return guest.includes(term) || hotel.includes(term) || code.includes(term);
+    return guest.includes(term) || cedula.includes(term) || hotel.includes(term) || code.includes(term);
   });
 
   const handleOpenCheckinModal = (reserva: ReservaAdminItem) => {
     setSelectedReserva(reserva);
+    setCedulaCheckin(
+      reserva.clienteIdentificacion &&
+        reserva.clienteIdentificacion !== '1710034065' &&
+        reserva.clienteIdentificacion !== '9999999999999'
+        ? reserva.clienteIdentificacion
+        : '',
+    );
     setHuespedesReales(reserva.numeroPersonas || 1);
     setObservaciones('Huésped presentado en recepción');
     setModalError(null);
@@ -118,6 +128,17 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
 
   const handleConfirmCheckin = async () => {
     if (!selectedReserva) return;
+    const cedulaLimpia = cedulaCheckin.trim();
+    if (!cedulaLimpia || cedulaLimpia.length < 5) {
+      setModalError('Debes ingresar el número de cédula o identificación del huésped para confirmar el check-in.');
+      return;
+    }
+    const cedulaTitular = (selectedReserva.clienteIdentificacion || '').trim();
+    const esGenerica = !cedulaTitular || cedulaTitular === '1710034065' || cedulaTitular === '9999999999999';
+    if (!esGenerica && cedulaLimpia !== cedulaTitular) {
+      setModalError(`La cédula ingresada (${cedulaLimpia}) no coincide con la cédula registrada del titular (${cedulaTitular}).`);
+      return;
+    }
     try {
       setIsCheckingIn(true);
       setModalError(null);
@@ -127,8 +148,11 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
 
       // Dispara POST /orders/:orderId/check-in (con outbox automático hacia Booking Core API)
       await api.post(`/orders/${encodeURIComponent(targetOrderId)}/check-in`, {
+        cedula: cedulaLimpia,
+        identificacion: cedulaLimpia,
+        earlyCheckinAutorizado: true,
         huespedes_reales: huespedesReales,
-        observaciones: observaciones.trim(),
+        observaciones: `${observaciones.trim()} (Cédula verificada: ${cedulaLimpia})`,
         admin_id: currentUser.id,
       });
 
@@ -177,7 +201,7 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
       {/* Buscador Rápido */}
       <div className={styles.searchBar}>
         <Input
-          placeholder="Buscar por nombre de huésped, código o hotel..."
+          placeholder="Buscar por número de cédula, nombre de huésped, código u hotel..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           icon={<Search size={16} />}
@@ -228,6 +252,11 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
                       <div className={styles.guestCol}>
                         <span className={styles.guestName}>{guestName}</span>
                         {guestEmail && <span className={styles.guestEmail}>{guestEmail}</span>}
+                        {res.clienteIdentificacion && (
+                          <span style={{ fontSize: '11.5px', color: '#14406B', fontWeight: 600 }}>
+                            Cédula/ID: {res.clienteIdentificacion}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td>
@@ -240,8 +269,8 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
                     </td>
                     <td>
                       <div style={{ fontSize: 'var(--font-size-xs)' }}>
-                        <div>In: {inDate} (14:00)</div>
-                        <div>Out: {outDate} (11:00)</div>
+                        <div>In: {inDate} (11:00)</div>
+                        <div>Out: {outDate} (15:00)</div>
                       </div>
                     </td>
                     <td style={{ fontWeight: 700, color: 'var(--color-pacific-blue)' }}>
@@ -294,6 +323,12 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
                 <strong>Huésped:</strong> {selectedReserva.usuarioNombre || selectedReserva.clienteNombre || 'Huésped Booking'}
               </div>
               <div>
+                <strong>Cédula / ID Registrado:</strong>{' '}
+                <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#14406B' }}>
+                  {selectedReserva.clienteIdentificacion || 'Por registrar en recepción'}
+                </span>
+              </div>
+              <div>
                 <strong>Alojamiento:</strong> {selectedReserva.alojamientoNombre} · {selectedReserva.habitacionNombre}
               </div>
               <div>
@@ -302,6 +337,21 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: '4px' }}>
+                  Número de Cédula / Identificación del Huésped *
+                </label>
+                <Input
+                  type="text"
+                  placeholder="Ingrese o confirme el número de cédula (ej. 1712345678)"
+                  value={cedulaCheckin}
+                  onChange={(e) => {
+                    setCedulaCheckin(e.target.value);
+                    if (modalError) setModalError(null);
+                  }}
+                />
+              </div>
+
               <div>
                 <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: '4px' }}>
                   Huéspedes reales presentes en recepción

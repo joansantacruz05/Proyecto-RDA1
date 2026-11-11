@@ -46,13 +46,16 @@
 }
 
 .tabButton:hover {
-  color: var(--color-midnight-blue);
+  color: #0F1E33;
+  background-color: #E2E8F0;
 }
 
-.tabButtonActive {
-  color: #FFFFFF;
-  background-color: var(--color-midnight-blue);
-  box-shadow: 0 2px 8px rgba(15, 30, 51, 0.15);
+.tabButtonActive,
+.tabButtonActive:hover {
+  color: #FFFFFF !important;
+  background: #0F1E33 !important;
+  background-color: #0F1E33 !important;
+  box-shadow: 0 2px 8px rgba(15, 30, 51, 0.2);
 }
 
 .tabCount {

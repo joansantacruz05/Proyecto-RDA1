@@ -36,16 +36,16 @@
 }
 
 .stepCircleActive {
-  background-color: var(--color-midnight-blue);
-  color: #FFFFFF;
-  border-color: var(--color-midnight-blue);
-  box-shadow: 0 0 0 4px rgba(15, 30, 51, 0.12);
+  background-color: #0F1E33 !important;
+  color: #FFFFFF !important;
+  border-color: #0F1E33 !important;
+  box-shadow: 0 0 0 4px rgba(15, 30, 51, 0.14);
 }
 
 .stepCircleCompleted {
-  background-color: var(--color-gold);
-  color: #0F1E33;
-  border-color: var(--color-gold);
+  background-color: #C9A227 !important;
+  color: #0F1E33 !important;
+  border-color: #C9A227 !important;
 }
 
 .stepTexts {

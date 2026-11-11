@@ -216,7 +216,7 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
                     <div className={styles.metaItem}>
                       <Clock size={13} color="#14406B" />
                       <span>
-                        {checkinClean} (14:00) a {checkoutClean} (11:00)
+                        {checkinClean} (11:00) a {checkoutClean} (15:00)
                       </span>
                     </div>
 

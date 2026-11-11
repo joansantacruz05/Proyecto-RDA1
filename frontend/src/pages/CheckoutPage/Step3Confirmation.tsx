@@ -169,12 +169,12 @@ export const Step3Confirmation: React.FC<Step3ConfirmationProps> = ({
 
           <div className={styles.infoRow}>
             <span className={styles.infoLabel}>Check-in</span>
-            <span className={styles.infoValue}>{checkin} (desde las 14:00)</span>
+            <span className={styles.infoValue}>{checkin} (desde las 11:00)</span>
           </div>
 
           <div className={styles.infoRow}>
             <span className={styles.infoLabel}>Check-out</span>
-            <span className={styles.infoValue}>{checkout} (hasta las 11:00)</span>
+            <span className={styles.infoValue}>{checkout} (hasta las 15:00)</span>
           </div>
 
           <div className={styles.infoRow}>

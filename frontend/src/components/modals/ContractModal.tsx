@@ -57,7 +57,7 @@ export const ContractModal: React.FC<ContractModalProps> = ({
         <div className={styles.legalBox}>
           <div className={styles.legalTitle}>Términos y Condiciones de Estancia · {hotelNombre}</div>
           <p>
-            1. <strong>Horarios de Recepción y Salida:</strong> El check-in oficial está habilitado a partir de las 14:00 (hora local de Guayaquil/Ecuador) y el check-out se realizará hasta las 11:00 am del día estipulado en la reserva.
+            1. <strong>Horarios de Recepción y Salida:</strong> El check-in oficial está habilitado a partir de las 11:00 (hora local de Guayaquil/Ecuador) y el check-out se realizará hasta las 15:00 del día estipulado en la reserva.
           </p>
           <p>
             2. <strong>Reglas de la Propiedad:</strong> Queda estrictamente prohibido fumar en habitaciones y áreas cerradas conforme a la Ley Orgánica para la Regulación y Control del Tabaco del Ecuador. Se exige respeto al descanso de los demás huéspedes entre las 22:00 y las 08:00.

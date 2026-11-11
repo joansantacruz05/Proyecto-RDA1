@@ -1,38 +1,38 @@
 .checkoutPage {
-  padding: var(--spacing-6) 0 var(--spacing-16);
+  padding: 28px 0 64px;
   min-height: calc(100vh - 160px);
 }
 
 .checkoutHeader {
-  margin-bottom: var(--spacing-6);
+  margin-bottom: 24px;
 }
 
 .backLink {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-2);
+  gap: 8px;
   font-size: var(--font-size-sm);
-  color: var(--color-pacific-blue);
+  color: #14406B;
   text-decoration: none;
   font-weight: 600;
-  margin-bottom: var(--spacing-3);
+  margin-bottom: 12px;
   transition: color var(--transition-fast);
 }
 
 .backLink:hover {
-  color: var(--color-pacific-blue-hover);
+  color: #0F3156;
 }
 
 .pageTitle {
   font-family: var(--font-heading);
   font-size: var(--font-size-2xl);
-  color: var(--color-midnight-blue);
+  color: #0F1E33;
 }
 
 .checkoutLayout {
   display: grid;
-  grid-template-columns: 1fr 380px;
-  gap: var(--spacing-8);
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 32px;
   align-items: start;
 }
 
@@ -43,11 +43,11 @@
 }
 
 .mainStepCol {
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  padding: var(--spacing-8);
-  box-shadow: var(--shadow-sm);
+  background-color: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: 0 4px 20px rgba(15, 30, 51, 0.04);
 }
 
 .sidebarCol {

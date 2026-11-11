@@ -134,7 +134,7 @@ export const ReservationSummary: React.FC<ReservationSummaryProps> = ({
           <span className={styles.stayLabel}>Check-in</span>
           <div className={styles.stayValue}>
             <span>{checkin}</span>
-            <span className={styles.timeSubtext}>Desde las 14:00 (Guayaquil)</span>
+            <span className={styles.timeSubtext}>Desde las 11:00 (Guayaquil)</span>
           </div>
         </div>
 
@@ -142,7 +142,7 @@ export const ReservationSummary: React.FC<ReservationSummaryProps> = ({
           <span className={styles.stayLabel}>Check-out</span>
           <div className={styles.stayValue}>
             <span>{checkout}</span>
-            <span className={styles.timeSubtext}>Hasta las 11:00 (Guayaquil)</span>
+            <span className={styles.timeSubtext}>Hasta las 15:00 (Guayaquil)</span>
           </div>
         </div>
 

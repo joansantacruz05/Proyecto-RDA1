@@ -478,7 +478,7 @@ export const Step2Payment: React.FC<Step2PaymentProps> = ({
           {isCash && (
             <div style={{ padding: 'var(--spacing-3) 0' }}>
               <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-                Tu reserva quedará registrada de inmediato. El pago total de ${total.toFixed(2)} USD se realizará en efectivo directamente en la recepción del hotel al momento de tu check-in (a partir de las 14:00).
+                Tu reserva quedará registrada de inmediato. El pago total de ${total.toFixed(2)} USD se realizará en efectivo directamente en la recepción del hotel al momento de tu check-in (a partir de las 11:00).
               </p>
             </div>
           )}
