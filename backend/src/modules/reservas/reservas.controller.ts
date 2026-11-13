@@ -166,6 +166,14 @@ export class ReservasController {
     return this.reservasService.checkOutOrder(id, body);
   }
 
+  @Post([':id/marcar-limpio', ':id/finalizar-limpieza', 'admin/:id/marcar-limpio'])
+  @Roles(Role.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Confirmar limpieza de la habitación de una reserva y cambiar estado a Finalizada' })
+  markCleanReserva(@Param('id') id: string, @Body() body?: any) {
+    return this.reservasService.markReservaClean(id, body);
+  }
+
   @Patch([':id/recepcion', ':id/ajustes'])
   @Post([':id/recepcion', ':id/ajustes'])
   @Roles(Role.ADMIN)

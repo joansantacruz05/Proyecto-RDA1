@@ -644,6 +644,40 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     }
   };
 
+  const handleMarkReservaClean = async (res: ReservaAdminItem) => {
+    try {
+      await api.post(`/reservas/${res.id}/marcar-limpio`, {
+        espacioId: res.espacioId,
+        alojamientoId: res.alojamientoId,
+      });
+      if (res.espacioId) {
+        await api.post(`/admin/habitaciones/${res.espacioId}/marcar-limpio`, {}).catch(() => {});
+      }
+      const fallbackAlojId =
+        res.alojamientoId ||
+        alojamientos.find((a) => a.nombre === res.alojamientoNombre)?.id ||
+        '';
+      if (fallbackAlojId || res.alojamientoNombre) {
+        clearHotelLimpiezaOverride(fallbackAlojId, res.alojamientoNombre);
+      }
+      showToast(
+        res.habitacionNombre
+          ? `Habitación "${res.habitacionNombre}" marcada limpia. Reserva finalizada con éxito.`
+          : 'Habitación marcada limpia y reserva finalizada exitosamente.',
+      );
+      await Promise.all([refetchAlojamientos(), refetchReservas()]);
+      queryClient.invalidateQueries({ queryKey: ['adminReservasTodas'] });
+      queryClient.invalidateQueries({ queryKey: ['alojamientos'] });
+      queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
+      queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
+      queryClient.invalidateQueries({ queryKey: ['hotelRooms'] });
+      queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
+      queryClient.invalidateQueries({ queryKey: ['adminDashboardStats'] });
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Error al marcar habitación limpia', 'error');
+    }
+  };
+
   const handleSetRoomCleaning = async (
     habId: string,
     habNombre?: string | null,
@@ -891,7 +925,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     const dirtyRoomSet =
       dirtyRoomsByHotel.get(`id:${aloj.id}`) ||
       dirtyRoomsByHotel.get(`name:${alojNameLower}`);
-    const dirtyRoomsCount = dirtyRoomSet ? dirtyRoomSet.size : 0;
+    // Sincronización precisa con las habitaciones físicas en espacios_rentables
+    const backendDirtyRooms = Number(aloj.habitaciones_limpieza ?? 0);
+    const reservationsDirtyCount = dirtyRoomSet ? dirtyRoomSet.size : 0;
+    const dirtyRoomsCount = backendDirtyRooms > 0
+      ? backendDirtyRooms
+      : (isCleaningState ? Math.max(1, reservationsDirtyCount) : 0);
     const hasDirtyRooms = dirtyRoomsCount > 0 || isCleaningState;
     const isPausedOrMaint = effEstado === 'Inactivo' || effEstado === 'En Mantenimiento';
     const isReservedNow =
@@ -1672,23 +1711,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                                   variant="gold"
                                   size="sm"
                                   icon={<Sparkles size={14} />}
-                                  onClick={() => {
-                                    const fallbackAlojId =
-                                      res.alojamientoId ||
-                                      alojamientos.find((a) => a.nombre === res.alojamientoNombre)?.id ||
-                                      '';
-                                    if (res.espacioId) {
-                                      handleMarkRoomClean(
-                                        res.espacioId,
-                                        res.habitacionNombre,
-                                        fallbackAlojId,
-                                        res.alojamientoNombre,
-                                      );
-                                    } else {
-                                      handleMarkCleanAndOnline(fallbackAlojId, res.alojamientoNombre);
-                                    }
-                                  }}
-                                  title="Confirmar que la limpieza de esta habitación terminó y volver a habilitarla en línea"
+                                  onClick={() => handleMarkReservaClean(res)}
+                                  title="Confirmar que la limpieza de esta habitación concluyó y pasar la reserva a estado Finalizada"
                                 >
                                   Marcar Hab. Limpia
                                 </Button>
@@ -2660,7 +2684,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                         variant="gold"
                         size="sm"
                         icon={<Sparkles size={13} />}
-                        onClick={() => handleMarkRoomClean(room.id, room.nombre)}
+                        onClick={() => handleMarkRoomClean(room.id, room.nombre, roomsModalHotel?.id, roomsModalHotel?.nombre)}
                       >
                         Limpiar → Activo
                       </Button>

@@ -9,6 +9,7 @@ import {
   ShieldAlert,
   LogIn,
   AlertCircle,
+  Sparkles,
 } from 'lucide-react';
 import { api, getAuthToken } from '../../api/client';
 import { UsuarioSession, ProblemDetailsException, ReservaAdminItem } from '../../api/types';
@@ -160,6 +161,38 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
     }
   };
 
+  const handleMarkReservaClean = async (res: ReservaAdminItem) => {
+    try {
+      await api.post(`/reservas/${res.id}/marcar-limpio`, {
+        espacioId: res.espacioId,
+        alojamientoId: res.alojamientoId,
+      });
+      if (res.espacioId) {
+        await api.post(`/admin/habitaciones/${res.espacioId}/marcar-limpio`, {}).catch(() => {});
+      }
+      setToastMessage(
+        res.habitacionNombre
+          ? `Habitación "${res.habitacionNombre}" limpia. Reserva ${res.external_order_id || res.ordenId || res.id} finalizada exitosamente.`
+          : 'Habitación marcada limpia y reserva finalizada exitosamente.',
+      );
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ['adminReservasTodas'] });
+      queryClient.invalidateQueries({ queryKey: ['alojamientos'] });
+      queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
+      queryClient.invalidateQueries({ queryKey: ['hotelRooms'] });
+      setTimeout(() => setToastMessage(null), 5000);
+    } catch (err: unknown) {
+      if (err instanceof ProblemDetailsException) {
+        setToastMessage(err.problem.detail || 'Error al marcar habitación limpia.');
+      } else if (err instanceof Error) {
+        setToastMessage(err.message);
+      } else {
+        setToastMessage('No se pudo marcar la habitación como limpia.');
+      }
+      setTimeout(() => setToastMessage(null), 5000);
+    }
+  };
+
   return (
     <div className={`container ${styles.receptionContainer}`}>
       <div className={styles.receptionHeader}>
@@ -297,9 +330,15 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
                           Confirmar llegada
                         </Button>
                       ) : isCleaning ? (
-                        <span style={{ fontSize: 'var(--font-size-xs)', color: '#B45309', fontWeight: 600 }}>
-                          🧹 En Limpieza
-                        </span>
+                        <Button
+                          variant="gold"
+                          size="sm"
+                          icon={<Sparkles size={14} />}
+                          onClick={() => handleMarkReservaClean(res)}
+                          title="Confirmar que la habitación está limpia y marcar la reserva como finalizada"
+                        >
+                          Habitación Limpia
+                        </Button>
                       ) : isCheckedOut ? (
                         <span style={{ fontSize: 'var(--font-size-xs)', color: '#14406B', fontWeight: 600 }}>
                           ✓ Estancia Finalizada

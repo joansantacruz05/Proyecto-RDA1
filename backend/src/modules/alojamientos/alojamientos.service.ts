@@ -610,10 +610,11 @@ export class AlojamientosService {
              "tipoCamas" = COALESCE($10, "tipoCamas"),
              "enLimpiezaDesde" = ${enLimpiezaExpr},
              codigo = COALESCE($12, codigo)
-         WHERE id = $11
-         RETURNING "alojamientoId", estado, codigo`,
+         WHERE id = $11 OR codigo = $11
+         RETURNING id, "alojamientoId", estado, codigo`,
         [dto.nombre, dto.precioPorNoche, dto.capacidadAdultos, dto.capacidadNinos, dto.cantidadDisponible, dto.imagenesUrls, dto.estado, dto.numHabitaciones, dto.numCamas, dto.tipoCamas, habId, dto.codigo || dto.tipoHabitacionCodigo]
     );
+    const updatedId = updatedRows?.[0]?.id || habId;
     const alojamientoId = updatedRows?.[0]?.alojamientoId;
     if (alojamientoId) {
       await this.syncAlojamientoCapacitySummary(alojamientoId);
@@ -622,13 +623,13 @@ export class AlojamientosService {
           `UPDATE reservas r
            SET "estadoId" = 'EST-005',
                "limpiezaCompletada" = true
-           WHERE r."espacioId" = $1
+           WHERE (r."espacioId" = $1 OR r."espacioId" = $2)
              AND (
                r."estadoId" = 'EST-004'
                OR (COALESCE(r."checkoutRealizado", false) = true AND COALESCE(r."limpiezaCompletada", false) = false)
              )
            RETURNING r.id`,
-          [habId],
+          [habId, updatedId],
         );
         for (const row of roomCleanDoneRows || []) {
           await this.alojamientoRepository.query(
@@ -641,10 +642,16 @@ export class AlojamientosService {
             ],
           ).catch(() => {});
         }
-        await this.alojamientoRepository.query(
-          `UPDATE alojamientos SET estado = 'Activo', "enLimpiezaDesde" = NULL WHERE id = $1 AND estado = 'En Limpieza'`,
+        const dirtyRooms = await this.alojamientoRepository.query(
+          `SELECT COUNT(*)::int as count FROM espacios_rentables WHERE "alojamientoId" = $1 AND estado = 'En Limpieza'`,
           [alojamientoId],
         );
+        if (Number(dirtyRooms?.[0]?.count || 0) === 0) {
+          await this.alojamientoRepository.query(
+            `UPDATE alojamientos SET estado = 'Activo', "enLimpiezaDesde" = NULL WHERE id = $1 AND estado = 'En Limpieza'`,
+            [alojamientoId],
+          );
+        }
       }
     }
     return {
@@ -1743,6 +1750,10 @@ export class AlojamientosService {
 
   async checkOutOrder(orderId: string, body?: any): Promise<any> {
     return this.reservasService.checkOutOrder(orderId, body);
+  }
+
+  async markReservaClean(orderId: string, body?: any): Promise<any> {
+    return this.reservasService.markReservaClean(orderId, body);
   }
 
   async setEarlyCheckin(orderId: string, body?: any): Promise<any> {

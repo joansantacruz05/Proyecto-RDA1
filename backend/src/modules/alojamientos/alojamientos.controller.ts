@@ -607,6 +607,22 @@ export class AlojamientosController {
     return this.alojamientosService.checkOutOrder(orderId, body);
   }
 
+  @Post([
+    'admin/reservas/:orderId/marcar-limpio',
+    'admin/orders/:orderId/marcar-limpio',
+    'orders/:orderId/marcar-limpio',
+    'alojamientos/orders/:orderId/marcar-limpio',
+    'alojamientos/reservas/:orderId/marcar-limpio',
+  ])
+  @Roles(Role.ADMIN)
+  @ApiTags('Check-in y Check-out Digital v2')
+  @ApiOperation({ summary: 'Confirmar limpieza de la habitación y finalizar orden de reserva' })
+  @ApiParam({ name: 'orderId', type: 'string' })
+  @HttpCode(HttpStatus.OK)
+  markReservaClean(@Param('orderId') orderId: string, @Body() body?: any) {
+    return this.alojamientosService.markReservaClean(orderId, body);
+  }
+
   @Put(['orders/:orderId/early-checkin', 'alojamientos/orders/:orderId/early-checkin'])
   @ApiTags('Check-in y Check-out Digital v2')
   @ApiOperation({ summary: 'Autorizar early check-in para una orden' })

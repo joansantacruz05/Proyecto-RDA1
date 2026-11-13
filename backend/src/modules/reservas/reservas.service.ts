@@ -2202,6 +2202,131 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  async markReservaClean(idOrOrdenId: string, body?: any): Promise<any> {
+    const rawKey = String(idOrOrdenId || '').trim();
+    let rows = await this.dataSource.query(
+      `SELECT r.id, r."ordenId", r."espacioId", r."estadoId", r."fechaEntrada", r."fechaSalida", e."alojamientoId", a.nombre as "alojamientoNombre"
+       FROM reservas r
+       LEFT JOIN espacios_rentables e ON r."espacioId" = e.id
+       LEFT JOIN alojamientos a ON e."alojamientoId" = a.id
+       WHERE r.id = $1 OR r."ordenId"::text = $1 OR r.id = ('RES-' || $1)
+       LIMIT 1`,
+      [rawKey],
+    );
+
+    if (!rows.length && (body?.espacioId || body?.alojamientoId)) {
+      rows = await this.dataSource.query(
+        `SELECT r.id, r."ordenId", r."espacioId", r."estadoId", r."fechaEntrada", r."fechaSalida", e."alojamientoId", a.nombre as "alojamientoNombre"
+         FROM reservas r
+         LEFT JOIN espacios_rentables e ON r."espacioId" = e.id
+         LEFT JOIN alojamientos a ON e."alojamientoId" = a.id
+         WHERE (r."espacioId" = $1 OR e."alojamientoId" = $2 OR a.id = $2)
+           AND (r."estadoId" = 'EST-004' OR (COALESCE(r."checkoutRealizado", false) = true AND COALESCE(r."limpiezaCompletada", false) = false))
+         ORDER BY r."fechaCreacion" DESC LIMIT 1`,
+        [body.espacioId || '', body.alojamientoId || ''],
+      );
+    }
+
+    if (!rows.length) {
+      throw new NotFoundException(`Reserva ${rawKey} no encontrada`);
+    }
+
+    const reserva = rows[0];
+    const targetEspacioId = body?.espacioId || reserva.espacioId;
+    const targetAlojamientoId = body?.alojamientoId || reserva.alojamientoId;
+
+    await this.dataSource.transaction(async (manager) => {
+      // 1. Actualizar estado de la reserva a EST-005 (Finalizada) y limpiezaCompletada = true
+      await manager.query(
+        `UPDATE reservas
+         SET "estadoId" = 'EST-005',
+             "limpiezaCompletada" = true,
+             "checkoutRealizado" = true
+         WHERE id = $1`,
+        [reserva.id],
+      );
+
+      // 2. Si la reserva tiene habitación asociada (o en body), reactivar la habitación
+      if (targetEspacioId) {
+        await manager.query(
+          `UPDATE espacios_rentables
+           SET estado = 'Activo',
+               "enLimpiezaDesde" = NULL
+           WHERE id = $1 OR codigo = $1`,
+          [targetEspacioId],
+        );
+
+        // También cerrar cualquier otra reserva que haya quedado pendiente de limpieza para esa misma habitación
+        await manager.query(
+          `UPDATE reservas
+           SET "estadoId" = 'EST-005',
+               "limpiezaCompletada" = true
+           WHERE "espacioId" = $1
+             AND (
+               "estadoId" = 'EST-004'
+               OR (COALESCE("checkoutRealizado", false) = true AND COALESCE("limpiezaCompletada", false) = false)
+             )`,
+          [targetEspacioId],
+        );
+      }
+
+      // 3. Si el alojamiento no tiene otras habitaciones en limpieza, poner el alojamiento en Activo
+      if (targetAlojamientoId) {
+        const dirtyCountRes = await manager.query(
+          `SELECT COUNT(*)::int as count
+           FROM espacios_rentables
+           WHERE "alojamientoId" = $1 AND estado = 'En Limpieza'`,
+          [targetAlojamientoId],
+        );
+        if (Number(dirtyCountRes?.[0]?.count || 0) === 0) {
+          await manager.query(
+            `UPDATE alojamientos
+             SET estado = 'Activo',
+                 "enLimpiezaDesde" = NULL
+             WHERE id = $1 AND estado = 'En Limpieza'`,
+            [targetAlojamientoId],
+          );
+        }
+      }
+
+      // 4. Historial
+      try {
+        await manager.query(
+          `INSERT INTO historial_reservas (id, "reservaId", "estadoAnteriorId", "estadoNuevoId", notas)
+           VALUES ($1, $2, 'EST-004', 'EST-005', $3)`,
+          [
+            generateEntityId('HIS'),
+            reserva.id,
+            'Limpieza completada y confirmada en recepción. Habitación habilitada y estancia finalizada.',
+          ],
+        );
+      } catch (e: any) {
+        this.logger.warn(`[LIMPIEZA-HISTORIAL] ${e?.message}`);
+      }
+    });
+
+    catalogCache.invalidate();
+
+    if (targetEspacioId && reserva.fechaEntrada && reserva.fechaSalida) {
+      await this.inventorySyncService.enqueueStockUpdate(
+        this.dataSource.manager,
+        targetEspacioId,
+        String(reserva.fechaEntrada).split('T')[0],
+        String(reserva.fechaSalida).split('T')[0],
+        'ROOM_CLEANED',
+      ).catch(() => {});
+    }
+
+    return {
+      id: reserva.id,
+      ordenId: reserva.ordenId,
+      estadoId: 'EST-005',
+      estadoNombre: 'Finalizada',
+      limpiezaCompletada: true,
+      mensaje: 'Limpieza de habitación completada con éxito. La reserva ha pasado a estado Finalizada.',
+    };
+  }
+
   async findByEmail(email: string) {
     const rows = await this.dataSource.query(
       `SELECT 
