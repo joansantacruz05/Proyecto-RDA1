@@ -199,9 +199,10 @@ export class AlojamientosService {
 
     const habId = `HAB-${Math.floor(Math.random() * 900) + 100}`;
     const habEstado = estado === 'Inactivo' ? 'Inactivo' : estado === 'En Limpieza' ? 'En Limpieza' : 'Activo';
+    const habCodigo = dto.tipoHabitacionCodigo || dto.codigoHabitacion || dto.codigo || 'SUITE_DELUXE';
     await this.alojamientoRepository.query(
-      'INSERT INTO espacios_rentables (id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible", estado, "numHabitaciones", "numCamas", "tipoCamas", "enLimpiezaDesde") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
-      [habId, id, 'Habitación Estándar', dto.capacidadAdultos || 2, dto.capacidadNinos ?? 0, dto.precioPorNoche || 100, cupos, habEstado, numHabitaciones, numCamas, tipoCamas, enLimpiezaDesde]
+      'INSERT INTO espacios_rentables (id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible", estado, "numHabitaciones", "numCamas", "tipoCamas", "enLimpiezaDesde", codigo) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
+      [habId, id, 'Habitación Estándar', dto.capacidadAdultos || 2, dto.capacidadNinos ?? 0, dto.precioPorNoche || 100, cupos, habEstado, numHabitaciones, numCamas, tipoCamas, enLimpiezaDesde, habCodigo]
     );
 
     if (dto.tienePiscina) {
@@ -498,9 +499,10 @@ export class AlojamientosService {
           );
       } else {
           const habId = `HAB-${Math.floor(Math.random() * 900) + 100}`;
+          const habCodigo = dto.codigo || dto.tipoHabitacionCodigo || 'SUITE_DELUXE';
           await this.alojamientoRepository.query(
-              'INSERT INTO espacios_rentables (id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible", "numHabitaciones", "numCamas", "tipoCamas") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-              [habId, id, 'Habitación Principal', dto.capacidadAdultos || 2, dto.capacidadNinos || 0, dto.precioPorNoche || 100, dto.habitaciones || 1, dto.numHabitaciones || 1, dto.numCamas || 1, dto.tipoCamas || '1 Cama Doble / Queen']
+              'INSERT INTO espacios_rentables (id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible", "numHabitaciones", "numCamas", "tipoCamas", codigo) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+              [habId, id, 'Habitación Principal', dto.capacidadAdultos || 2, dto.capacidadNinos || 0, dto.precioPorNoche || 100, dto.habitaciones || 1, dto.numHabitaciones || 1, dto.numCamas || 1, dto.tipoCamas || '1 Cama Doble / Queen', habCodigo]
           );
       }
       await this.syncAlojamientoCapacitySummary(id);
@@ -534,7 +536,10 @@ export class AlojamientosService {
   // ═══════════════════════════════════════════════════════════════════════
   
   async getRoomsAdmin(alojamientoId: string): Promise<any[]> {
-    return await this.alojamientoRepository.query('SELECT * FROM espacios_rentables WHERE "alojamientoId" = $1 ORDER BY nombre', [alojamientoId]);
+    return await this.alojamientoRepository.query(
+      'SELECT id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible", estado, "imagenesUrls", COALESCE(codigo, \'SUITE_DELUXE\') AS codigo, "numHabitaciones", "numCamas", "tipoCamas", "enLimpiezaDesde" FROM espacios_rentables WHERE "alojamientoId" = $1 ORDER BY nombre',
+      [alojamientoId],
+    );
   }
 
   async createRoomAdmin(alojamientoId: string, dto: any): Promise<any> {
@@ -547,12 +552,13 @@ export class AlojamientosService {
       (numCamas === 1 ? '1 Cama Doble / Queen' : `${numCamas} Camas`);
     const estado = dto.estado || 'Activo';
     const enLimpiezaDesde = estado === 'En Limpieza' ? new Date() : null;
+    const habCodigo = dto.codigo || dto.tipoHabitacionCodigo || 'SUITE_DELUXE';
     await this.alojamientoRepository.query(
-        'INSERT INTO espacios_rentables (id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible", "imagenesUrls", estado, "numHabitaciones", "numCamas", "tipoCamas", "enLimpiezaDesde") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
-        [habId, alojamientoId, dto.nombre || 'Nueva Habitación', dto.capacidadAdultos || 2, dto.capacidadNinos || 0, dto.precioPorNoche || 100, dto.cantidadDisponible || 1, dto.imagenesUrls || '', estado, numHabitaciones, numCamas, tipoCamas, enLimpiezaDesde]
+        'INSERT INTO espacios_rentables (id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible", "imagenesUrls", estado, "numHabitaciones", "numCamas", "tipoCamas", "enLimpiezaDesde", codigo) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)',
+        [habId, alojamientoId, dto.nombre || 'Nueva Habitación', dto.capacidadAdultos || 2, dto.capacidadNinos || 0, dto.precioPorNoche || 100, dto.cantidadDisponible || 1, dto.imagenesUrls || '', estado, numHabitaciones, numCamas, tipoCamas, enLimpiezaDesde, habCodigo]
     );
     await this.syncAlojamientoCapacitySummary(alojamientoId);
-    return { id: habId, nombre: dto.nombre, numHabitaciones, numCamas, tipoCamas, estado };
+    return { id: habId, nombre: dto.nombre, numHabitaciones, numCamas, tipoCamas, estado, codigo: habCodigo };
   }
 
   async updateRoomAdmin(habId: string, dto: any): Promise<any> {
@@ -576,10 +582,11 @@ export class AlojamientosService {
              "numHabitaciones" = COALESCE($8, "numHabitaciones"),
              "numCamas" = COALESCE($9, "numCamas"),
              "tipoCamas" = COALESCE($10, "tipoCamas"),
-             "enLimpiezaDesde" = ${enLimpiezaExpr}
+             "enLimpiezaDesde" = ${enLimpiezaExpr},
+             codigo = COALESCE($12, codigo)
          WHERE id = $11
-         RETURNING "alojamientoId", estado`,
-        [dto.nombre, dto.precioPorNoche, dto.capacidadAdultos, dto.capacidadNinos, dto.cantidadDisponible, dto.imagenesUrls, dto.estado, dto.numHabitaciones, dto.numCamas, dto.tipoCamas, habId]
+         RETURNING "alojamientoId", estado, codigo`,
+        [dto.nombre, dto.precioPorNoche, dto.capacidadAdultos, dto.capacidadNinos, dto.cantidadDisponible, dto.imagenesUrls, dto.estado, dto.numHabitaciones, dto.numCamas, dto.tipoCamas, habId, dto.codigo || dto.tipoHabitacionCodigo]
     );
     const alojamientoId = updatedRows?.[0]?.alojamientoId;
     if (alojamientoId) {
@@ -731,11 +738,11 @@ export class AlojamientosService {
     // Verificar si el alojamiento existe
     const alRows = await this.alojamientoRepository.query(
       `SELECT * FROM alojamientos 
-       WHERE id = $1 
-          OR codigo = $1 
-          OR REPLACE(codigo, '-', '_') = REPLACE($1, '-', '_') 
-          OR REPLACE(codigo, '_', '-') = REPLACE($1, '_', '-') 
-          OR id = ('ALO-' || $1)
+       WHERE UPPER(id) = UPPER($1) 
+          OR UPPER(COALESCE(codigo, '')) = UPPER($1) 
+          OR UPPER(id) = UPPER('ALO-' || $1)
+          OR REPLACE(UPPER(COALESCE(codigo, '')), '-', '_') = REPLACE(UPPER($1), '-', '_') 
+          OR REPLACE(UPPER(COALESCE(codigo, '')), '_', '-') = REPLACE(UPPER($1), '_', '-') 
        LIMIT 1`,
       [alojamientoId],
     );
@@ -781,10 +788,18 @@ export class AlojamientosService {
 
     if (tipoHabitacion) {
       params.push(tipoHabitacion);
-      query += ` AND (e.codigo = $2 OR e.id = $2 OR REPLACE(e.codigo, '-', '_') = REPLACE($2, '-', '_'))`;
+      query += ` AND (
+        UPPER(COALESCE(e.codigo, '')) = UPPER($2) 
+        OR UPPER(e.id) = UPPER($2) 
+        OR (UPPER($2) = 'SUITE_DELUXE' AND (e.codigo IS NULL OR UPPER(e.codigo) = 'SUITE_DELUXE'))
+        OR REPLACE(UPPER(COALESCE(e.codigo, '')), '-', '_') = REPLACE(UPPER($2), '-', '_') 
+        OR REPLACE(UPPER(COALESCE(e.codigo, '')), '_', '-') = REPLACE(UPPER($2), '_', '-') 
+        OR UPPER(e.nombre) = UPPER($2)
+        OR e.nombre ILIKE ('%' || $2 || '%')
+      )`;
     }
 
-    query += ` ORDER BY e.nombre`;
+    query += ` ORDER BY (CASE WHEN e.codigo = 'SUITE_DELUXE' THEN 0 ELSE 1 END), e.nombre`;
     const spaces = await this.alojamientoRepository.query(query, params);
 
     // Conteo global de habitaciones ocupadas y total del hotel
@@ -891,11 +906,11 @@ export class AlojamientosService {
 
     const alRows = await this.alojamientoRepository.query(
       `SELECT * FROM alojamientos 
-       WHERE id = $1 
-          OR codigo = $1 
-          OR REPLACE(codigo, '-', '_') = REPLACE($1, '-', '_') 
-          OR REPLACE(codigo, '_', '-') = REPLACE($1, '_', '-') 
-          OR id = ('ALO-' || $1)
+       WHERE UPPER(id) = UPPER($1) 
+          OR UPPER(COALESCE(codigo, '')) = UPPER($1) 
+          OR UPPER(id) = UPPER('ALO-' || $1)
+          OR REPLACE(UPPER(COALESCE(codigo, '')), '-', '_') = REPLACE(UPPER($1), '-', '_') 
+          OR REPLACE(UPPER(COALESCE(codigo, '')), '_', '-') = REPLACE(UPPER($1), '_', '-') 
        LIMIT 1`,
       [accommodationId],
     );
@@ -927,20 +942,52 @@ export class AlojamientosService {
     }
 
     // Buscar habitación
-    let query = `
-      SELECT e.* 
-      FROM espacios_rentables e
-      WHERE e."alojamientoId" = $1 AND (e.estado = 'Activo' OR e.estado IS NULL)
-    `;
-    const params: any[] = [accommodation.id];
+    let spaces: any[] = [];
+    const normTipo = tipoHabitacionCodigo ? tipoHabitacionCodigo.trim() : '';
 
-    if (tipoHabitacionCodigo) {
-      params.push(tipoHabitacionCodigo);
-      query += ` AND (e.codigo = $2 OR e.id = $2 OR REPLACE(e.codigo, '-', '_') = REPLACE($2, '-', '_'))`;
+    if (normTipo) {
+      spaces = await this.alojamientoRepository.query(
+        `SELECT e.* 
+         FROM espacios_rentables e
+         WHERE e."alojamientoId" = $1 
+           AND (e.estado = 'Activo' OR e.estado IS NULL)
+           AND (
+             UPPER(COALESCE(e.codigo, '')) = UPPER($2)
+             OR UPPER(e.id) = UPPER($2)
+             OR (UPPER($2) = 'SUITE_DELUXE' AND (e.codigo IS NULL OR UPPER(e.codigo) = 'SUITE_DELUXE'))
+             OR REPLACE(UPPER(COALESCE(e.codigo, '')), '-', '_') = REPLACE(UPPER($2), '-', '_')
+             OR REPLACE(UPPER(COALESCE(e.codigo, '')), '_', '-') = REPLACE(UPPER($2), '_', '-')
+             OR UPPER(e.nombre) = UPPER($2)
+             OR e.nombre ILIKE ('%' || $2 || '%')
+           )
+         ORDER BY 
+           (CASE 
+             WHEN UPPER(COALESCE(e.codigo, '')) = UPPER($2) THEN 0
+             WHEN UPPER(e.id) = UPPER($2) THEN 1
+             WHEN (UPPER($2) = 'SUITE_DELUXE' AND (e.codigo IS NULL OR UPPER(e.codigo) = 'SUITE_DELUXE')) THEN 2
+             WHEN UPPER(e.nombre) = UPPER($2) THEN 3
+             ELSE 4
+           END),
+           e.id 
+         LIMIT 1`,
+        [accommodation.id, normTipo],
+      );
     }
 
-    query += ` ORDER BY (CASE WHEN e.codigo = $2 THEN 0 ELSE 1 END), e.id LIMIT 1`;
-    const spaces = await this.alojamientoRepository.query(query, params);
+    // Fallback: si no se encontró con el código específico o no se envió tipoHabitacionCodigo,
+    // tomar la primera habitación activa disponible de la propiedad
+    if (!spaces || spaces.length === 0) {
+      spaces = await this.alojamientoRepository.query(
+        `SELECT e.* 
+         FROM espacios_rentables e
+         WHERE e."alojamientoId" = $1 AND (e.estado = 'Activo' OR e.estado IS NULL)
+         ORDER BY 
+           (CASE WHEN e.codigo = 'SUITE_DELUXE' THEN 0 ELSE 1 END),
+           e.id 
+         LIMIT 1`,
+        [accommodation.id],
+      );
+    }
 
     if (!spaces || spaces.length === 0) {
       throw new ProblemDetailsException(

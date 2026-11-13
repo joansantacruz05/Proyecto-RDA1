@@ -71,7 +71,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       `UPDATE reservas SET "espacioId" = 'ESP-004' WHERE "espacioId" IN ('HAB-004-A', 'HAB-004-B')`,
       `UPDATE reservas SET "espacioId" = 'ESP-005' WHERE "espacioId" IN ('HAB-005-A', 'HAB-005-B')`,
       `DELETE FROM espacios_rentables WHERE id LIKE 'HAB-00%'`,
-      `UPDATE espacios_rentables SET codigo = 'SUITE_DELUXE' WHERE id LIKE 'ESP-%' AND (codigo IS NULL OR codigo != 'SUITE_DELUXE')`,
+      `UPDATE espacios_rentables SET codigo = 'SUITE_DELUXE' WHERE codigo IS NULL OR TRIM(codigo) = ''`,
+      `UPDATE alojamientos SET codigo = id WHERE codigo IS NULL OR TRIM(codigo) = ''`,
       `UPDATE espacios_rentables SET "cantidadDisponible" = 3 WHERE id LIKE 'ESP-%' AND "cantidadDisponible" != 3`,
       `CREATE INDEX IF NOT EXISTS idx_reservas_fechas_estado ON reservas ("espacioId", "estadoId", "fechaEntrada", "fechaSalida")`,
       `CREATE TABLE IF NOT EXISTS checkin_notificaciones (
@@ -143,7 +144,14 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
               COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut"
        FROM espacios_rentables e
        JOIN alojamientos a ON a.id = e."alojamientoId"
-       WHERE (e.id = $1 OR e.id = $2 OR e.codigo = $3)
+       WHERE (
+         UPPER(e.id) = UPPER($1) 
+         OR UPPER(e.id) = UPPER($2) 
+         OR UPPER(COALESCE(e.codigo, '')) = UPPER($3)
+         OR (UPPER($3) = 'SUITE_DELUXE' AND (e.codigo IS NULL OR UPPER(e.codigo) = 'SUITE_DELUXE'))
+         OR UPPER(e.nombre) = UPPER($3)
+         OR e.nombre ILIKE ('%' || $3 || '%')
+       )
          AND (a.estado = 'Activo' OR a.estado IS NULL)
          AND (e.estado = 'Activo' OR e.estado IS NULL)
        LIMIT 1`,
@@ -158,10 +166,14 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
                 COALESCE(TO_CHAR(a."horaCheckOut", 'HH24:MI'), '11:00') as "horaCheckOut"
          FROM espacios_rentables e
          JOIN alojamientos a ON a.id = e."alojamientoId"
-         WHERE (a.id = $1 OR a.codigo = $1)
+         WHERE (
+           UPPER(a.id) = UPPER($1) 
+           OR UPPER(COALESCE(a.codigo, '')) = UPPER($1)
+           OR UPPER(a.id) = UPPER('ALO-' || $1)
+         )
            AND (a.estado = 'Activo' OR a.estado IS NULL)
            AND (e.estado = 'Activo' OR e.estado IS NULL)
-         ORDER BY e."precioPorNoche" ASC LIMIT 1`,
+         ORDER BY (CASE WHEN e.codigo = 'SUITE_DELUXE' THEN 0 ELSE 1 END), e."precioPorNoche" ASC LIMIT 1`,
         [accommodationId],
       );
       espacio = fallback[0];
@@ -613,19 +625,30 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
          FROM alojamientos a
          JOIN espacios_rentables e ON e."alojamientoId" = a.id
          WHERE (
-           a.id = $1 
-           OR a.codigo = $1 
-           OR REPLACE(a.codigo, '-', '_') = REPLACE($1, '-', '_') 
-           OR REPLACE(a.codigo, '_', '-') = REPLACE($1, '_', '-') 
-           OR a.id = ('ALO-' || $1) 
+           UPPER(a.id) = UPPER($1) 
+           OR UPPER(COALESCE(a.codigo, '')) = UPPER($1) 
+           OR UPPER(a.id) = UPPER('ALO-' || $1) 
+           OR REPLACE(UPPER(COALESCE(a.codigo, '')), '-', '_') = REPLACE(UPPER($1), '-', '_') 
+           OR REPLACE(UPPER(COALESCE(a.codigo, '')), '_', '-') = REPLACE(UPPER($1), '_', '-') 
            OR $1 = '' 
            OR $1 IS NULL
          )
            AND (a.estado = 'Activo' OR a.estado IS NULL)
            AND (e.estado = 'Activo' OR e.estado IS NULL)
          ORDER BY 
-           (CASE WHEN e.codigo = $2 OR e.id = $2 OR REPLACE(e.codigo, '-', '_') = REPLACE($2, '-', '_') THEN 0 ELSE 1 END),
-           (CASE WHEN e.codigo = 'SUITE_DELUXE' THEN 0 ELSE 1 END),
+           (CASE 
+             WHEN $2 <> '' AND (
+               UPPER(COALESCE(e.codigo, '')) = UPPER($2)
+               OR UPPER(e.id) = UPPER($2)
+               OR (UPPER($2) = 'SUITE_DELUXE' AND (e.codigo IS NULL OR UPPER(e.codigo) = 'SUITE_DELUXE'))
+               OR REPLACE(UPPER(COALESCE(e.codigo, '')), '-', '_') = REPLACE(UPPER($2), '-', '_')
+               OR REPLACE(UPPER(COALESCE(e.codigo, '')), '_', '-') = REPLACE(UPPER($2), '_', '-')
+               OR UPPER(e.nombre) = UPPER($2)
+               OR e.nombre ILIKE ('%' || $2 || '%')
+             ) THEN 0 
+             WHEN e.codigo = 'SUITE_DELUXE' THEN 1
+             ELSE 2 
+           END),
            e.id
          LIMIT 1
          FOR UPDATE OF e;`,

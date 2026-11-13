@@ -405,7 +405,7 @@ export class AlojamientosController {
   }
 
   @Public()
-  @Post(['alojamientos/:id/availability', 'alojamientos/:id/disponibilidad'])
+  @Post(['alojamientos/:id/availability', 'alojamientos/:id/disponibilidad', ':id/availability', ':id/disponibilidad'])
   @ApiTags('Disponibilidad y Cotización v2')
   @ApiOperation({ summary: 'Consultar disponibilidad para un alojamiento específico' })
   checkPropertyAvailability(@Param('id') id: string, @Body() body: any) {
