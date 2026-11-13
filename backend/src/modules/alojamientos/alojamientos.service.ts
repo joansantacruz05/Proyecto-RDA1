@@ -198,36 +198,28 @@ export class AlojamientosService {
     );
 
     const habEstado = estado === 'Inactivo' ? 'Inactivo' : estado === 'En Limpieza' ? 'En Limpieza' : 'Activo';
-    const baseCodigo = dto.tipoHabitacionCodigo || dto.codigoHabitacion || dto.codigo || 'SUITE_DELUXE';
-    const totalRooms = numHabitaciones;
-    const camasPorHabitacion = Math.max(1, Math.round(numCamas / totalRooms)) || 1;
+    const habCodigo = dto.tipoHabitacionCodigo || dto.codigoHabitacion || dto.codigo || 'SUITE_DELUXE';
+    const habId = `HAB-${Math.floor(Math.random() * 900) + 100}`;
+    const habNombre = dto.nombreHabitacion || `Habitación / Suite de ${dto.nombre || 'Alojamiento'}`;
 
-    for (let i = 1; i <= totalRooms; i++) {
-      const habId = `HAB-${Math.floor(Math.random() * 90000) + 10000}`;
-      const habNombre = totalRooms === 1 ? 'Habitación Estándar' : `Habitación ${100 + i}`;
-      // El primer cuarto lleva el código principal para que reservas de Booking Core o por defecto funcionen de inmediato
-      const habCodigo = i === 1 ? baseCodigo : `${baseCodigo}_${i}`;
-      const stockPorHabitacion = totalRooms === 1 ? cupos : 1;
-
-      await this.alojamientoRepository.query(
-        'INSERT INTO espacios_rentables (id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible", estado, "numHabitaciones", "numCamas", "tipoCamas", "enLimpiezaDesde", codigo) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
-        [
-          habId,
-          id,
-          habNombre,
-          dto.capacidadAdultos || 2,
-          dto.capacidadNinos ?? 0,
-          dto.precioPorNoche || 100,
-          stockPorHabitacion,
-          habEstado,
-          1,
-          camasPorHabitacion,
-          tipoCamas,
-          enLimpiezaDesde,
-          habCodigo,
-        ]
-      );
-    }
+    await this.alojamientoRepository.query(
+      'INSERT INTO espacios_rentables (id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible", estado, "numHabitaciones", "numCamas", "tipoCamas", "enLimpiezaDesde", codigo) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
+      [
+        habId,
+        id,
+        habNombre,
+        dto.capacidadAdultos || 2,
+        dto.capacidadNinos ?? 0,
+        dto.precioPorNoche || 100,
+        cupos,
+        habEstado,
+        numHabitaciones,
+        numCamas,
+        tipoCamas,
+        enLimpiezaDesde,
+        habCodigo,
+      ]
+    );
 
     await this.syncAlojamientoCapacitySummary(id);
 

@@ -559,10 +559,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
   };
 
   const handleCreateNewRoom = () => {
-    const nextRoomNum = 101 + roomsList.length;
     setEditingRoom({
       id: 'Nueva',
-      nombre: `Habitación ${nextRoomNum}`,
+      nombre: roomsModalHotel ? `Habitación / Suite de ${roomsModalHotel.nombre}` : 'Habitación / Suite Estándar',
       precioPorNoche: Number(roomsModalHotel?.precioPorNoche) || 100,
       capacidadAdultos: 2,
       capacidadNinos: 0,

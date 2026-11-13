@@ -95,6 +95,33 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       `CREATE INDEX IF NOT EXISTS idx_reservas_canal_origen ON reservas ("canalOrigen")`,
       `ALTER TABLE alojamientos ADD COLUMN IF NOT EXISTS "enLimpiezaDesde" TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS "numHabitaciones" INT NOT NULL DEFAULT 1, ADD COLUMN IF NOT EXISTS "numCamas" INT NOT NULL DEFAULT 1`,
       `ALTER TABLE espacios_rentables ADD COLUMN IF NOT EXISTS "numHabitaciones" INT NOT NULL DEFAULT 1, ADD COLUMN IF NOT EXISTS "numCamas" INT NOT NULL DEFAULT 1, ADD COLUMN IF NOT EXISTS "tipoCamas" VARCHAR(100) NOT NULL DEFAULT '1 Cama Doble / Queen', ADD COLUMN IF NOT EXISTS "enLimpiezaDesde" TIMESTAMPTZ`,
+      `UPDATE espacios_rentables e SET nombre = 'Habitación / Suite de ' || a.nombre, codigo = 'SUITE_DELUXE' FROM alojamientos a WHERE e."alojamientoId" = a.id AND (e.nombre LIKE 'Habitación 10%' OR e.nombre LIKE 'Habitación 11%' OR e.codigo LIKE 'SUITE_DELUXE_%')`,
+      `DO $$
+       DECLARE
+         aloj_rec RECORD;
+         first_hab_id VARCHAR(50);
+       BEGIN
+         FOR aloj_rec IN 
+           SELECT a.id, a.nombre, COALESCE(a."numHabitaciones", 1) as num_habs, COUNT(e.id) as hab_count
+           FROM alojamientos a
+           JOIN espacios_rentables e ON e."alojamientoId" = a.id
+           WHERE e.codigo LIKE 'SUITE_DELUXE%' OR e.nombre LIKE 'Habitación / Suite%' OR e.nombre LIKE 'Habitación 10%'
+           GROUP BY a.id, a.nombre, a."numHabitaciones"
+           HAVING COUNT(e.id) > 1
+         LOOP
+           SELECT id INTO first_hab_id FROM espacios_rentables WHERE "alojamientoId" = aloj_rec.id ORDER BY id ASC LIMIT 1;
+           UPDATE reservas SET "espacioId" = first_hab_id WHERE "espacioId" IN (
+             SELECT id FROM espacios_rentables WHERE "alojamientoId" = aloj_rec.id AND id != first_hab_id
+           );
+           DELETE FROM espacios_rentables WHERE "alojamientoId" = aloj_rec.id AND id != first_hab_id;
+           UPDATE espacios_rentables 
+           SET nombre = 'Habitación / Suite de ' || aloj_rec.nombre,
+               codigo = 'SUITE_DELUXE',
+               "cantidadDisponible" = GREATEST(aloj_rec.num_habs, 1),
+               "numHabitaciones" = aloj_rec.num_habs
+           WHERE id = first_hab_id;
+         END LOOP;
+       END $$;`,
     ];
     for (const stmt of ddl) {
       try {
