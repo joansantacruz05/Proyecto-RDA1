@@ -154,7 +154,7 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
     setExtras((prev) => {
       const existingIdx = prev.findIndex(
         (item) =>
-          item.concepto.toLowerCase() === cleanConcepto.toLowerCase() &&
+          String(item.concepto || '').toLowerCase() === cleanConcepto.toLowerCase() &&
           Number(item.precioUnitario) === cleanPrice,
       );
       if (existingIdx >= 0) {

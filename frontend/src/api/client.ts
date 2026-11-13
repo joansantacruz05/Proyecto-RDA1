@@ -90,11 +90,8 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
   requestHeaders.set('Accept', 'application/json, application/problem+json');
 
   const method = String(restOptions.method || 'GET').toUpperCase();
-  const isMutating = method === 'POST' || method === 'PUT' || method === 'PATCH';
-  const requiresIdempotency =
-    isMutating &&
-    /(\/orders\/(create|[^/]+\/(modify|cancel))|\/reservas\/[^/]+\/cancelar?)(\?|$)/i.test(urlPath);
-  if (requiresIdempotency && !requestHeaders.has('Idempotency-Key')) {
+  const isMutating = method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE';
+  if (isMutating && !requestHeaders.has('Idempotency-Key')) {
     requestHeaders.set('Idempotency-Key', generateUuidV4());
   }
 

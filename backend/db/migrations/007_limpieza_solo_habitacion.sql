@@ -16,3 +16,4 @@ SELECT
   (SELECT COALESCE(sum(pagos.monto), 0::numeric) FROM pagos WHERE pagos.estado::text = 'Completado'::text) AS ingresos_totales,
   (SELECT count(*) FROM alojamientos WHERE estado::text = 'En Limpieza'::text) AS alojamientos_en_limpieza,
   (SELECT count(*) FROM espacios_rentables WHERE estado::text = 'En Limpieza'::text) AS habitaciones_en_limpieza;
+

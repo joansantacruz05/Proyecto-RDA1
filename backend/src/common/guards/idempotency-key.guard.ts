@@ -1,5 +1,6 @@
 import { CanActivate, ExecutionContext, Injectable, HttpStatus } from '@nestjs/common';
 import { Request } from 'express';
+import * as crypto from 'crypto';
 import { ProblemDetailsException } from '../exceptions/problem-details.exception';
 
 /**
@@ -13,7 +14,16 @@ export class IdempotencyKeyGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
-    const idempotencyKey = request.headers['idempotency-key'] as string | undefined;
+    let idempotencyKey = request.headers['idempotency-key'] as string | undefined;
+
+    // Si viene de un navegador web (interfaz de usuario) y omitió la cabecera,
+    // generar un UUID v4 transparente para no bloquear la operación del usuario.
+    const userAgent = String(request.headers['user-agent'] || '');
+    const isBrowserClient = userAgent.includes('Mozilla') || userAgent.includes('Chrome') || userAgent.includes('Safari');
+    if ((!idempotencyKey || idempotencyKey.trim() === '') && isBrowserClient) {
+      idempotencyKey = crypto.randomUUID();
+      request.headers['idempotency-key'] = idempotencyKey;
+    }
 
     if (!idempotencyKey || idempotencyKey.trim() === '') {
       throw new ProblemDetailsException(

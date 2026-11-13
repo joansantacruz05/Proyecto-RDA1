@@ -21,3 +21,4 @@ END
 WHERE r."canalOrigen" IS NULL OR TRIM(r."canalOrigen") = '';
 
 CREATE INDEX IF NOT EXISTS idx_reservas_canal_origen ON reservas ("canalOrigen");
+

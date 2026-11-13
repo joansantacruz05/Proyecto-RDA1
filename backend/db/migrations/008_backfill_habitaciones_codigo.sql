@@ -11,3 +11,4 @@ WHERE codigo IS NULL OR TRIM(codigo) = '';
 UPDATE alojamientos
 SET codigo = id
 WHERE codigo IS NULL OR TRIM(codigo) = '';
+

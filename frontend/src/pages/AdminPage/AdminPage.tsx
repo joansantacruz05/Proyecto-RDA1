@@ -756,13 +756,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       }
       if (!q) return true;
       return (
-        r.ordenId?.toLowerCase().includes(q) ||
-        r.id?.toLowerCase().includes(q) ||
-        r.alojamientoNombre?.toLowerCase().includes(q) ||
-        r.habitacionNombre?.toLowerCase().includes(q) ||
-        (r.clienteIdentificacion && r.clienteIdentificacion.toLowerCase().includes(q)) ||
-        (r.clienteNombre && r.clienteNombre.toLowerCase().includes(q)) ||
-        (r.usuarioNombre && r.usuarioNombre.toLowerCase().includes(q))
+        String(r.ordenId || '').toLowerCase().includes(q) ||
+        String(r.id || '').toLowerCase().includes(q) ||
+        String(r.alojamientoNombre || '').toLowerCase().includes(q) ||
+        String(r.habitacionNombre || '').toLowerCase().includes(q) ||
+        String(r.clienteIdentificacion || '').toLowerCase().includes(q) ||
+        String(r.clienteNombre || '').toLowerCase().includes(q) ||
+        String(r.usuarioNombre || '').toLowerCase().includes(q)
       );
     });
   }, [reservas, searchReservaQuery, receptionFilter]);
@@ -781,7 +781,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       const roomKey = r.espacioId || r.habitacionNombre || r.id;
       const keys = [
         r.alojamientoId ? `id:${r.alojamientoId}` : '',
-        r.alojamientoNombre ? `name:${r.alojamientoNombre.toLowerCase().trim()}` : '',
+        r.alojamientoNombre ? `name:${String(r.alojamientoNombre).toLowerCase().trim()}` : '',
       ].filter(Boolean);
       for (const k of keys) {
         if (!map.has(k)) map.set(k, new Set());
@@ -793,15 +793,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
 
   const getAlojamientoEstadoInfo = (aloj: AlojamientoAdmin) => {
     const overrides = getEstadosOverride();
+    const alojNameLower = String(aloj.nombre || '').toLowerCase().trim();
     const rawOverride =
-      overrides[aloj.id] || overrides[aloj.nombre?.toLowerCase().trim() || ''];
+      overrides[aloj.id] || overrides[alojNameLower];
     const currentOverride =
       rawOverride && rawOverride !== 'En Limpieza' ? rawOverride : undefined;
     const effEstado = currentOverride || aloj.estado || 'Activo';
     const isCleaningState = effEstado === 'En Limpieza';
     const dirtyRoomSet =
       dirtyRoomsByHotel.get(`id:${aloj.id}`) ||
-      dirtyRoomsByHotel.get(`name:${aloj.nombre?.toLowerCase().trim() || ''}`);
+      dirtyRoomsByHotel.get(`name:${alojNameLower}`);
     const dirtyRoomsCount = dirtyRoomSet ? dirtyRoomSet.size : 0;
     const hasDirtyRooms = dirtyRoomsCount > 0 || isCleaningState;
     const isPausedOrMaint = effEstado === 'Inactivo' || effEstado === 'En Mantenimiento';
@@ -854,9 +855,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
         ? aloj.destino
         : (aloj.destino as { nombre?: string } | undefined)?.nombre || '';
     return (
-      aloj.id?.toLowerCase().includes(q) ||
-      aloj.nombre?.toLowerCase().includes(q) ||
-      destName.toLowerCase().includes(q)
+      String(aloj.id || '').toLowerCase().includes(q) ||
+      String(aloj.nombre || '').toLowerCase().includes(q) ||
+      String(destName || '').toLowerCase().includes(q)
     );
   });
 

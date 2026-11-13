@@ -85,11 +85,11 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
   }
 
   const filteredReservas = reservas.filter((r) => {
-    const term = searchTerm.toLowerCase();
-    const guest = (r.usuarioNombre || r.clienteNombre || '').toLowerCase();
-    const cedula = (r.clienteIdentificacion || '').toLowerCase();
-    const hotel = (r.alojamientoNombre || '').toLowerCase();
-    const code = (r.ordenId || r.external_order_id || r.id || '').toLowerCase();
+    const term = String(searchTerm || '').toLowerCase();
+    const guest = String(r.usuarioNombre || r.clienteNombre || '').toLowerCase();
+    const cedula = String(r.clienteIdentificacion || '').toLowerCase();
+    const hotel = String(r.alojamientoNombre || '').toLowerCase();
+    const code = String(r.ordenId || r.external_order_id || r.id || '').toLowerCase();
     return guest.includes(term) || cedula.includes(term) || hotel.includes(term) || code.includes(term);
   });
 

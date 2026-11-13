@@ -1,10 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { AlertTriangle, XCircle, CheckCircle, Clock } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Info } from 'lucide-react';
 import { Modal } from '../ui/Modal/Modal';
 import { Button } from '../ui/Button/Button';
 import { Textarea } from '../ui/Textarea/Textarea';
 import { api, generateUuidV4 } from '../../api/client';
-import { formatUSD } from '../ui/PriceDisplay/PriceDisplay';
 import { ProblemDetailsException } from '../../api/types';
 import { markReservaCanceladaLocal } from '../../utils/accommodationStatus';
 import styles from './Modals.module.css';
@@ -25,9 +24,6 @@ export const CancelModal: React.FC<CancelModalProps> = ({
   onClose,
   reservaId,
   hotelNombre,
-  fechaEntrada,
-  horaCheckIn,
-  precioTotal,
   onSuccess,
 }) => {
   const [motivo, setMotivo] = useState('');
@@ -42,33 +38,6 @@ export const CancelModal: React.FC<CancelModalProps> = ({
       idempotencyKeyRef.current = generateUuidV4();
     }
   }, [isOpen, reservaId]);
-
-  useEffect(() => {
-    idempotencyKeyRef.current = generateUuidV4();
-  }, [motivo]);
-
-  const inHora = (horaCheckIn || '14:00').slice(0, 5);
-  // Cálculo del tramo de penalidad según la hora de check-in del alojamiento (hora de Guayaquil)
-  const dEntrada = new Date(`${fechaEntrada.split('T')[0]}T${inHora}:00-05:00`).getTime();
-  const ahora = Date.now();
-  const horasRestantes = (dEntrada - ahora) / (1000 * 60 * 60);
-
-  let porcentajeReembolso = 100;
-  let porcentajePenalidad = 0;
-
-  if (horasRestantes > 48) {
-    porcentajeReembolso = 100;
-    porcentajePenalidad = 0;
-  } else if (horasRestantes >= 24) {
-    porcentajeReembolso = 50;
-    porcentajePenalidad = 50;
-  } else {
-    porcentajeReembolso = 0;
-    porcentajePenalidad = 100;
-  }
-
-  const montoReembolso = (precioTotal * porcentajeReembolso) / 100;
-  const montoPenalidad = (precioTotal * porcentajePenalidad) / 100;
 
   const handleConfirmCancel = async () => {
     try {
@@ -114,53 +83,33 @@ export const CancelModal: React.FC<CancelModalProps> = ({
             <AlertTriangle size={18} />
             <span>¿Estás seguro de cancelar tu reserva en {hotelNombre}?</span>
           </div>
-          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', margin: 0 }}>
-            La cancelación es inmediata e irreversible. Conforme a las políticas de LuxeStays, se aplicará el tramo de reembolso correspondiente a las horas previas al check-in.
+          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', margin: 0, lineHeight: 1.5 }}>
+            La cancelación es inmediata. La reserva quedará anulada y la habitación se liberará automáticamente en el inventario del hotel.
           </p>
         </div>
 
-        {/* Detalle de los 3 Tramos */}
-        <div className={styles.cancelTiers}>
-          <div className={`${styles.tierRow} ${horasRestantes > 48 ? styles.tierActive : ''}`}>
-            <span>
-              <CheckCircle size={14} color="#1F7A4D" style={{ display: 'inline', marginRight: '6px' }} />
-              Más de 48 horas antes del check-in
-            </span>
-            <span style={{ fontWeight: 700, color: '#1F7A4D' }}>Reembolso del 100%</span>
-          </div>
-
-          <div className={`${styles.tierRow} ${horasRestantes >= 24 && horasRestantes <= 48 ? styles.tierActive : ''}`}>
-            <span>
-              <Clock size={14} color="#9A6700" style={{ display: 'inline', marginRight: '6px' }} />
-              Entre 48 y 24 horas antes del check-in
-            </span>
-            <span style={{ fontWeight: 700, color: '#9A6700' }}>Reembolso del 50%</span>
-          </div>
-
-          <div className={`${styles.tierRow} ${horasRestantes < 24 ? styles.tierActive : ''}`}>
-            <span>
-              <XCircle size={14} color="#B42318" style={{ display: 'inline', marginRight: '6px' }} />
-              Menos de 24 horas antes del check-in
-            </span>
-            <span style={{ fontWeight: 700, color: '#B42318' }}>Sin reembolso (100% penalidad)</span>
-          </div>
-        </div>
-
-        {/* Resumen Financiero de la Cancelación */}
-        <div style={{ backgroundColor: 'var(--color-background)', padding: '12px', borderRadius: 'var(--radius-md)', margin: '16px 0', fontSize: 'var(--font-size-sm)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span>Total abonado de la reserva:</span>
-            <span style={{ fontWeight: 600 }}>{formatUSD(precioTotal)}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span>Penalidad aplicada ({porcentajePenalidad}%):</span>
-            <span style={{ color: 'var(--color-error)' }}>-{formatUSD(montoPenalidad)}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--color-border)', paddingTop: '6px', fontWeight: 700 }}>
-            <span>Monto neto a reembolsar:</span>
-            <span style={{ color: 'var(--color-success)', fontSize: 'var(--font-size-base)' }}>
-              {formatUSD(montoReembolso)} USD
-            </span>
+        {/* Información operativa sobre canal de pago y reembolsos */}
+        <div
+          style={{
+            backgroundColor: '#F8FAFC',
+            border: '1px solid #E2E8F0',
+            borderRadius: 'var(--radius-md)',
+            padding: '12px 14px',
+            margin: '16px 0',
+            fontSize: 'var(--font-size-xs)',
+            color: '#475569',
+            display: 'flex',
+            gap: '10px',
+            alignItems: 'flex-start',
+            lineHeight: 1.45,
+          }}
+        >
+          <Info size={16} color="#0284C7" style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div>
+            <strong style={{ color: '#0F172A', display: 'block', marginBottom: '2px' }}>
+              Gestión de pagos y reembolsos
+            </strong>
+            LuxeStays gestiona la disponibilidad y el inventario del alojamiento. Para reservas originadas o abonadas en plataformas externas (como <strong>Booking Core</strong> o pasarelas de terceros), el procesamiento y eventual reintegro monetario se administra directamente a través del canal donde realizaste el pago.
           </div>
         </div>
 
@@ -184,7 +133,7 @@ export const CancelModal: React.FC<CancelModalProps> = ({
 
         <div className={styles.modalActions}>
           <Button variant="ghost" onClick={onClose} disabled={loading}>
-            No cancelar
+            Conservar reserva
           </Button>
           <Button
             variant="danger"

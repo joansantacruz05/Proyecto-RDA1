@@ -544,7 +544,16 @@ export class AlojamientosController {
     return this.alojamientosService.modifyOrder(orderId, modifyRequest);
   }
 
-  @Post(['orders/:orderId/cancel', 'alojamientos/orders/:orderId/cancel', 'alojamientos/reservas/:orderId/cancel', 'alojamientos/reservations/:orderId/cancel'])
+  @Post([
+    'orders/:orderId/cancel',
+    'orders/:orderId/cancelar',
+    'alojamientos/orders/:orderId/cancel',
+    'alojamientos/orders/:orderId/cancelar',
+    'alojamientos/reservas/:orderId/cancel',
+    'alojamientos/reservas/:orderId/cancelar',
+    'alojamientos/reservations/:orderId/cancel',
+    'alojamientos/reservations/:orderId/cancelar',
+  ])
   @ApiTags('Reservas y Órdenes Saga v2')
   @ApiOperation({ summary: 'Cancelar orden compensatoria (idempotente)' })
   @ApiParam({ name: 'orderId', type: 'string' })
