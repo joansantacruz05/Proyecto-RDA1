@@ -12,6 +12,7 @@ import {
   LogIn,
   FileText,
   MapPin,
+  Info,
 } from 'lucide-react';
 import { api, getAuthToken } from '../../api/client';
 import { ReservaUsuarioItem, UsuarioSession } from '../../api/types';
@@ -24,6 +25,7 @@ import { ReviewModal } from '../../components/modals/ReviewModal';
 import { CancelModal } from '../../components/modals/CancelModal';
 import { InvoiceModal, InvoiceModalData } from '../../components/modals/InvoiceModal';
 import { formatHoraHHMM } from '../../utils/ecuadorLocations';
+import { isBookingOriginReserva } from '../../utils/receptionFolio';
 import styles from './MyBookingsPage.module.css';
 
 interface MyBookingsPageProps {
@@ -76,7 +78,7 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
     });
   };
 
-  // Consulta de reservas del usuario
+  // Consulta de reservas del usuario (en vivo cada 3 s)
   const {
     data: reservas = [],
     isLoading,
@@ -85,6 +87,8 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
     queryKey: ['misReservas', currentUser?.id],
     queryFn: () => api.get<ReservaUsuarioItem[]>('/reservas/mias'),
     enabled: Boolean(token && currentUser),
+    refetchInterval: 3000,
+    staleTime: 1000,
   });
 
   if (!token || !currentUser) {
@@ -219,7 +223,8 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
             const isPast = dOut < now && !isCancelled;
             const canReview = isPast && !reserva.calificacion;
             const canSign = !reserva.contratoFirmado && !isCancelled;
-            const canCancel = !isPast && !isCancelled;
+            const isBooking = isBookingOriginReserva(reserva);
+            const canCancel = !isPast && !isCancelled && !isBooking;
 
             const checkinClean = String(reserva.fechaEntrada).split('T')[0] || '';
             const checkoutClean = String(reserva.fechaSalida).split('T')[0] || '';
@@ -244,6 +249,9 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
                     <Badge variant={isCancelled ? 'error' : isPast ? 'neutral' : 'success'}>
                       {reserva.estadoNombre || (isCancelled ? 'Cancelada' : 'Confirmada')}
                     </Badge>
+                    {isBooking && (
+                      <Badge variant="info">Booking.com</Badge>
+                    )}
                     {reserva.contratoFirmado ? (
                       <Badge variant="success">Contrato Firmado</Badge>
                     ) : !isCancelled ? (
@@ -349,7 +357,7 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
                       </Button>
                     )}
 
-                    {canCancel && (
+                    {canCancel ? (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -358,7 +366,23 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
                       >
                         Cancelar
                       </Button>
-                    )}
+                    ) : isBooking && !isPast && !isCancelled ? (
+                      <span
+                        style={{
+                          fontSize: '12px',
+                          color: '#475569',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          background: '#F1F5F9',
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                        }}
+                      >
+                        <Info size={13} color="#2563EB" />
+                        Gestionada por Booking.com (cancelar desde Booking)
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -399,6 +423,7 @@ export const MyBookingsPage: React.FC<MyBookingsPageProps> = ({ currentUser }) =
           fechaEntrada={String(cancelReserva.fechaEntrada)}
           horaCheckIn={formatHoraHHMM(cancelReserva.horaCheckIn, '14:00')}
           precioTotal={Number(cancelReserva.precioTotal)}
+          isBooking={isBookingOriginReserva(cancelReserva)}
           onSuccess={handleModalSuccess}
         />
       )}

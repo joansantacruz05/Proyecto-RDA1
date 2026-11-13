@@ -41,7 +41,7 @@ export const CatalogPage: React.FC = () => {
     tipo: searchParams.get('tipo') || undefined,
   });
 
-  // Query al catálogo paginado
+  // Query al catálogo paginado (en vivo cada 5 s)
   const { data, isLoading, isError, refetch } = useQuery<AlojamientosApiResponse>({
     queryKey: ['alojamientosCatalog', page, ciudadParam, filters],
     queryFn: () =>
@@ -55,6 +55,8 @@ export const CatalogPage: React.FC = () => {
           maxPrecio: filters.maxPrecio,
         },
       }),
+    refetchInterval: 5000,
+    staleTime: 2000,
   });
 
   const handleHeroSearch = (searchData: {

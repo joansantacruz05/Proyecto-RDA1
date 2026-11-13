@@ -165,18 +165,22 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
 
   const isAdmin = currentUser?.rol?.toLowerCase().includes('admin');
 
-  // 1. Estadísticas del Dashboard
+  // 1. Estadísticas del Dashboard (en vivo cada 3 s)
   const { data: stats } = useQuery<StatsData>({
     queryKey: ['adminDashboardStats'],
     queryFn: () => api.get<StatsData>('/admin/dashboard-stats'),
     enabled: Boolean(token && isAdmin),
+    refetchInterval: 3000,
+    staleTime: 1000,
   });
 
-  // 2. Lista de Alojamientos
+  // 2. Lista de Alojamientos (en vivo cada 3 s)
   const { data: alojamientos = [], isLoading: loadingAlojamientos, refetch: refetchAlojamientos } = useQuery<AlojamientoAdmin[]>({
     queryKey: ['adminAlojamientos'],
     queryFn: () => api.get<AlojamientoAdmin[]>('/admin/alojamientos'),
     enabled: Boolean(token && isAdmin),
+    refetchInterval: 3000,
+    staleTime: 1000,
   });
 
   // 3. Ciudades oficiales de Ecuador
@@ -191,11 +195,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       .filter(Boolean);
   }, [rawCiudades]);
 
-  // 4. Reservas de Recepción
+  // 4. Reservas de Recepción (en vivo cada 3 s)
   const { data: reservas = [], isLoading: loadingReservas, refetch: refetchReservas } = useQuery<ReservaAdminItem[]>({
     queryKey: ['adminReservasTodas'],
     queryFn: () => api.get<ReservaAdminItem[]>('/reservas/admin/todas'),
     enabled: Boolean(token && isAdmin),
+    refetchInterval: 3000,
+    staleTime: 1000,
   });
 
   // 5. Usuarios
@@ -203,6 +209,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     queryKey: ['adminUsuarios'],
     queryFn: () => api.get<UsuarioAdminItem[]>('/admin/usuarios'),
     enabled: Boolean(token && isAdmin),
+    refetchInterval: 5000,
+    staleTime: 2000,
   });
 
   // 6. Facturas SRI
@@ -210,13 +218,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     queryKey: ['adminFacturas'],
     queryFn: () => api.get<FacturaAdminItem[]>('/admin/facturas'),
     enabled: Boolean(token && isAdmin),
+    refetchInterval: 5000,
+    staleTime: 2000,
   });
 
-  // 7. Cancelaciones
+  // 7. Cancelaciones (en vivo cada 3 s)
   const { data: cancelaciones = [] } = useQuery<CancelacionAdminItem[]>({
     queryKey: ['adminCancelaciones'],
     queryFn: () => api.get<CancelacionAdminItem[]>('/reservas/admin/cancelaciones'),
     enabled: Boolean(token && isAdmin),
+    refetchInterval: 3000,
+    staleTime: 1000,
   });
 
   // --- MODAL: CREAR / EDITAR ALOJAMIENTO ---
@@ -983,6 +995,32 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
           </div>
         </div>
         <div className={styles.headerActions}>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              borderRadius: '20px',
+              background: '#ECFDF5',
+              border: '1px solid #A7F3D0',
+              color: '#065F46',
+              fontSize: '12px',
+              fontWeight: 600,
+            }}
+          >
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                backgroundColor: '#10B981',
+                display: 'inline-block',
+                boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.3)',
+              }}
+            />
+            Datos en Vivo (3s)
+          </span>
           <a
             href="https://posada-ec-alojamientos.azurewebsites.net/api/docs"
             target="_blank"

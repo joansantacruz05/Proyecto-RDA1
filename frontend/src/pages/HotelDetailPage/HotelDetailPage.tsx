@@ -46,18 +46,21 @@ export const HotelDetailPage: React.FC = () => {
     enabled: Boolean(id),
   });
 
-  // 2. Habitaciones del Alojamiento
+  // 2. Habitaciones del Alojamiento (en vivo cada 3 s)
   const { data: rooms = [], isLoading: isRoomsLoading } = useQuery<HabitacionDetalle[]>({
     queryKey: ['hotelRooms', id],
     queryFn: () => api.get<HabitacionDetalle[]>(`/alojamientos/${id}/habitaciones`),
     enabled: Boolean(id),
+    refetchInterval: 3000,
+    staleTime: 1000,
   });
 
-  // 3. Reservas Activas (cruce con Azure para detectar si ya está reservado)
+  // 3. Reservas Activas (en vivo cada 3 s)
   const { data: activeReservas = [] } = useQuery<ReservaItemLike[]>({
     queryKey: ['reservasActivasPublicas'],
     queryFn: () => api.get<ReservaItemLike[]>('/reservas'),
-    staleTime: 5000,
+    refetchInterval: 3000,
+    staleTime: 1000,
   });
 
   const hotelRooms = rooms.length > 0 ? rooms : hotel?.habitaciones || [];

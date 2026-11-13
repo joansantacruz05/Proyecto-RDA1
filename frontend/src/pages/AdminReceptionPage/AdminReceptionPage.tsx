@@ -41,7 +41,7 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
 
   const isAdmin = currentUser?.rol?.toLowerCase().includes('admin');
 
-  // Consulta de todas las reservas para recepción
+  // Consulta de todas las reservas para recepción (en vivo cada 3 s)
   const {
     data: reservas = [],
     isLoading,
@@ -50,6 +50,8 @@ export const AdminReceptionPage: React.FC<AdminReceptionPageProps> = ({ currentU
     queryKey: ['adminReservasTodas'],
     queryFn: () => api.get<ReservaAdminItem[]>('/reservas/admin/todas'),
     enabled: Boolean(token && isAdmin),
+    refetchInterval: 3000,
+    staleTime: 1000,
   });
 
   if (!token || !currentUser) {

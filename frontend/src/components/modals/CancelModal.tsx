@@ -16,6 +16,7 @@ interface CancelModalProps {
   fechaEntrada: string;
   horaCheckIn?: string | undefined;
   precioTotal: number;
+  isBooking?: boolean | undefined;
   onSuccess: () => void;
 }
 
@@ -24,6 +25,7 @@ export const CancelModal: React.FC<CancelModalProps> = ({
   onClose,
   reservaId,
   hotelNombre,
+  isBooking,
   onSuccess,
 }) => {
   const [motivo, setMotivo] = useState('');
@@ -40,6 +42,10 @@ export const CancelModal: React.FC<CancelModalProps> = ({
   }, [isOpen, reservaId]);
 
   const handleConfirmCancel = async () => {
+    if (isBooking) {
+      setError('Las reservas originadas en Booking.com no pueden cancelarse desde este sistema.');
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -78,71 +84,86 @@ export const CancelModal: React.FC<CancelModalProps> = ({
       size="md"
     >
       <div>
-        <div className={styles.cancelNotice}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-error)', fontWeight: 700, marginBottom: '6px' }}>
-            <AlertTriangle size={18} />
-            <span>¿Estás seguro de cancelar tu reserva en {hotelNombre}?</span>
-          </div>
-          <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', margin: 0, lineHeight: 1.5 }}>
-            La cancelación es inmediata. La reserva quedará anulada y la habitación se liberará automáticamente en el inventario del hotel.
-          </p>
-        </div>
-
-        {/* Información operativa sobre canal de pago y reembolsos */}
-        <div
-          style={{
-            backgroundColor: '#F8FAFC',
-            border: '1px solid #E2E8F0',
-            borderRadius: 'var(--radius-md)',
-            padding: '12px 14px',
-            margin: '16px 0',
-            fontSize: 'var(--font-size-xs)',
-            color: '#475569',
-            display: 'flex',
-            gap: '10px',
-            alignItems: 'flex-start',
-            lineHeight: 1.45,
-          }}
-        >
-          <Info size={16} color="#0284C7" style={{ flexShrink: 0, marginTop: '2px' }} />
+        {isBooking ? (
           <div>
-            <strong style={{ color: '#0F172A', display: 'block', marginBottom: '2px' }}>
-              Gestión de pagos y reembolsos
-            </strong>
-            LuxeStays gestiona la disponibilidad y el inventario del alojamiento. Para reservas originadas o abonadas en plataformas externas (como <strong>Booking Core</strong> o pasarelas de terceros), el procesamiento y eventual reintegro monetario se administra directamente a través del canal donde realizaste el pago.
+            <div
+              style={{
+                backgroundColor: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                borderRadius: 'var(--radius-md)',
+                padding: '16px',
+                color: '#1E40AF',
+                display: 'flex',
+                gap: '12px',
+                alignItems: 'flex-start',
+                lineHeight: 1.5,
+                marginBottom: '16px',
+              }}
+            >
+              <Info size={20} color="#2563EB" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div>
+                <strong style={{ color: '#1E3A8A', display: 'block', marginBottom: '6px', fontSize: '14px' }}>
+                  Reserva externa de Booking.com
+                </strong>
+                <p style={{ margin: '0 0 6px 0', fontSize: 'var(--font-size-xs)' }}>
+                  Esta reserva en <strong>{hotelNombre}</strong> fue creada y abonada a través del canal oficial de <strong>Booking.com</strong>.
+                </p>
+                <p style={{ margin: 0, fontSize: 'var(--font-size-xs)' }}>
+                  Por políticas de integración y sincronización de canales, <strong>las cancelaciones de Booking no se pueden realizar desde este sistema</strong>. Debes ingresar directamente a la aplicación o portal de Booking.com para gestionar la cancelación.
+                </p>
+              </div>
+            </div>
+
+            <div className={styles.modalActions}>
+              <Button variant="primary" onClick={onClose}>
+                Entendido / Regresar
+              </Button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div>
+            <div className={styles.cancelNotice}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-error)', fontWeight: 700, marginBottom: '6px' }}>
+                <AlertTriangle size={18} />
+                <span>¿Estás seguro de cancelar tu reserva en {hotelNombre}?</span>
+              </div>
+              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                La cancelación es inmediata. La reserva quedará anulada y la habitación se liberará automáticamente en el inventario del hotel.
+              </p>
+            </div>
 
-        <div style={{ marginTop: 'var(--spacing-3)' }}>
-          <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: '4px' }}>
-            Motivo de cancelación (Opcional)
-          </label>
-          <Textarea
-            value={motivo}
-            onChange={(e) => setMotivo(e.target.value)}
-            placeholder="Indícanos la razón de tu cancelación (cambio de planes, fuerza mayor, etc.)..."
-            rows={2}
-          />
-        </div>
+            <div style={{ marginTop: 'var(--spacing-3)' }}>
+              <label style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: '4px' }}>
+                Motivo de cancelación (Opcional)
+              </label>
+              <Textarea
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value)}
+                placeholder="Indícanos la razón de tu cancelación (cambio de planes, fuerza mayor, etc.)..."
+                rows={2}
+              />
+            </div>
 
-        {error && (
-          <p style={{ color: 'var(--color-error)', fontSize: 'var(--font-size-xs)', marginTop: '8px' }}>
-            {error}
-          </p>
+            {error && (
+              <p style={{ color: 'var(--color-error)', fontSize: 'var(--font-size-xs)', marginTop: '8px' }}>
+                {error}
+              </p>
+            )}
+
+            <div className={styles.modalActions}>
+              <Button variant="ghost" onClick={onClose} disabled={loading}>
+                Conservar reserva
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleConfirmCancel}
+                loading={loading}
+              >
+                Confirmar Cancelación
+              </Button>
+            </div>
+          </div>
         )}
-
-        <div className={styles.modalActions}>
-          <Button variant="ghost" onClick={onClose} disabled={loading}>
-            Conservar reserva
-          </Button>
-          <Button
-            variant="danger"
-            onClick={handleConfirmCancel}
-            loading={loading}
-          >
-            Confirmar Cancelación
-          </Button>
-        </div>
       </div>
     </Modal>
   );

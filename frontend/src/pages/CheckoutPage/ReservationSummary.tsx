@@ -1,9 +1,8 @@
-import React from 'react';
-import { Clock, ShieldCheck, MapPin, RefreshCw, AlertTriangle } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Clock, ShieldCheck, MapPin } from 'lucide-react';
 import { AlojamientoDetalle } from '../../api/types';
 import { RatingStars } from '../../components/ui/RatingStars/RatingStars';
 import { formatUSD } from '../../components/ui/PriceDisplay/PriceDisplay';
-import { Button } from '../../components/ui/Button/Button';
 import { usePriceCountdown } from '../../hooks/usePriceCountdown';
 import { formatHoraHHMM } from '../../utils/ecuadorLocations';
 import styles from './ReservationSummary.module.css';
@@ -49,12 +48,14 @@ export const ReservationSummary: React.FC<ReservationSummaryProps> = ({
   const diffTime = Math.abs(dOut.getTime() - dIn.getTime());
   const noches = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
-  const handleRefreshClick = () => {
-    resetCountdown();
-    if (onRefreshQuote) {
-      onRefreshQuote();
+  useEffect(() => {
+    if (isExpired) {
+      resetCountdown();
+      if (onRefreshQuote) {
+        onRefreshQuote();
+      }
     }
-  };
+  }, [isExpired, resetCountdown, onRefreshQuote]);
 
   const hotelName = hotel?.nombre || 'Alojamiento LuxeStays';
   const location = typeof hotel?.destino === 'string'
@@ -106,19 +107,16 @@ export const ReservationSummary: React.FC<ReservationSummaryProps> = ({
           </div>
         </div>
       ) : (
-        <div className={styles.expiredAlert}>
-          <div className={styles.expiredText}>
-            <AlertTriangle size={15} />
-            <span>Tarifa expirada. La cotización se actualiza al renovar.</span>
+        <div className={styles.timerAlert} style={{ background: '#F0FDF4', borderColor: '#BBF7D0' }}>
+          <div className={styles.timerHeader}>
+            <span className={styles.timerLabel}>
+              <Clock size={13} color="#059669" />
+              <span style={{ color: '#065F46' }}>Cotización en vivo:</span>
+            </span>
+            <span className={styles.timerValue} style={{ color: '#059669', fontSize: '11.5px', fontWeight: 600 }}>
+              ● Actualizada automáticamente
+            </span>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            icon={<RefreshCw size={13} />}
-            onClick={handleRefreshClick}
-          >
-            Actualizar cotización
-          </Button>
         </div>
       )}
 

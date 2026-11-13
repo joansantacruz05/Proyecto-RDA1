@@ -1265,6 +1265,21 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       throw new ForbiddenException('No tienes autorización para cancelar esta reserva.');
     }
 
+    // Regla de integración de canales: Las reservas de Booking NO se cancelan desde los sistemas del hotel/LuxeStays
+    const esBooking = this.isBookingOriginOrder(reserva);
+    if (esBooking && !esOrquestador) {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/restriction-violated',
+          title: 'Booking Reservation Cancellation Restricted',
+          status: HttpStatus.FORBIDDEN,
+          code: 'BOOKING_CHANNEL_CANCELLATION_RESTRICTED',
+          detail: 'Las reservas originadas a través de Booking.com no pueden ser canceladas desde este sistema. Deben gestionarse directamente en la plataforma de Booking.',
+        },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
     // Cálculo de política de reembolso y penalidad
     const totalMonto = Number(reserva.precioTotal || reserva.total || 0);
     let porcentajeReembolso = 100;
