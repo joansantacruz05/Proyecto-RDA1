@@ -225,7 +225,28 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
   const [isSavingAlojamiento, setIsSavingAlojamiento] = useState(false);
   const initialQuitoCoords = getCityCenterCoords('Quito');
   const [hasCustomPin, setHasCustomPin] = useState(false);
-  const [alojamientoForm, setAlojamientoForm] = useState({
+  const [alojamientoForm, setAlojamientoForm] = useState<{
+    nombre: string;
+    descripcion: string;
+    destino: string;
+    direccion: string;
+    latitud: number | string;
+    longitud: number | string;
+    horaCheckIn: string;
+    horaCheckOut: string;
+    precioPorNoche: number | string;
+    capacidadAdultos: number | string;
+    capacidadNinos: number | string;
+    habitaciones: number | string;
+    numHabitaciones: number | string;
+    numCamas: number | string;
+    tipoCamas: string;
+    imagenUrl: string;
+    tienePiscina: boolean;
+    permitePaquete: boolean;
+    estado: string;
+    liberarReservas: boolean;
+  }>({
     nombre: '',
     descripcion: '',
     destino: 'Quito',
@@ -234,13 +255,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     longitud: initialQuitoCoords.lng,
     horaCheckIn: '14:00',
     horaCheckOut: '11:00',
-    precioPorNoche: 95,
-    capacidadAdultos: 2,
-    capacidadNinos: 1,
-    habitaciones: 3,
-    numHabitaciones: 1,
-    numCamas: 1,
-    tipoCamas: '1 Cama King / Queen',
+    precioPorNoche: '',
+    capacidadAdultos: '',
+    capacidadNinos: '',
+    habitaciones: '',
+    numHabitaciones: '',
+    numCamas: '',
+    tipoCamas: '',
     imagenUrl: '',
     tienePiscina: false,
     permitePaquete: true,
@@ -262,14 +283,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       longitud: cityCoords.lng,
       horaCheckIn: '14:00',
       horaCheckOut: '11:00',
-      precioPorNoche: 95,
-      capacidadAdultos: 2,
-      capacidadNinos: 1,
-      habitaciones: 3,
-      numHabitaciones: 1,
-      numCamas: 1,
-      tipoCamas: '1 Cama King / Queen',
-      imagenUrl: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80',
+      precioPorNoche: '',
+      capacidadAdultos: '',
+      capacidadNinos: '',
+      habitaciones: '',
+      numHabitaciones: '',
+      numCamas: '',
+      tipoCamas: '',
+      imagenUrl: '',
       tienePiscina: false,
       permitePaquete: true,
       estado: 'Activo',
@@ -297,13 +318,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       longitud: validPin ? Number(aloj.longitud) : cityCoords.lng,
       horaCheckIn: formatHoraHHMM(aloj.horaCheckIn, '14:00'),
       horaCheckOut: formatHoraHHMM(aloj.horaCheckOut, '11:00'),
-      precioPorNoche: Number(aloj.precioPorNoche) || 95,
-      capacidadAdultos: aloj.capacidadAdultos || 2,
-      capacidadNinos: aloj.capacidadNinos || 0,
-      habitaciones: aloj.habitaciones || 1,
-      numHabitaciones: aloj.numHabitaciones || 1,
-      numCamas: aloj.numCamas || 1,
-      tipoCamas: aloj.tipoCamas || '1 Cama King / Queen',
+      precioPorNoche: aloj.precioPorNoche ?? '',
+      capacidadAdultos: aloj.capacidadAdultos ?? '',
+      capacidadNinos: aloj.capacidadNinos ?? '',
+      habitaciones: aloj.habitaciones ?? '',
+      numHabitaciones: aloj.numHabitaciones ?? '',
+      numCamas: aloj.numCamas ?? '',
+      tipoCamas: aloj.tipoCamas || '',
       imagenUrl: aloj.imagenUrl || '',
       tienePiscina: Boolean(aloj.tienePiscina),
       permitePaquete: true,
@@ -430,17 +451,35 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
 
   const handleSaveAlojamiento = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!alojamientoForm.nombre.trim()) {
+      showToast('Por favor ingresa un nombre para el alojamiento.', 'error');
+      return;
+    }
     setIsSavingAlojamiento(true);
+    const rawNumHab = Math.max(1, parseInt(String(alojamientoForm.numHabitaciones || alojamientoForm.habitaciones || 1), 10) || 1);
+    const rawStock = Math.max(1, parseInt(String(alojamientoForm.habitaciones || alojamientoForm.numHabitaciones || 1), 10) || rawNumHab);
+    const rawCamas = Math.max(1, parseInt(String(alojamientoForm.numCamas || rawNumHab), 10) || rawNumHab);
+    const rawAdultos = Math.max(1, parseInt(String(alojamientoForm.capacidadAdultos || 2), 10) || 2);
+    const rawNinos = Math.max(0, parseInt(String(alojamientoForm.capacidadNinos || 0), 10) || 0);
+    const rawPrecio = Math.max(10, parseFloat(String(alojamientoForm.precioPorNoche || 95)) || 95);
+
     const payload = {
       ...alojamientoForm,
+      nombre: alojamientoForm.nombre.trim(),
+      descripcion: alojamientoForm.descripcion.trim(),
+      precioPorNoche: rawPrecio,
+      capacidadAdultos: rawAdultos,
+      capacidadNinos: rawNinos,
+      habitaciones: rawStock,
+      numHabitaciones: rawNumHab,
+      numCamas: rawCamas,
+      tipoCamas: alojamientoForm.tipoCamas.trim() || (rawCamas === 1 ? '1 Cama Doble / Queen' : `${rawCamas} Camas`),
+      imagenUrl: alojamientoForm.imagenUrl.trim() || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80',
       direccion: alojamientoForm.direccion.trim() || `Centro de ${alojamientoForm.destino}`,
       latitud: Number(alojamientoForm.latitud),
       longitud: Number(alojamientoForm.longitud),
       horaCheckIn: formatHoraHHMM(alojamientoForm.horaCheckIn, '14:00'),
       horaCheckOut: formatHoraHHMM(alojamientoForm.horaCheckOut, '11:00'),
-      numHabitaciones: Math.max(1, Number(alojamientoForm.numHabitaciones) || 1),
-      numCamas: Math.max(1, Number(alojamientoForm.numCamas) || 1),
-      tipoCamas: alojamientoForm.tipoCamas.trim() || '1 Cama Doble / Queen',
     };
     try {
       if (editingAlojamientoId) {
@@ -508,17 +547,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
   };
 
   const handleCreateNewRoom = () => {
+    const nextRoomNum = 101 + roomsList.length;
     setEditingRoom({
       id: 'Nueva',
-      nombre: 'Suite Deluxe Ejecutiva',
-      precioPorNoche: Number(roomsModalHotel?.precioPorNoche) || 120,
+      nombre: `Habitación ${nextRoomNum}`,
+      precioPorNoche: Number(roomsModalHotel?.precioPorNoche) || 100,
       capacidadAdultos: 2,
-      capacidadNinos: 1,
-      cantidadDisponible: 3,
+      capacidadNinos: 0,
+      cantidadDisponible: 1,
       numHabitaciones: 1,
-      numCamas: 2,
+      numCamas: 1,
       tipoCamas: '1 Cama King / Queen',
-      imagenesUrls: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
+      imagenesUrls: '',
       estado: 'Activo',
     });
   };
@@ -526,16 +566,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
   const handleSaveRoom = async () => {
     if (!editingRoom || !roomsModalHotel) return;
     try {
+      const roomPayload = {
+        ...editingRoom,
+        nombre: editingRoom.nombre.trim() || 'Habitación Estándar',
+        precioPorNoche: Math.max(1, parseFloat(String(editingRoom.precioPorNoche)) || 100),
+        capacidadAdultos: Math.max(1, parseInt(String(editingRoom.capacidadAdultos), 10) || 2),
+        capacidadNinos: Math.max(0, parseInt(String(editingRoom.capacidadNinos), 10) || 0),
+        cantidadDisponible: Math.max(1, parseInt(String(editingRoom.cantidadDisponible), 10) || 1),
+        numHabitaciones: Math.max(1, parseInt(String(editingRoom.numHabitaciones), 10) || 1),
+        numCamas: Math.max(1, parseInt(String(editingRoom.numCamas), 10) || 1),
+        tipoCamas: (editingRoom.tipoCamas && editingRoom.tipoCamas.trim()) || '1 Cama Doble / Queen',
+      };
       if (editingRoom.id === 'Nueva') {
         const res = await api.post<{ id: string }>(
           `/admin/alojamientos/${roomsModalHotel.id}/habitaciones`,
-          editingRoom,
+          roomPayload,
         );
-        setRoomsList([...roomsList, { ...editingRoom, id: res?.id || `HAB-${Date.now()}` }]);
+        setRoomsList([...roomsList, { ...roomPayload, id: res?.id || `HAB-${Date.now()}` }]);
         showToast('Habitación creada exitosamente');
       } else {
-        await api.patch(`/admin/habitaciones/${editingRoom.id}`, editingRoom);
-        setRoomsList(roomsList.map((r) => (r.id === editingRoom.id ? editingRoom : r)));
+        await api.patch(`/admin/habitaciones/${editingRoom.id}`, roomPayload);
+        setRoomsList(roomsList.map((r) => (r.id === editingRoom.id ? { ...r, ...roomPayload } : r)));
         showToast('Habitación actualizada con éxito');
       }
       setEditingRoom(null);
@@ -1961,8 +2012,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 min="10"
                 required
                 className={styles.formInput}
-                value={alojamientoForm.precioPorNoche}
-                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, precioPorNoche: parseFloat(e.target.value) || 0 })}
+                value={alojamientoForm.precioPorNoche ?? ''}
+                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, precioPorNoche: e.target.value })}
+                placeholder="Ej: 95.00"
               />
             </div>
 
@@ -1974,8 +2026,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 max="20"
                 required
                 className={styles.formInput}
-                value={alojamientoForm.capacidadAdultos}
-                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, capacidadAdultos: parseInt(e.target.value, 10) || 1 })}
+                value={alojamientoForm.capacidadAdultos ?? ''}
+                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, capacidadAdultos: e.target.value })}
+                placeholder="Ej: 2"
               />
             </div>
 
@@ -1986,8 +2039,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 min="0"
                 max="10"
                 className={styles.formInput}
-                value={alojamientoForm.capacidadNinos}
-                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, capacidadNinos: parseInt(e.target.value, 10) || 0 })}
+                value={alojamientoForm.capacidadNinos ?? ''}
+                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, capacidadNinos: e.target.value })}
+                placeholder="Ej: 0"
               />
             </div>
 
@@ -1999,8 +2053,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 max="100"
                 required
                 className={styles.formInput}
-                value={alojamientoForm.habitaciones}
-                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, habitaciones: parseInt(e.target.value, 10) || 1 })}
+                value={alojamientoForm.habitaciones ?? ''}
+                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, habitaciones: e.target.value })}
+                placeholder="Ej: 3"
               />
             </div>
 
@@ -2012,8 +2067,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 max="50"
                 required
                 className={styles.formInput}
-                value={alojamientoForm.numHabitaciones}
-                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, numHabitaciones: parseInt(e.target.value, 10) || 1 })}
+                value={alojamientoForm.numHabitaciones ?? ''}
+                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, numHabitaciones: e.target.value })}
+                placeholder="Ej: 3"
               />
             </div>
 
@@ -2025,8 +2081,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                 max="60"
                 required
                 className={styles.formInput}
-                value={alojamientoForm.numCamas}
-                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, numCamas: parseInt(e.target.value, 10) || 1 })}
+                value={alojamientoForm.numCamas ?? ''}
+                onChange={(e) => setAlojamientoForm({ ...alojamientoForm, numCamas: e.target.value })}
+                placeholder="Ej: 3"
               />
             </div>
 
@@ -2314,9 +2371,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                   <input
                     type="number"
                     step="0.01"
+                    placeholder="Ej: 95.00"
                     className={styles.formInput}
-                    value={editingRoom.precioPorNoche}
-                    onChange={(e) => setEditingRoom({ ...editingRoom, precioPorNoche: parseFloat(e.target.value) || 0 })}
+                    value={editingRoom.precioPorNoche ?? ''}
+                    onChange={(e) => setEditingRoom({ ...editingRoom, precioPorNoche: e.target.value })}
                   />
                 </div>
 
@@ -2325,9 +2383,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                   <input
                     type="number"
                     min="1"
+                    placeholder="Ej: 2"
                     className={styles.formInput}
-                    value={editingRoom.capacidadAdultos}
-                    onChange={(e) => setEditingRoom({ ...editingRoom, capacidadAdultos: parseInt(e.target.value, 10) || 1 })}
+                    value={editingRoom.capacidadAdultos ?? ''}
+                    onChange={(e) => setEditingRoom({ ...editingRoom, capacidadAdultos: e.target.value })}
                   />
                 </div>
 
@@ -2336,9 +2395,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                   <input
                     type="number"
                     min="0"
+                    placeholder="Ej: 0"
                     className={styles.formInput}
-                    value={editingRoom.capacidadNinos}
-                    onChange={(e) => setEditingRoom({ ...editingRoom, capacidadNinos: parseInt(e.target.value, 10) || 0 })}
+                    value={editingRoom.capacidadNinos ?? ''}
+                    onChange={(e) => setEditingRoom({ ...editingRoom, capacidadNinos: e.target.value })}
                   />
                 </div>
 
@@ -2347,9 +2407,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                   <input
                     type="number"
                     min="1"
+                    placeholder="Ej: 1"
                     className={styles.formInput}
-                    value={editingRoom.cantidadDisponible}
-                    onChange={(e) => setEditingRoom({ ...editingRoom, cantidadDisponible: parseInt(e.target.value, 10) || 1 })}
+                    value={editingRoom.cantidadDisponible ?? ''}
+                    onChange={(e) => setEditingRoom({ ...editingRoom, cantidadDisponible: e.target.value })}
                   />
                 </div>
 
@@ -2359,9 +2420,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                     type="number"
                     min="1"
                     max="50"
+                    placeholder="Ej: 1"
                     className={styles.formInput}
-                    value={editingRoom.numHabitaciones ?? 1}
-                    onChange={(e) => setEditingRoom({ ...editingRoom, numHabitaciones: parseInt(e.target.value, 10) || 1 })}
+                    value={editingRoom.numHabitaciones ?? ''}
+                    onChange={(e) => setEditingRoom({ ...editingRoom, numHabitaciones: e.target.value })}
                   />
                 </div>
 
@@ -2371,9 +2433,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                     type="number"
                     min="1"
                     max="60"
+                    placeholder="Ej: 1"
                     className={styles.formInput}
-                    value={editingRoom.numCamas ?? 1}
-                    onChange={(e) => setEditingRoom({ ...editingRoom, numCamas: parseInt(e.target.value, 10) || 1 })}
+                    value={editingRoom.numCamas ?? ''}
+                    onChange={(e) => setEditingRoom({ ...editingRoom, numCamas: e.target.value })}
                   />
                 </div>
 
@@ -2383,7 +2446,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                     type="text"
                     placeholder="Ej: 1 Cama King + 1 Queen"
                     className={styles.formInput}
-                    value={editingRoom.tipoCamas ?? '1 Cama King / Queen'}
+                    value={editingRoom.tipoCamas ?? ''}
                     onChange={(e) => setEditingRoom({ ...editingRoom, tipoCamas: e.target.value })}
                   />
                 </div>

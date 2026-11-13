@@ -311,11 +311,11 @@ export interface HabitacionAdmin {
   id: string;
   nombre: string;
   precioPorNoche: number | string;
-  capacidadAdultos: number;
-  capacidadNinos: number;
-  cantidadDisponible: number;
-  numHabitaciones?: number;
-  numCamas?: number;
+  capacidadAdultos: number | string;
+  capacidadNinos: number | string;
+  cantidadDisponible: number | string;
+  numHabitaciones?: number | string;
+  numCamas?: number | string;
   tipoCamas?: string;
   imagenesUrls?: string;
   estado?: string;
