@@ -14,6 +14,7 @@ export interface ReservaItemLike {
   alojamientoId?: string | null | undefined;
   alojamientoNombre?: string | null | undefined;
   alojamientoCodigo?: string | null | undefined;
+  espacioId?: string | null | undefined;
   habitacionNombre?: string | null | undefined;
   fechaEntrada?: string | null | undefined;
   fechaSalida?: string | null | undefined;
@@ -28,7 +29,20 @@ export interface CheckIsAlojamientoReservedParams {
   alojamientoCodigo?: string | null | undefined;
   estaReservadoApi?: boolean | null | undefined;
   habitacionesDisponibles?: number | null | undefined;
+  totalHabitaciones?: number | null | undefined;
   estado?: string | null | undefined;
+  activeReservas?: ReservaItemLike[] | null | undefined;
+  checkDates?: { checkin?: string | null | undefined; checkout?: string | null | undefined } | null | undefined;
+}
+
+export interface CheckIsRoomReservedParams {
+  roomId?: string | null | undefined;
+  roomNombre?: string | null | undefined;
+  roomCodigo?: string | null | undefined;
+  roomEstado?: string | null | undefined;
+  cantidadDisponible?: number | null | undefined;
+  alojamientoId?: string | null | undefined;
+  alojamientoNombre?: string | null | undefined;
   activeReservas?: ReservaItemLike[] | null | undefined;
   checkDates?: { checkin?: string | null | undefined; checkout?: string | null | undefined } | null | undefined;
 }
@@ -233,11 +247,157 @@ export function markReservaCanceladaLocal(
   }
 }
 
+export function isReservaClosed(r: ReservaItemLike): boolean {
+  const eNombre = String(r.estadoNombre ?? '').toLowerCase();
+  return (
+    Boolean(r.checkoutRealizado) ||
+    r.estadoId === 'EST-003' ||
+    r.estadoId === 'EST-004' ||
+    r.estadoId === 'EST-005' ||
+    eNombre.includes('cancel') ||
+    eNombre.includes('limpieza') ||
+    eNombre.includes('finaliz') ||
+    eNombre.includes('check-out')
+  );
+}
+
+export function isReservaDateConflict(
+  res: ReservaItemLike,
+  checkDates?: { checkin?: string | null | undefined; checkout?: string | null | undefined } | null,
+): boolean {
+  if (checkDates?.checkin && checkDates?.checkout && res.fechaEntrada && res.fechaSalida) {
+    const qIn = new Date(checkDates.checkin).getTime();
+    const qOut = new Date(checkDates.checkout).getTime();
+    const rIn = new Date(res.fechaEntrada).getTime();
+    const rOut = new Date(res.fechaSalida).getTime();
+    if (!isNaN(qIn) && !isNaN(qOut) && !isNaN(rIn) && !isNaN(rOut)) {
+      return qIn < rOut && qOut > rIn;
+    }
+  }
+  if (res.fechaSalida) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const outDate = new Date(res.fechaSalida);
+    if (!isNaN(outDate.getTime())) {
+      return outDate.getTime() >= today.getTime();
+    }
+  }
+  return true;
+}
+
+export function doesReservaMatchRoom(
+  res: ReservaItemLike,
+  roomId?: string | null,
+  roomNombre?: string | null,
+  roomCodigo?: string | null,
+  alojamientoId?: string | null,
+): boolean {
+  if (!res) return false;
+  const targetAloj = String(alojamientoId ?? '').trim().toLowerCase();
+  const resAlo = String(res.alojamientoId ?? '').trim().toLowerCase();
+  if (targetAloj && resAlo && targetAloj !== resAlo && !targetAloj.includes(resAlo) && !resAlo.includes(targetAloj)) {
+    return false;
+  }
+
+  const targetId = String(roomId ?? '').trim().toLowerCase();
+  const targetName = String(roomNombre ?? '').trim().toLowerCase();
+  const targetCode = String(roomCodigo ?? '').trim().toLowerCase();
+
+  const resEspId = String(res.espacioId ?? '').trim().toLowerCase();
+  const resHabName = String(res.habitacionNombre ?? '').trim().toLowerCase();
+
+  if (targetId && resEspId && (targetId === resEspId || targetId.includes(resEspId) || resEspId.includes(targetId))) {
+    return true;
+  }
+  if (targetName && resHabName && (targetName === resHabName || targetName.includes(resHabName) || resHabName.includes(targetName))) {
+    return true;
+  }
+  if (targetCode && resHabName && resHabName.includes(targetCode)) {
+    return true;
+  }
+  return false;
+}
+
+export function doesReservaMatchProperty(
+  res: ReservaItemLike,
+  idNorm: string,
+  nameNorm: string,
+  codeNorm: string,
+): boolean {
+  if (!res) return false;
+  const resAloId = String(res.alojamientoId ?? '').toLowerCase().trim();
+  const resName = String(res.alojamientoNombre ?? '').toLowerCase().trim();
+  const resCode = String(res.alojamientoCodigo ?? '').toLowerCase().trim();
+  const resHab = String(res.habitacionNombre ?? '').toLowerCase().trim();
+
+  return Boolean(
+    (idNorm && resAloId && (idNorm === resAloId || idNorm.includes(resAloId) || resAloId.includes(idNorm))) ||
+    (nameNorm && resName && (nameNorm.includes(resName) || resName.includes(nameNorm))) ||
+    (codeNorm && resCode && (codeNorm === resCode || codeNorm.includes(resCode))) ||
+    (idNorm && (resName.includes(idNorm) || resCode.includes(idNorm))) ||
+    (nameNorm && resHab && nameNorm.includes('villa colonial') && resHab.includes('villa colonial')),
+  );
+}
+
 /**
- * Determina si un alojamiento está reservado activamente cruzando:
+ * Determina si una habitación física específica está reservada o no disponible:
+ * 1. Estado en limpieza o inactivo
+ * 2. Cruce con reservas activas (API y locales) para ese espacioId o nombre
+ * 3. Capacidad de stock remanente
+ */
+export function checkIsRoomReserved(params: CheckIsRoomReservedParams): boolean {
+  const {
+    roomId,
+    roomNombre,
+    roomCodigo,
+    roomEstado = 'Activo',
+    cantidadDisponible = 1,
+    alojamientoId,
+    activeReservas = [],
+    checkDates,
+  } = params || {};
+
+  const estadoNorm = String(roomEstado ?? '').toLowerCase().trim();
+  if (
+    estadoNorm === 'inactivo' ||
+    estadoNorm === 'mantenimiento' ||
+    estadoNorm === 'en limpieza' ||
+    estadoNorm.includes('limpieza')
+  ) {
+    return true;
+  }
+
+  const safeReservas = Array.isArray(activeReservas) ? activeReservas : [];
+  const locales = getReservadosLocales();
+
+  let occupiedCount = 0;
+
+  for (const loc of locales) {
+    if (!loc || isReservaClosed(loc)) continue;
+    if (!isReservaDateConflict(loc, checkDates)) continue;
+    if (doesReservaMatchRoom(loc, roomId, roomNombre, roomCodigo, alojamientoId)) {
+      occupiedCount++;
+    }
+  }
+
+  for (const res of safeReservas) {
+    if (!res || isReservaClosed(res)) continue;
+    if (!isReservaDateConflict(res, checkDates)) continue;
+    if (doesReservaMatchRoom(res, roomId, roomNombre, roomCodigo, alojamientoId)) {
+      occupiedCount++;
+    }
+  }
+
+  const stock = Math.max(1, Number(cantidadDisponible ?? 1));
+  return occupiedCount >= stock;
+}
+
+/**
+ * Determina si un alojamiento está totalmente reservado cruzando:
  * 1. La respuesta de la API (/reservas de Azure)
  * 2. Las reservas locales de la sesión
  * 3. Los liberados/pausados por el administrador
+ * 4. Conteo de habitaciones disponibles (un hotel no se bloquea si aún tiene habitaciones libres)
  */
 export function checkIsAlojamientoReserved(params: CheckIsAlojamientoReservedParams): boolean {
   const {
@@ -246,6 +406,7 @@ export function checkIsAlojamientoReserved(params: CheckIsAlojamientoReservedPar
     alojamientoCodigo = '',
     estaReservadoApi = false,
     habitacionesDisponibles,
+    totalHabitaciones,
     estado = 'Activo',
     activeReservas = [],
     checkDates,
@@ -257,7 +418,7 @@ export function checkIsAlojamientoReserved(params: CheckIsAlojamientoReservedPar
   const codeNorm = String(alojamientoCodigo ?? '').toLowerCase().trim();
   const safeReservas = Array.isArray(activeReservas) ? activeReservas : [];
 
-  // 1. Si el administrador o recepción lo tiene como 'Inactivo', 'Pausado' o 'En Limpieza', no se puede reservar
+  // 1. Si el administrador o recepción lo tiene como 'Inactivo', 'Pausado' o 'En Limpieza'
   const overrides = getEstadosOverride();
   const overrideEstado = overrides[safeId] || overrides[idNorm] || overrides[nameNorm];
   const estadoNorm = String(estado ?? '').toLowerCase().trim();
@@ -284,97 +445,62 @@ export function checkIsAlojamientoReserved(params: CheckIsAlojamientoReservedPar
         (nameNorm && lib.includes(nameNorm))),
   );
 
-  const isClosedReserva = (r: ReservaItemLike) => {
-    const eNombre = String(r.estadoNombre ?? '').toLowerCase();
-    return (
-      Boolean(r.checkoutRealizado) ||
-      r.estadoId === 'EST-003' ||
-      r.estadoId === 'EST-004' ||
-      r.estadoId === 'EST-005' ||
-      eNombre.includes('cancel') ||
-      eNombre.includes('limpieza') ||
-      eNombre.includes('finaliz') ||
-      eNombre.includes('check-out')
-    );
-  };
-
   // 3. Revisar reservas locales recientes
   const locales = getReservadosLocales();
-  const hasLocalMatch = locales.some((loc) => {
-    const locId = String(loc.alojamientoId ?? '').toLowerCase().trim();
-    const locName = String(loc.alojamientoNombre ?? '').toLowerCase().trim();
-    const locCode = String(loc.alojamientoCodigo ?? '').toLowerCase().trim();
-    const matchesProp =
-      (idNorm && locId && (idNorm === locId || idNorm.includes(locId) || locId.includes(idNorm))) ||
-      (nameNorm && locName && (nameNorm.includes(locName) || locName.includes(nameNorm))) ||
-      (codeNorm && locCode && codeNorm === locCode);
-
-    if (!matchesProp) return false;
-    if (isClosedReserva(loc)) return false;
-
-    // Si se especifican fechas de consulta, verificar superposición
-    if (checkDates?.checkin && checkDates?.checkout && loc.fechaEntrada && loc.fechaSalida) {
-      const qIn = new Date(checkDates.checkin).getTime();
-      const qOut = new Date(checkDates.checkout).getTime();
-      const rIn = new Date(loc.fechaEntrada).getTime();
-      const rOut = new Date(loc.fechaSalida).getTime();
-      return qIn < rOut && qOut > rIn;
-    }
-    return true;
+  const matchingLocales = locales.filter((loc) => {
+    if (!loc || isReservaClosed(loc)) return false;
+    if (!doesReservaMatchProperty(loc, idNorm, nameNorm, codeNorm)) return false;
+    return isReservaDateConflict(loc, checkDates);
   });
 
-  if (hasLocalMatch) return true;
-
   // Si estaba liberado por el admin y no hay reserva local reciente, respetar la liberación
-  if (isLiberado) return false;
+  if (isLiberado && matchingLocales.length === 0) return false;
+
+  const totalHabs = totalHabitaciones !== undefined && totalHabitaciones !== null ? Number(totalHabitaciones) : undefined;
+
+  // Si hay reservas locales recientes para esta propiedad:
+  // Si el hotel tiene múltiples habitaciones (totalHabs > 1), descontar de las disponibles
+  if (matchingLocales.length > 0) {
+    if (totalHabs !== undefined && totalHabs > 1) {
+      const avail = habitacionesDisponibles !== undefined && habitacionesDisponibles !== null ? Number(habitacionesDisponibles) : totalHabs;
+      if (avail - matchingLocales.length <= 0) {
+        return true;
+      }
+    } else {
+      return true;
+    }
+  }
 
   // Si el catálogo reporta que aún quedan habitaciones disponibles (> 0), está disponible para reservar
-  if (habitacionesDisponibles !== undefined && habitacionesDisponibles !== null && habitacionesDisponibles > 0 && !estaReservadoApi) {
-    return false;
+  if (
+    habitacionesDisponibles !== undefined &&
+    habitacionesDisponibles !== null &&
+    habitacionesDisponibles > 0 &&
+    !estaReservadoApi
+  ) {
+    const remainingAfterLocal = Number(habitacionesDisponibles) - matchingLocales.length;
+    if (remainingAfterLocal > 0) {
+      return false;
+    }
+    return true;
   }
 
   // 4. Si el backend explícitamente reportó estaReservadoApi (0 habitaciones disponibles)
   if (estaReservadoApi) return true;
 
   // 5. Cruzar contra las reservas oficiales de Azure (activeReservas)
-  const hasApiMatch = safeReservas.some((res) => {
-    // Descartar canceladas, check-out completados o finalizadas
-    if (!res || isClosedReserva(res)) return false;
-
-    const resName = String(res.alojamientoNombre ?? '').toLowerCase().trim();
-    const resCode = String(res.alojamientoCodigo ?? '').toLowerCase().trim();
-    const resHab = String(res.habitacionNombre ?? '').toLowerCase().trim();
-
-    const resAloId = String(res.alojamientoId ?? '').toLowerCase().trim();
-
-    const matchesProp =
-      (idNorm && resAloId && (idNorm === resAloId || idNorm.includes(resAloId) || resAloId.includes(idNorm))) ||
-      (nameNorm && resName && (nameNorm.includes(resName) || resName.includes(nameNorm))) ||
-      (codeNorm && resCode && (codeNorm === resCode || codeNorm.includes(resCode))) ||
-      (idNorm && (resName.includes(idNorm) || resCode.includes(idNorm))) ||
-      (nameNorm && resHab && nameNorm.includes('villa colonial') && resHab.includes('villa colonial'));
-
-    if (!matchesProp) return false;
-
-    // Verificar fechas si se proporcionan
-    if (checkDates?.checkin && checkDates?.checkout && res.fechaEntrada && res.fechaSalida) {
-      const qIn = new Date(checkDates.checkin).getTime();
-      const qOut = new Date(checkDates.checkout).getTime();
-      const rIn = new Date(res.fechaEntrada).getTime();
-      const rOut = new Date(res.fechaSalida).getTime();
-      return qIn < rOut && qOut > rIn;
-    }
-
-    // Por defecto, considerar activa si la fecha de salida es futura o vigente
-    if (res.fechaSalida) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const outDate = new Date(res.fechaSalida);
-      return outDate.getTime() >= today.getTime();
-    }
-
-    return true;
+  const matchingApi = safeReservas.filter((res) => {
+    if (!res || isReservaClosed(res)) return false;
+    if (!doesReservaMatchProperty(res, idNorm, nameNorm, codeNorm)) return false;
+    return isReservaDateConflict(res, checkDates);
   });
 
-  return hasApiMatch;
+  // Si totalHabitaciones está definido y es > 1 (propiedad con múltiples cuartos):
+  // Solo se bloquea si las reservas activas (API + locales) copan todas las habitaciones
+  if (totalHabs !== undefined && totalHabs > 1) {
+    const totalOccupied = matchingApi.length + matchingLocales.length;
+    return totalOccupied >= totalHabs;
+  }
+
+  return matchingApi.length > 0;
 }

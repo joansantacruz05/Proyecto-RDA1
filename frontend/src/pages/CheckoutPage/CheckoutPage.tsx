@@ -17,7 +17,7 @@ import { Step2Payment } from './Step2Payment';
 import { Step3Confirmation } from './Step3Confirmation';
 import { Skeleton } from '../../components/ui/Skeleton/Skeleton';
 import { Button } from '../../components/ui/Button/Button';
-import { checkIsAlojamientoReserved, ReservaItemLike } from '../../utils/accommodationStatus';
+import { checkIsAlojamientoReserved, checkIsRoomReserved, ReservaItemLike } from '../../utils/accommodationStatus';
 import styles from './CheckoutPage.module.css';
 
 interface CheckoutPageProps {
@@ -169,17 +169,45 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ currentUser }) => {
     );
   }
 
-  const isReserved =
-    Boolean(hotel?.estaReservado) ||
-    checkIsAlojamientoReserved({
-      alojamientoId: hotelId,
-      alojamientoNombre: hotel?.nombre,
-      alojamientoCodigo: hotel?.codigo,
-      estaReservadoApi: hotel?.estaReservado,
-      estado: hotel?.estado,
-      activeReservas,
-      checkDates: checkin && checkout ? { checkin, checkout } : undefined,
-    });
+  const targetDates = checkin && checkout ? { checkin, checkout } : undefined;
+
+  const isReserved = selectedRoom
+    ? checkIsRoomReserved({
+        roomId: selectedRoom.id,
+        roomNombre: selectedRoom.nombre,
+        roomCodigo: selectedRoom.codigo,
+        roomEstado: selectedRoom.estado,
+        cantidadDisponible: selectedRoom.cantidadDisponible,
+        alojamientoId: hotelId,
+        alojamientoNombre: hotel?.nombre,
+        activeReservas,
+        checkDates: targetDates,
+      })
+    : hotelRooms.length > 0
+    ? hotelRooms.every((r) =>
+        checkIsRoomReserved({
+          roomId: r.id,
+          roomNombre: r.nombre,
+          roomCodigo: r.codigo,
+          roomEstado: r.estado,
+          cantidadDisponible: r.cantidadDisponible,
+          alojamientoId: hotelId,
+          alojamientoNombre: hotel?.nombre,
+          activeReservas,
+          checkDates: targetDates,
+        }),
+      )
+    : Boolean(hotel?.estaReservado) ||
+      checkIsAlojamientoReserved({
+        alojamientoId: hotelId,
+        alojamientoNombre: hotel?.nombre,
+        alojamientoCodigo: hotel?.codigo,
+        estaReservadoApi: hotel?.estaReservado,
+        totalHabitaciones: hotel?.numHabitaciones,
+        estado: hotel?.estado,
+        activeReservas,
+        checkDates: targetDates,
+      });
 
   if (isReserved && step < 3) {
     return (

@@ -8,9 +8,10 @@ import styles from './RoomCard.module.css';
 interface RoomCardProps {
   habitacion: HabitacionDetalle;
   onSelect: (hab: HabitacionDetalle) => void;
-  isSelected?: boolean;
-  isHotelReserved?: boolean;
-  isHotelCleaning?: boolean;
+  isSelected?: boolean | undefined;
+  isHotelReserved?: boolean | undefined;
+  isHotelCleaning?: boolean | undefined;
+  isRoomReserved?: boolean | undefined;
 }
 
 const DEFAULT_ROOM_IMG = 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=600&q=80';
@@ -21,14 +22,16 @@ export const RoomCard: React.FC<RoomCardProps> = ({
   isSelected = false,
   isHotelReserved = false,
   isHotelCleaning = false,
+  isRoomReserved,
 }) => {
   const precio = typeof habitacion.precioPorNoche === 'string'
     ? parseFloat(habitacion.precioPorNoche)
     : habitacion.precioPorNoche || 100;
 
   const stock = habitacion.cantidadDisponible ?? 3;
-  const isCleaning = Boolean(isHotelCleaning) || habitacion.estado === 'En Limpieza';
-  const isOutOfStock = isCleaning || Boolean(isHotelReserved) || stock <= 0 || habitacion.estado === 'Inactivo';
+  const isCleaning = habitacion.estado === 'En Limpieza' || Boolean(isHotelCleaning);
+  const isReserved = isRoomReserved !== undefined ? isRoomReserved : Boolean(isHotelReserved);
+  const isOutOfStock = isCleaning || isReserved || stock <= 0 || habitacion.estado === 'Inactivo';
   const isLowStock = !isOutOfStock && stock > 0 && stock <= 2;
   const code = habitacion.codigo || 'SUITE_DELUXE';
   const capacity = habitacion.capacidadAdultos ?? habitacion.capacidad ?? 2;

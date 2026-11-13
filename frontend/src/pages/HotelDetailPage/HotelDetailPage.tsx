@@ -13,7 +13,7 @@ import { Skeleton } from '../../components/ui/Skeleton/Skeleton';
 import { Button } from '../../components/ui/Button/Button';
 import { api } from '../../api/client';
 import { AlojamientoDetalle, HabitacionDetalle } from '../../api/types';
-import { checkIsAlojamientoReserved, isAlojamientoInCleaning, ReservaItemLike } from '../../utils/accommodationStatus';
+import { checkIsAlojamientoReserved, checkIsRoomReserved, isAlojamientoInCleaning, ReservaItemLike } from '../../utils/accommodationStatus';
 import { InteractiveMap } from '../../components/map/InteractiveMap';
 import {
   buildGoogleMapsUrl,
@@ -107,10 +107,30 @@ export const HotelDetailPage: React.FC = () => {
   const defaultPrice = firstActiveRoom?.precioPorNoche
     ? Number(firstActiveRoom.precioPorNoche)
     : 120;
+  const checkDatesParam = checkinParam && checkoutParam ? { checkin: checkinParam, checkout: checkoutParam } : undefined;
+
+  // Mapa de estado de reserva individual por habitación
+  const roomReservedMap = new Map<string, boolean>();
+  for (const r of hotelRooms) {
+    const isRes = checkIsRoomReserved({
+      roomId: r.id,
+      roomNombre: r.nombre,
+      roomCodigo: r.codigo,
+      roomEstado: r.estado,
+      cantidadDisponible: r.cantidadDisponible,
+      alojamientoId: hotel.id,
+      alojamientoNombre: hotel.nombre,
+      activeReservas,
+      checkDates: checkDatesParam,
+    });
+    roomReservedMap.set(r.id, isRes);
+  }
+
   const allRoomsCleaning =
     hotelRooms.length > 0 && hotelRooms.every((r) => r.estado === 'En Limpieza');
   const hasAnyActiveRoom =
-    hotelRooms.length > 0 && hotelRooms.some((r) => !r.estado || r.estado === 'Activo');
+    hotelRooms.length > 0 && hotelRooms.some((r) => (!r.estado || r.estado === 'Activo') && !roomReservedMap.get(r.id));
+
   const isHotelCleaning =
     allRoomsCleaning ||
     (!hasAnyActiveRoom &&
@@ -120,15 +140,23 @@ export const HotelDetailPage: React.FC = () => {
         estado: hotel.estado,
       }));
 
-  const isHotelReserved = checkIsAlojamientoReserved({
-    alojamientoId: hotel.id,
-    alojamientoNombre: hotel.nombre,
-    alojamientoCodigo: hotel.codigo,
-    estaReservadoApi: hotel.estaReservado,
-    estado: hotel.estado,
-    activeReservas,
-    checkDates: checkinParam && checkoutParam ? { checkin: checkinParam, checkout: checkoutParam } : undefined,
-  });
+  // Un hotel se considera 'Reservado' en su totalidad solo si TODAS sus habitaciones están ocupadas
+  const allRoomsReserved =
+    hotelRooms.length > 0 &&
+    hotelRooms.every((r) => Boolean(roomReservedMap.get(r.id)) || r.estado === 'Inactivo' || r.estado === 'En Limpieza');
+
+  const isHotelReserved =
+    hotelRooms.length > 0
+      ? allRoomsReserved
+      : checkIsAlojamientoReserved({
+          alojamientoId: hotel.id,
+          alojamientoNombre: hotel.nombre,
+          alojamientoCodigo: hotel.codigo,
+          estaReservadoApi: hotel.estaReservado,
+          estado: hotel.estado,
+          activeReservas,
+          checkDates: checkDatesParam,
+        });
 
   return (
     <div className={`container ${styles.detailContainer}`}>
@@ -251,7 +279,8 @@ export const HotelDetailPage: React.FC = () => {
                     habitacion={room}
                     isSelected={selectedHabitacion?.id === room.id}
                     isHotelReserved={isHotelReserved}
-                    isHotelCleaning={isHotelCleaning}
+                    isHotelCleaning={allRoomsCleaning}
+                    isRoomReserved={roomReservedMap.get(room.id)}
                     onSelect={(hab) => setSelectedHabitacion(hab)}
                   />
                 ))}

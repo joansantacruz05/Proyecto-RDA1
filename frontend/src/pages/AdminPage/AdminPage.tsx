@@ -632,6 +632,31 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
     }
   };
 
+  const handleSetRoomCleaning = async (
+    habId: string,
+    habNombre?: string | null,
+  ) => {
+    try {
+      await api.patch(`/admin/habitaciones/${habId}`, { estado: 'En Limpieza' });
+      setRoomsList((prev) => prev.map((r) => (r.id === habId ? { ...r, estado: 'En Limpieza' } : r)));
+      showToast(
+        habNombre
+          ? `Habitación "${habNombre}" enviada a estado En Limpieza individual`
+          : 'Habitación enviada a estado En Limpieza individual',
+      );
+      await Promise.all([refetchAlojamientos(), refetchReservas()]);
+      queryClient.invalidateQueries({ queryKey: ['alojamientos'] });
+      queryClient.invalidateQueries({ queryKey: ['alojamientosCatalog'] });
+      queryClient.invalidateQueries({ queryKey: ['hotelDetail'] });
+      queryClient.invalidateQueries({ queryKey: ['hotelRooms'] });
+      queryClient.invalidateQueries({ queryKey: ['reservasActivasPublicas'] });
+      queryClient.invalidateQueries({ queryKey: ['adminReservasTodas'] });
+      queryClient.invalidateQueries({ queryKey: ['adminDashboardStats'] });
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Error al cambiar estado de habitación', 'error');
+    }
+  };
+
   const handleDeleteRoom = async (habId: string) => {
     if (window.confirm('¿Deseas eliminar permanentemente esta habitación?')) {
       try {
@@ -2592,14 +2617,24 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: '8px', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
-                    {room.estado === 'En Limpieza' && (
+                    {room.estado === 'En Limpieza' ? (
                       <Button
                         variant="gold"
                         size="sm"
                         icon={<Sparkles size={13} />}
-                        onClick={() => handleMarkRoomClean(room.id)}
+                        onClick={() => handleMarkRoomClean(room.id, room.nombre)}
                       >
                         Limpiar → Activo
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        icon={<Sparkles size={13} />}
+                        onClick={() => handleSetRoomCleaning(room.id, room.nombre)}
+                        title="Enviar esta habitación individual a estado En Limpieza"
+                      >
+                        🧹 A Limpieza
                       </Button>
                     )}
                     <Button variant="outline" size="sm" icon={<Edit2 size={13} />} onClick={() => setEditingRoom(room)}>

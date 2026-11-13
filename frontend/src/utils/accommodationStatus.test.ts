@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   checkIsAlojamientoReserved,
+  checkIsRoomReserved,
   clearHotelLimpiezaOverride,
   getEstadosOverride,
   isAlojamientoInCleaning,
@@ -157,6 +158,67 @@ describe('accommodationStatus', () => {
     setAdminAlojamientoEstado('ALO-002', 'Inactivo');
     clearHotelLimpiezaOverride('ALO-002', 'Villa Colonial');
     expect(getEstadosOverride()['ALO-002']).toBe('Inactivo');
+  });
+
+  it('permite reservar habitaciones de forma independiente en un alojamiento con múltiples cuartos (ej. Carla)', () => {
+    const carlaReservas = [
+      {
+        id: 'RES-CARLA-1',
+        alojamientoId: 'ALO-CARLA',
+        alojamientoNombre: 'Carla',
+        espacioId: 'HAB-102',
+        habitacionNombre: 'Habitación 102',
+        estadoId: 'EST-002',
+        estadoNombre: 'Confirmada',
+        fechaEntrada: '2026-11-20',
+        fechaSalida: '2026-11-25',
+      },
+    ];
+
+    // Habitación 102 está reservada para esas fechas
+    const isRoom102Reserved = checkIsRoomReserved({
+      roomId: 'HAB-102',
+      roomNombre: 'Habitación 102',
+      roomEstado: 'Activo',
+      cantidadDisponible: 1,
+      alojamientoId: 'ALO-CARLA',
+      activeReservas: carlaReservas,
+      checkDates: { checkin: '2026-11-21', checkout: '2026-11-24' },
+    });
+    expect(isRoom102Reserved).toBe(true);
+
+    // Habitación Estándar NO está reservada para esas fechas y tiene stock disponible
+    const isRoomEstándarReserved = checkIsRoomReserved({
+      roomId: 'HAB-STD',
+      roomNombre: 'Habitación Estándar',
+      roomEstado: 'Activo',
+      cantidadDisponible: 2,
+      alojamientoId: 'ALO-CARLA',
+      activeReservas: carlaReservas,
+      checkDates: { checkin: '2026-11-21', checkout: '2026-11-24' },
+    });
+    expect(isRoomEstándarReserved).toBe(false);
+
+    // El alojamiento Carla como un todo NO está reservado porque le queda 1 habitación libre
+    const isCarlaReserved = checkIsAlojamientoReserved({
+      alojamientoId: 'ALO-CARLA',
+      alojamientoNombre: 'Carla',
+      totalHabitaciones: 2,
+      habitacionesDisponibles: 1,
+      activeReservas: carlaReservas,
+      checkDates: { checkin: '2026-11-21', checkout: '2026-11-24' },
+    });
+    expect(isCarlaReserved).toBe(false);
+
+    // Si una habitación se pone individualmente en estado En Limpieza, solo ella queda no disponible
+    const isRoomCleaning = checkIsRoomReserved({
+      roomId: 'HAB-102',
+      roomNombre: 'Habitación 102',
+      roomEstado: 'En Limpieza',
+      cantidadDisponible: 1,
+      alojamientoId: 'ALO-CARLA',
+    });
+    expect(isRoomCleaning).toBe(true);
   });
 });
 

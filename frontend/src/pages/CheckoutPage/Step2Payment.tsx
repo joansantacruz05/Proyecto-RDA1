@@ -256,9 +256,11 @@ export const Step2Payment: React.FC<Step2PaymentProps> = ({
 
       const pagoResult = await api.post<PagoResponse>('/pagos', pagoPayload);
 
-      // Registrar propiedad como reservada inmediatamente en estado global
+      // Registrar propiedad / habitación como reservada inmediatamente en estado global
       markAlojamientoReserved({
         alojamientoId: hotelId,
+        espacioId: roomId || orderResult?.espacioId,
+        habitacionNombre: orderResult?.habitacionAsignada,
         fechaEntrada: checkin,
         fechaSalida: checkout,
         ordenId: targetReservaId,

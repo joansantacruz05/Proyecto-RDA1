@@ -7,7 +7,7 @@ import { Badge } from '../../ui/Badge/Badge';
 import { formatUSD } from '../../ui/PriceDisplay/PriceDisplay';
 import { api, getAuthToken } from '../../../api/client';
 import { AvailabilityResponse } from '../../../api/types';
-import { checkIsAlojamientoReserved, ReservaItemLike } from '../../../utils/accommodationStatus';
+import { checkIsAlojamientoReserved, checkIsRoomReserved, ReservaItemLike } from '../../../utils/accommodationStatus';
 import styles from './StickyBookingCard.module.css';
 
 interface StickyBookingCardProps {
@@ -73,6 +73,16 @@ export const StickyBookingCard: React.FC<StickyBookingCardProps> = ({
     staleTime: 5000,
   });
 
+  const isSelectedRoomReserved = selectedRoomId
+    ? checkIsRoomReserved({
+        roomId: selectedRoomId,
+        roomCodigo: selectedRoomCode,
+        alojamientoId,
+        activeReservas,
+        checkDates: checkin && checkout ? { checkin, checkout } : undefined,
+      })
+    : false;
+
   const isReservedForDates = checkIsAlojamientoReserved({
     alojamientoId,
     activeReservas,
@@ -87,12 +97,11 @@ export const StickyBookingCard: React.FC<StickyBookingCardProps> = ({
     ? availabilityData?.opciones?.find((o) => o.tipoHabitacionCodigo === selectedRoomCode)
     : availabilityData?.opciones?.[0];
 
-  const estaDisponible =
-    !isHotelReserved &&
-    !isReservedForDates &&
-    (availabilityData
-      ? Boolean(matchingOption && matchingOption.estaDisponible)
-      : true);
+  const estaDisponible = selectedRoomId
+    ? !isSelectedRoomReserved && (matchingOption ? Boolean(matchingOption.estaDisponible) : true)
+    : !isHotelReserved &&
+      !isReservedForDates &&
+      (availabilityData ? Boolean(matchingOption && matchingOption.estaDisponible) : true);
 
   const precioNoche = matchingOption ? parseFloat(String(matchingOption.precioNoche)) : defaultPrice;
 
@@ -103,8 +112,8 @@ export const StickyBookingCard: React.FC<StickyBookingCardProps> = ({
   const total = Math.round((subtotal + iva + tasaMunicipal) * 100) / 100;
 
   const handleCheckoutClick = () => {
-    if (isHotelReserved || isReservedForDates || !estaDisponible) {
-      alert('Esta propiedad ya se encuentra reservada para las fechas seleccionadas.');
+    if (isSelectedRoomReserved || (!selectedRoomId && (isHotelReserved || isReservedForDates)) || !estaDisponible) {
+      alert('La habitación o propiedad seleccionada ya se encuentra reservada para las fechas indicadas.');
       return;
     }
 

@@ -185,6 +185,8 @@ export interface OrderCreateResponse {
   saga_id?: string;
   alojamientoId?: string;
   alojamientoNombre?: string;
+  espacioId?: string;
+  habitacionAsignada?: string;
   tipoHabitacionCodigo?: string;
   tipoHabitacion?: string;
   cantidadHabitaciones?: number;

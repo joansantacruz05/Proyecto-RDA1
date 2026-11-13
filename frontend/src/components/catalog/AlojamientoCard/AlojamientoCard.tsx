@@ -53,6 +53,7 @@ export const AlojamientoCard: React.FC<AlojamientoCardProps> = ({
     alojamientoNombre: alojamiento.nombre,
     alojamientoCodigo: alojamiento.codigo,
     habitacionesDisponibles: alojamiento.habitacionesDisponibles,
+    totalHabitaciones: alojamiento.numHabitaciones,
     estaReservadoApi: Boolean(
       alojamiento.estaReservado ||
       (alojamiento.habitacionesDisponibles !== undefined && alojamiento.habitacionesDisponibles <= 0),
