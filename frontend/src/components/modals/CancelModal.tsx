@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { AlertTriangle, CheckCircle, Info } from 'lucide-react';
+import { AlertTriangle, Info } from 'lucide-react';
 import { Modal } from '../ui/Modal/Modal';
 import { Button } from '../ui/Button/Button';
 import { Textarea } from '../ui/Textarea/Textarea';
