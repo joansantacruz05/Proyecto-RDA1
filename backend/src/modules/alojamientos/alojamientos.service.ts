@@ -281,7 +281,18 @@ export class AlojamientosService {
         (SELECT "capacidadAdultos" FROM espacios_rentables er WHERE er."alojamientoId" = a.id ORDER BY er.id LIMIT 1) as "capacidadAdultos",
         (SELECT "capacidadNinos" FROM espacios_rentables er WHERE er."alojamientoId" = a.id ORDER BY er.id LIMIT 1) as "capacidadNinos",
         COALESCE((SELECT SUM(COALESCE(er."cantidadDisponible", 1)) FROM espacios_rentables er WHERE er."alojamientoId" = a.id), 0)::int as habitaciones,
-        COALESCE((SELECT SUM(COALESCE(er."cantidadDisponible", 1)) FROM espacios_rentables er WHERE er."alojamientoId" = a.id AND (er.estado = 'Activo' OR er.estado IS NULL)), 0)::int as habitaciones_disponibles,
+        COALESCE((
+          SELECT SUM(GREATEST(0, COALESCE(er."cantidadDisponible", 1) - COALESCE((
+            SELECT SUM(COALESCE(r."cantidadHabitaciones", 1))
+            FROM reservas r
+            WHERE r."espacioId" = er.id
+              AND r."estadoId" IN ('EST-001', 'EST-002')
+              AND COALESCE(r."checkoutRealizado", false) = false
+              AND r."fechaSalida" >= CURRENT_DATE
+          ), 0)))
+          FROM espacios_rentables er
+          WHERE er."alojamientoId" = a.id AND (er.estado = 'Activo' OR er.estado IS NULL)
+        ), 0)::int as habitaciones_disponibles,
         COALESCE((SELECT COUNT(*) FROM espacios_rentables er WHERE er."alojamientoId" = a.id AND er.estado = 'En Limpieza'), 0)::int as habitaciones_limpieza,
         GREATEST(COALESCE((SELECT SUM(COALESCE(er."numHabitaciones", 1)) FROM espacios_rentables er WHERE er."alojamientoId" = a.id), COALESCE(a."numHabitaciones", 1), 1), 1)::int as "numHabitaciones",
         GREATEST(COALESCE((SELECT SUM(COALESCE(er."numCamas", 1)) FROM espacios_rentables er WHERE er."alojamientoId" = a.id), COALESCE(a."numCamas", 1), 1), 1)::int as "numCamas",
@@ -555,7 +566,20 @@ export class AlojamientosService {
   
   async getRoomsAdmin(alojamientoId: string): Promise<any[]> {
     return await this.alojamientoRepository.query(
-      'SELECT id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche", "cantidadDisponible", estado, "imagenesUrls", COALESCE(codigo, \'SUITE_DELUXE\') AS codigo, "numHabitaciones", "numCamas", "tipoCamas", "enLimpiezaDesde" FROM espacios_rentables WHERE "alojamientoId" = $1 ORDER BY nombre',
+      `SELECT id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche",
+              GREATEST(0, COALESCE("cantidadDisponible", 1) - COALESCE((
+                SELECT SUM(COALESCE(r."cantidadHabitaciones", 1))
+                FROM reservas r
+                WHERE r."espacioId" = espacios_rentables.id
+                  AND r."estadoId" IN ('EST-001', 'EST-002')
+                  AND COALESCE(r."checkoutRealizado", false) = false
+                  AND r."fechaSalida" >= CURRENT_DATE
+              ), 0))::int AS "cantidadDisponible",
+              "cantidadDisponible" AS "cantidadTotal",
+              estado, "imagenesUrls", COALESCE(codigo, 'SUITE_DELUXE') AS codigo,
+              "numHabitaciones", "numCamas", "tipoCamas", "enLimpiezaDesde"
+       FROM espacios_rentables
+       WHERE "alojamientoId" = $1 ORDER BY nombre`,
       [alojamientoId],
     );
   }

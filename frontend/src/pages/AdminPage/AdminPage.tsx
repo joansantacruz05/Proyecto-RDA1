@@ -938,6 +938,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
       checkIsAlojamientoReserved({
         alojamientoId: aloj.id,
         alojamientoNombre: aloj.nombre,
+        totalHabitaciones: aloj.numHabitaciones || (aloj.habitaciones ?? 1),
+        habitacionesDisponibles: aloj.habitaciones_disponibles,
         activeReservas: reservas,
       });
     return {
@@ -2698,7 +2700,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ currentUser }) => {
                         🧹 A Limpieza
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" icon={<Edit2 size={13} />} onClick={() => setEditingRoom(room)}>
+                    <Button variant="outline" size="sm" icon={<Edit2 size={13} />} onClick={() => setEditingRoom({ ...room, cantidadDisponible: room.cantidadTotal ?? room.cantidadDisponible })}>
                       Editar
                     </Button>
                     <Button variant="ghost" size="sm" icon={<Trash2 size={13} color="#DC2626" />} onClick={() => handleDeleteRoom(room.id)} />

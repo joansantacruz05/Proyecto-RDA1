@@ -104,22 +104,11 @@ export const Step1Billing: React.FC<Step1BillingProps> = ({
   };
 
   const handleDocTypeSelect = (tipo: TipoDocumento) => {
-    setFormData((prev) => {
-      let identificacion = prev.identificacion;
-      let nombre = prev.nombre;
-      if (tipo === 'CONSUMIDOR_FINAL') {
-        identificacion = '9999999999999';
-        nombre = prev.nombre || 'Consumidor Final';
-      } else if (prev.tipoDocumento === 'CONSUMIDOR_FINAL') {
-        identificacion = '';
-      }
-      return {
-        ...prev,
-        tipoDocumento: tipo,
-        identificacion,
-        nombre,
-      };
-    });
+    setFormData((prev) => ({
+      ...prev,
+      tipoDocumento: tipo,
+      identificacion: prev.tipoDocumento === 'CONSUMIDOR_FINAL' ? '' : prev.identificacion,
+    }));
     // Limpiar error del campo al cambiar tipo
     setErrors((prev) => {
       const updated = { ...prev };
@@ -465,17 +454,6 @@ export const Step1Billing: React.FC<Step1BillingProps> = ({
               <span className={styles.docCardIcon}>✈️</span>
               <span className={styles.docCardTitle}>Pasaporte</span>
               <span className={styles.docCardDesc}>Turistas internacionales</span>
-            </div>
-
-            <div
-              className={`${styles.docCard} ${
-                formData.tipoDocumento === 'CONSUMIDOR_FINAL' ? styles.docCardActive : ''
-              }`}
-              onClick={() => handleDocTypeSelect('CONSUMIDOR_FINAL')}
-            >
-              <span className={styles.docCardIcon}>🧾</span>
-              <span className={styles.docCardTitle}>Consumidor Final</span>
-              <span className={styles.docCardDesc}>Sin datos fiscales específicos</span>
             </div>
           </div>
         </div>

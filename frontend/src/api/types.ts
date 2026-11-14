@@ -316,6 +316,7 @@ export interface HabitacionAdmin {
   capacidadAdultos: number | string;
   capacidadNinos: number | string;
   cantidadDisponible: number | string;
+  cantidadTotal?: number | string;
   numHabitaciones?: number | string;
   numCamas?: number | string;
   tipoCamas?: string;

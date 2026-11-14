@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { CheckoutStepper } from './CheckoutStepper';
 import { ReservationSummary } from './ReservationSummary';
 import { Step1Billing } from './Step1Billing';
@@ -89,25 +89,7 @@ describe('Fase 3: Asistente de Checkout y Pasos de Reserva', () => {
       expect(screen.getByText('Cédula')).toBeInTheDocument();
       expect(screen.getByText('RUC')).toBeInTheDocument();
       expect(screen.getByText('Pasaporte')).toBeInTheDocument();
-      expect(screen.getByText('Consumidor Final')).toBeInTheDocument();
-    });
-
-    it('al seleccionar Consumidor Final autocompleta con 9999999999999', () => {
-      const { container } = render(
-        <Step1Billing
-          currentUser={null}
-          onProceed={vi.fn()}
-        />,
-        { wrapper: createWrapper() },
-      );
-
-      const cfCard = screen.getByText('Consumidor Final').closest('div');
-      if (cfCard) {
-        fireEvent.click(cfCard);
-      }
-
-      const idInput = container.querySelector('#identificacion') as HTMLInputElement;
-      expect(idInput.value).toBe('9999999999999');
+      expect(screen.queryByText('Consumidor Final')).not.toBeInTheDocument();
     });
 
     it('no muestra errores antes de que los campos sean tocados', () => {

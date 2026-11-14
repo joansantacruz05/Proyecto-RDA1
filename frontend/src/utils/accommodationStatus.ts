@@ -20,6 +20,7 @@ export interface ReservaItemLike {
   fechaSalida?: string | null | undefined;
   estadoId?: string | null | undefined;
   estadoNombre?: string | null | undefined;
+  cantidadHabitaciones?: number | null | undefined;
   checkoutRealizado?: boolean | null | undefined;
 }
 
@@ -498,7 +499,8 @@ export function checkIsAlojamientoReserved(params: CheckIsAlojamientoReservedPar
   // Si totalHabitaciones está definido y es > 1 (propiedad con múltiples cuartos):
   // Solo se bloquea si las reservas activas (API + locales) copan todas las habitaciones
   if (totalHabs !== undefined && totalHabs > 1) {
-    const totalOccupied = matchingApi.length + matchingLocales.length;
+    const apiRooms = matchingApi.reduce((sum, r) => sum + Math.max(1, Number(r.cantidadHabitaciones || 1)), 0);
+    const totalOccupied = apiRooms + matchingLocales.length;
     return totalOccupied >= totalHabs;
   }
 
