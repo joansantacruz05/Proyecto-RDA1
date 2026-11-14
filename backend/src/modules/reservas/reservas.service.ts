@@ -151,8 +151,17 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
   // ═══════════════════════════════════════════════════════════════════════
 
   async previewOrder(previewRequest: any): Promise<any> {
-    const accommodationId = String(previewRequest.accommodation_id || previewRequest.accommodationId || '');
-    const productId = String(previewRequest.product_id || previewRequest.productId || previewRequest.espacioId || '');
+    const accommodationId = String(
+      previewRequest.accommodation_id ||
+      previewRequest.accommodationId ||
+      previewRequest.alojamientoId ||
+      previewRequest.alojamiento ||
+      previewRequest.hotel_id ||
+      previewRequest.hotelId ||
+      previewRequest.id ||
+      '',
+    ).trim();
+    const productId = String(previewRequest.product_id || previewRequest.productId || previewRequest.espacioId || '').trim();
     const guests = previewRequest.guests || {
       number_of_adults: previewRequest.numeroPersonas || 1,
       number_of_rooms: 1,
@@ -172,17 +181,28 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
        FROM espacios_rentables e
        JOIN alojamientos a ON a.id = e."alojamientoId"
        WHERE (
-         UPPER(e.id) = UPPER($1) 
-         OR UPPER(e.id) = UPPER($2) 
-         OR UPPER(COALESCE(e.codigo, '')) = UPPER($3)
-         OR (UPPER($3) = 'SUITE_DELUXE' AND (e.codigo IS NULL OR UPPER(e.codigo) = 'SUITE_DELUXE'))
-         OR UPPER(e.nombre) = UPPER($3)
-         OR e.nombre ILIKE ('%' || $3 || '%')
+         $4 = ''
+         OR UPPER(a.id) = UPPER($4) 
+         OR UPPER(COALESCE(a.codigo, '')) = UPPER($4) 
+         OR UPPER(a.id) = UPPER('ALO-' || $4)
+         OR REPLACE(UPPER(COALESCE(a.codigo, '')), '-', '_') = REPLACE(UPPER($4), '-', '_') 
+         OR REPLACE(UPPER(COALESCE(a.codigo, '')), '_', '-') = REPLACE(UPPER($4), '_', '-') 
+         OR a.nombre ILIKE ('%' || $4 || '%')
        )
+         AND (
+           $1 = ''
+           OR UPPER(e.id) = UPPER($1) 
+           OR UPPER(e.id) = UPPER($2) 
+           OR UPPER(COALESCE(e.codigo, '')) = UPPER($3)
+           OR (UPPER($3) = 'SUITE_DELUXE' AND (e.codigo IS NULL OR UPPER(e.codigo) = 'SUITE_DELUXE'))
+           OR UPPER(e.nombre) = UPPER($3)
+           OR e.nombre ILIKE ('%' || $3 || '%')
+         )
          AND (a.estado = 'Activo' OR a.estado IS NULL)
          AND (e.estado = 'Activo' OR e.estado IS NULL)
+       ORDER BY (CASE WHEN e.codigo = 'SUITE_DELUXE' THEN 0 ELSE 1 END), e."precioPorNoche" ASC
        LIMIT 1`,
-      [productId, `HAB-${productId}`, productId],
+      [productId, `HAB-${productId}`, productId, accommodationId],
     );
 
     let espacio = habRows[0];
