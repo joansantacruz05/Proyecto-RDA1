@@ -220,6 +220,8 @@ export class AlojamientosController {
     @Query('fechaFin') fechaFin?: string,
     @Query('tipoHabitacion') tipoHabitacion?: string,
     @Query('tipoHabitacionCodigo') tipoHabitacionCodigo?: string,
+    @Query('tipo_habitacion_id') tipoHabitacionIdSnake?: string,
+    @Query('tipoHabitacionId') tipoHabitacionId?: string,
     @Query('product_id') productId?: string,
     @Query('adults') adults?: string,
     @Query('rooms') rooms?: string,
@@ -228,7 +230,7 @@ export class AlojamientosController {
     const accId = alojamientoId || accommodation || accommodationId || hotelId || id;
     const chkIn = checkin || fechaInicio;
     const chkOut = checkout || fechaFin;
-    const roomCode = tipoHabitacion || tipoHabitacionCodigo || productId;
+    const roomCode = tipoHabitacion || tipoHabitacionCodigo || tipoHabitacionIdSnake || tipoHabitacionId || productId;
     const numRooms = rooms ? parseInt(rooms, 10) : (cantidadHabitaciones ? parseInt(cantidadHabitaciones, 10) : 1);
     const numAdults = adults ? parseInt(adults, 10) : 1;
 
@@ -393,6 +395,10 @@ export class AlojamientosController {
     @Query('adults') adults?: string,
     @Query('rooms') rooms?: string,
     @Query('tipoHabitacion') tipoHabitacion?: string,
+    @Query('tipoHabitacionCodigo') tipoHabitacionCodigo?: string,
+    @Query('tipo_habitacion_id') tipoHabitacionIdSnake?: string,
+    @Query('tipoHabitacionId') tipoHabitacionId?: string,
+    @Query('product_id') productId?: string,
   ) {
     return this.alojamientosService.getPropertyAvailability(
       id,
@@ -400,7 +406,7 @@ export class AlojamientosController {
       checkout,
       adults ? parseInt(adults, 10) : 1,
       rooms ? parseInt(rooms, 10) : 1,
-      tipoHabitacion,
+      tipoHabitacion || tipoHabitacionCodigo || tipoHabitacionIdSnake || tipoHabitacionId || productId,
     );
   }
 

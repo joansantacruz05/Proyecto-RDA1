@@ -142,14 +142,14 @@ export class InventorySyncService implements OnModuleInit, OnModuleDestroy {
     const mgr = manager || this.dataSource.manager;
     const res = await mgr.query(
       `SELECT (
-         e."cantidadDisponible" - (
-           SELECT COUNT(*) 
+         e."cantidadDisponible" - COALESCE((
+           SELECT SUM(COALESCE(r."cantidadHabitaciones", 1))
            FROM reservas r 
            WHERE r."espacioId" = e.id 
              AND r."estadoId" IN ('EST-001', 'EST-002')
              AND COALESCE(r."checkoutRealizado", false) = false
              AND r."fechaEntrada" <= $2 AND r."fechaSalida" > $2
-         )
+         ), 0)
        ) as disponibles
        FROM espacios_rentables e
        WHERE e.id = $1`,

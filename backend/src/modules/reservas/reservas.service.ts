@@ -20,6 +20,7 @@ import { validarIdentificacion } from '../../common/utils/ecuador-validators';
 import { randomUUID } from 'crypto';
 import { catalogCache } from '../../common/utils/ttl-cache';
 import { buildEcuadorHourTimestamp, normalizeHoraHHMM, parseHoraMinutes } from '../../common/utils/time-format';
+import { extractAccommodationCode, extractRoomTypeAndPlan, toIsoDateOnly } from '../../common/utils/booking-ids';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -151,7 +152,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
   // ═══════════════════════════════════════════════════════════════════════
 
   async previewOrder(previewRequest: any): Promise<any> {
-    const rawAccommodationId = String(
+    const accommodationId = extractAccommodationCode(
       previewRequest.accommodation_id ||
       previewRequest.accommodationId ||
       previewRequest.alojamientoId ||
@@ -160,11 +161,17 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       previewRequest.hotelId ||
       previewRequest.id ||
       '',
-    ).trim();
-    const accommodationId = rawAccommodationId.includes('~')
-      ? rawAccommodationId.split('~').pop()!.trim()
-      : rawAccommodationId;
-    const productId = String(previewRequest.product_id || previewRequest.productId || previewRequest.espacioId || '').trim();
+    );
+    const { roomCode: productId } = extractRoomTypeAndPlan(
+      previewRequest.tipoHabitacionCodigo ||
+      previewRequest.tipoHabitacion ||
+      previewRequest.tipo_habitacion_id ||
+      previewRequest.tipoHabitacionId ||
+      previewRequest.product_id ||
+      previewRequest.productId ||
+      previewRequest.espacioId ||
+      '',
+    );
     const guests = previewRequest.guests || {
       number_of_adults: previewRequest.numeroPersonas || 1,
       number_of_rooms: 1,
@@ -450,7 +457,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     const previewId = createRequest.order_preview_id || createRequest.orderPreviewId;
     const cachedPreview = previewId ? ReservasService.previewsCache.get(previewId) : null;
 
-    const rawAccommodationId = String(
+    const accommodationId = extractAccommodationCode(
       createRequest.alojamientoId ||
       createRequest.accommodation_id ||
       createRequest.accommodationId ||
@@ -460,15 +467,14 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       createRequest.property_id ||
       createRequest.selected_product?.accommodation_id ||
       cachedPreview?.accommodationId ||
-      ''
-    ).trim();
-    const accommodationId = rawAccommodationId.includes('~')
-      ? rawAccommodationId.split('~').pop()!.trim()
-      : rawAccommodationId;
+      '',
+    );
 
-    const tipoHabitacionCodigo = String(
+    const { roomCode: tipoHabitacionCodigo } = extractRoomTypeAndPlan(
       createRequest.tipoHabitacionCodigo ||
       createRequest.tipoHabitacion ||
+      createRequest.tipo_habitacion_id ||
+      createRequest.tipoHabitacionId ||
       createRequest.room_type ||
       createRequest.room_type_code ||
       createRequest.product_id ||
@@ -478,8 +484,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       createRequest.espacioId ||
       createRequest.selected_product?.product_id ||
       cachedPreview?.productId ||
-      ''
-    ).trim();
+      '',
+    );
 
     const checkin =
       createRequest.fechaInicio ||
@@ -2431,8 +2437,8 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       await this.inventorySyncService.enqueueStockUpdate(
         this.dataSource.manager,
         targetEspacioId,
-        String(reserva.fechaEntrada).split('T')[0],
-        String(reserva.fechaSalida).split('T')[0],
+        toIsoDateOnly(reserva.fechaEntrada),
+        toIsoDateOnly(reserva.fechaSalida),
         'ROOM_CLEANED',
       ).catch(() => {});
     }

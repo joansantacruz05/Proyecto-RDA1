@@ -14,6 +14,7 @@ import { HttpStatus, BadRequestException } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { catalogCache } from '../../common/utils/ttl-cache';
 import { normalizeHoraHHMM, toCoordNumber } from '../../common/utils/time-format';
+import { extractAccommodationCode, extractRoomTypeAndPlan } from '../../common/utils/booking-ids';
 
 @Injectable()
 export class AlojamientosService {
@@ -800,9 +801,7 @@ export class AlojamientosService {
     const checkinClean = String(checkin).split('T')[0];
     const checkoutClean = String(checkout).split('T')[0];
 
-    const cleanAlojamientoId = String(alojamientoId || '').includes('~')
-      ? String(alojamientoId).split('~').pop()!.trim()
-      : String(alojamientoId || '').trim();
+    const cleanAlojamientoId = extractAccommodationCode(alojamientoId);
 
     // Verificar si el alojamiento existe
     const alRows = await this.alojamientoRepository.query(
@@ -859,8 +858,9 @@ export class AlojamientosService {
     `;
     const params: any[] = [accommodation.id];
 
-    if (tipoHabitacion) {
-      params.push(tipoHabitacion);
+    const { roomCode: tipoHabitacionClean } = extractRoomTypeAndPlan(tipoHabitacion);
+    if (tipoHabitacionClean) {
+      params.push(tipoHabitacionClean);
       query += ` AND (
         UPPER(COALESCE(e.codigo, '')) = UPPER($2) 
         OR UPPER(e.id) = UPPER($2) 
@@ -961,29 +961,28 @@ export class AlojamientosService {
   }
 
   async checkAvailability(availabilityRequest: any): Promise<any> {
-    const rawAccommodationId = String(
+    const accommodationId = extractAccommodationCode(
       availabilityRequest.alojamientoId ||
       availabilityRequest.accommodation ||
       availabilityRequest.accommodation_id ||
       availabilityRequest.hotel_id ||
       availabilityRequest.hotelId ||
       availabilityRequest.id ||
-      ''
-    ).trim();
-    const accommodationId = rawAccommodationId.includes('~')
-      ? rawAccommodationId.split('~').pop()!.trim()
-      : rawAccommodationId;
+      '',
+    );
     const checkin = availabilityRequest.fechaInicio || availabilityRequest.checkin || availabilityRequest.dates?.checkin;
     const checkout = availabilityRequest.fechaFin || availabilityRequest.checkout || availabilityRequest.dates?.checkout;
-    const tipoHabitacionCodigo = String(
+    const { roomCode: tipoHabitacionCodigo, ratePlan: extractedPlan } = extractRoomTypeAndPlan(
       availabilityRequest.tipoHabitacionCodigo ||
+      availabilityRequest.tipo_habitacion_id ||
+      availabilityRequest.tipoHabitacionId ||
       availabilityRequest.product_id ||
       availabilityRequest.productId ||
       availabilityRequest.room_type ||
       availabilityRequest.room_type_code ||
       availabilityRequest.tipoHabitacion ||
-      ''
-    ).trim();
+      '',
+    );
     const cantidadHabitaciones = Math.max(1, Number(
       availabilityRequest.cantidadHabitaciones ||
       availabilityRequest.number_of_rooms ||
@@ -994,7 +993,7 @@ export class AlojamientosService {
       availabilityRequest.guests?.rooms ||
       1
     ));
-    const planTarifaCodigo = availabilityRequest.planTarifaCodigo || 'FLEX_BB';
+    const planTarifaCodigo = availabilityRequest.planTarifaCodigo || extractedPlan || 'FLEX_BB';
 
     const alRows = await this.alojamientoRepository.query(
       `SELECT * FROM alojamientos 
