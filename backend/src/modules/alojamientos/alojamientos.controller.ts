@@ -578,6 +578,10 @@ export class AlojamientosController {
   @Post([
     'orders/:orderId/check-in',
     'orders/:orderId/checkin',
+    'reservas/:orderId/checkin',
+    'reservas/:orderId/check-in',
+    'api/v2/reservas/:orderId/checkin',
+    'api/v1/reservas/:orderId/checkin',
     'alojamientos/orders/:orderId/check-in',
     'alojamientos/orders/:orderId/checkin',
     'alojamientos/reservas/:orderId/checkin',

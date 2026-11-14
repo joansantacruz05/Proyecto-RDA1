@@ -923,8 +923,12 @@ export class AlojamientosService {
     ).trim();
     const cantidadHabitaciones = Math.max(1, Number(
       availabilityRequest.cantidadHabitaciones ||
+      availabilityRequest.number_of_rooms ||
+      availabilityRequest.numberOfRooms ||
       availabilityRequest.rooms ||
+      availabilityRequest.num_rooms ||
       availabilityRequest.guests?.number_of_rooms ||
+      availabilityRequest.guests?.rooms ||
       1
     ));
     const planTarifaCodigo = availabilityRequest.planTarifaCodigo || 'FLEX_BB';
@@ -1085,6 +1089,7 @@ export class AlojamientosService {
       checkinClean,
       checkoutClean,
       cantidadHabitaciones,
+      { isBookingChannel: true },
     );
 
     const cotizacionId = crypto.randomUUID();

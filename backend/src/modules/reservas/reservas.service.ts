@@ -220,8 +220,26 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     }
 
     // 2. Validar capacidad
-    const numAdults = Number(guests.number_of_adults || 1);
-    const maxCapacity = Number(espacio.capacidadAdultos || 1) + Number(espacio.capacidadNinos || 0);
+    const roomsRequested = Math.max(1, Number(
+      previewRequest.cantidadHabitaciones ||
+      previewRequest.number_of_rooms ||
+      previewRequest.numberOfRooms ||
+      previewRequest.rooms ||
+      previewRequest.num_rooms ||
+      guests.number_of_rooms ||
+      guests.rooms ||
+      1,
+    ));
+
+    const numAdults = Number(
+      previewRequest.number_of_adults ||
+      previewRequest.numberOfAdults ||
+      previewRequest.adults ||
+      guests.number_of_adults ||
+      guests.adults ||
+      1,
+    );
+    const maxCapacity = (Number(espacio.capacidadAdultos || 2) + Number(espacio.capacidadNinos || 0)) * roomsRequested;
     if (numAdults > maxCapacity) {
       throw new BadRequestException(
         `El número de huéspedes (${numAdults}) excede la capacidad máxima de la habitación (${maxCapacity}).`,
@@ -256,7 +274,6 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     const dispEsp = Math.max(0, totalEspacio - ocupadasEspacio);
     const dispHotel = Math.max(0, totalHotel - ocupadasHotel);
     const disponibles = Math.min(dispEsp, dispHotel);
-    const roomsRequested = Number(guests.number_of_rooms || 1);
 
     if (disponibles < roomsRequested) {
       throw new ProblemDetailsException(
@@ -271,12 +288,13 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
-    // 4. Cotización exacta con PricingService (recargos + IVA 15% + Tasa USD 2/noche)
+    // 4. Cotización exacta con PricingService (tarifa estándar Booking Hub sin impuestos extras)
     const pricing = this.pricingService.calculatePrice(
       Number(espacio.precioPorNoche),
       checkin,
       checkout,
       roomsRequested,
+      { isBookingChannel: true },
     );
 
     const orderPreviewId = `PREV-${randomUUID()}`;
@@ -451,12 +469,17 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
 
     const cantidadHabitaciones = Math.max(1, Number(
       createRequest.cantidadHabitaciones ||
+      createRequest.number_of_rooms ||
+      createRequest.numberOfRooms ||
       createRequest.rooms ||
+      createRequest.num_rooms ||
       createRequest.guests?.number_of_rooms ||
+      createRequest.guests?.rooms ||
+      cachedPreview?.guests?.number_of_rooms ||
       1,
     ));
 
-    const ocupantes = createRequest.ocupantes || createRequest.guests;
+    const ocupantes = createRequest.ocupantes || createRequest.guests || cachedPreview?.guests;
 
     // Validación estricta de Adultos (>= 1, sin fallback implícito '|| 1')
     const totalAdultos = ocupantes?.adultos !== undefined
@@ -465,7 +488,15 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
           ? Number(createRequest.adultos)
           : (ocupantes?.number_of_adults !== undefined
               ? Number(ocupantes.number_of_adults)
-              : (createRequest.numeroPersonas !== undefined ? Number(createRequest.numeroPersonas) : NaN)));
+              : (createRequest.number_of_adults !== undefined
+                  ? Number(createRequest.number_of_adults)
+                  : (createRequest.numberOfAdults !== undefined
+                      ? Number(createRequest.numberOfAdults)
+                      : (createRequest.numeroPersonas !== undefined
+                          ? Number(createRequest.numeroPersonas)
+                          : (cachedPreview?.guests?.number_of_adults !== undefined
+                              ? Number(cachedPreview.guests.number_of_adults)
+                              : NaN))))));
 
     if (isNaN(totalAdultos) || totalAdultos < 1) {
       throw new ProblemDetailsException(
@@ -755,31 +786,6 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         );
       }
 
-      // Cotizar tarifa oficial
-      const pricing = this.pricingService.calculatePrice(
-        Number(espacio.precioPorNoche),
-        checkinClean,
-        checkoutClean,
-        cantidadHabitaciones,
-      );
-
-      // Validar Coherencia de Precio (PRICE_MISMATCH)
-      if (totalPagar !== undefined && totalPagar !== null && String(totalPagar).trim() !== '') {
-        const totalPagarNum = parseFloat(String(totalPagar));
-        if (!isNaN(totalPagarNum) && Math.abs(totalPagarNum - pricing.total) > 0.05) {
-          throw new ProblemDetailsException(
-            {
-              type: 'https://api.booking-hub.com/errors/price-mismatch',
-              title: 'Price Mismatch',
-              status: HttpStatus.CONFLICT,
-              code: 'PRICE_MISMATCH',
-              detail: `El total a pagar enviado ($${totalPagarNum.toFixed(2)}) no coincide con la tarifa oficial calculada ($${pricing.totalStr}).`,
-            },
-            HttpStatus.CONFLICT,
-          );
-        }
-      }
-
       const tInsertStart = performance.now();
 
       // Asegurar existencia del cliente en 'usuarios' y 'clientes'
@@ -800,6 +806,34 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         clientIdHeader,
         clientId,
       );
+
+      const isBookingChannel = canalOrigen !== 'WEB_DIRECT';
+
+      // Cotizar tarifa oficial
+      const pricing = this.pricingService.calculatePrice(
+        Number(espacio.precioPorNoche),
+        checkinClean,
+        checkoutClean,
+        cantidadHabitaciones,
+        { isBookingChannel },
+      );
+
+      // Validar Coherencia de Precio (PRICE_MISMATCH)
+      if (totalPagar !== undefined && totalPagar !== null && String(totalPagar).trim() !== '') {
+        const totalPagarNum = parseFloat(String(totalPagar));
+        if (!isNaN(totalPagarNum) && Math.abs(totalPagarNum - pricing.total) > 0.05) {
+          throw new ProblemDetailsException(
+            {
+              type: 'https://api.booking-hub.com/errors/price-mismatch',
+              title: 'Price Mismatch',
+              status: HttpStatus.CONFLICT,
+              code: 'PRICE_MISMATCH',
+              detail: `El total a pagar enviado ($${totalPagarNum.toFixed(2)}) no coincide con la tarifa oficial calculada ($${pricing.totalStr}).`,
+            },
+            HttpStatus.CONFLICT,
+          );
+        }
+      }
 
       await manager.query(
         `INSERT INTO usuarios (id, "nombreCompleto", email, telefono, identificacion, contrasena)
@@ -1278,14 +1312,36 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
         codigoReembolso,
         porcentajeReembolso: 100,
         montoReembolsado: String(Number(reserva.precioTotal || reserva.total || 0).toFixed(2)),
-        cuposRestaurados: 1,
+        cuposRestaurados: Number(reserva.cantidadHabitaciones || 1),
         yaCancelada: true,
         timestamp: new Date().toISOString(),
       };
     }
 
+    // Regla de integración y control de estancia: no se permite cancelar tras el check-in presencial
+    if (Boolean(reserva.checkinRealizado)) {
+      throw new ProblemDetailsException(
+        {
+          type: 'https://api.booking-hub.com/errors/checkin-already-completed',
+          title: 'Check-in ya realizado',
+          status: HttpStatus.CONFLICT,
+          code: 'CHECKIN_ALREADY_COMPLETED',
+          detail: 'La reserva ya cuenta con check-in presencial confirmado y no permite cancelaciones.',
+        },
+        HttpStatus.CONFLICT,
+      );
+    }
+
     const esAdmin = (userRol || '').toLowerCase().includes('admin');
-    const esOrquestador = solicitadoPor === 'SAGA_ORCHESTRATOR' || userId === 'NODE_SYSTEM_HUB';
+    const esOrquestador =
+      solicitadoPor === 'SAGA_ORCHESTRATOR' ||
+      solicitadoPor === 'BOOKING' ||
+      solicitadoPor === 'BOOKING_HUB' ||
+      solicitadoPor === 'BOOKING_CORE' ||
+      userId === 'NODE_SYSTEM_HUB' ||
+      String(userId || '').toUpperCase().includes('BOOKING') ||
+      String(userId || '').toUpperCase().includes('HUB') ||
+      Boolean(userId && String(userId).startsWith('CLI-'));
 
     // Validación de titularidad
     if (!esAdmin && !esOrquestador && userId && reserva.usuarioId && reserva.usuarioId !== userId) {
@@ -1294,7 +1350,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
 
     // Regla de integración de canales: Las reservas de Booking NO se cancelan desde los sistemas del hotel/LuxeStays
     const esBooking = this.isBookingOriginOrder(reserva);
-    if (esBooking && !esOrquestador) {
+    if (esBooking && !esOrquestador && !esAdmin) {
       throw new ProblemDetailsException(
         {
           type: 'https://api.booking-hub.com/errors/restriction-violated',
@@ -2072,18 +2128,29 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     }
 
     const base = (process.env.BOOKING_CORE_URL || 'https://booking-core-api.azurewebsites.net').replace(/\/+$/, '');
-    const url = `${base}/api/v1/reservas/${encodeURIComponent(n.external_order_id)}/checkin`;
+    const urlV2 = `${base}/api/v2/reservas/${encodeURIComponent(n.external_order_id)}/checkin`;
+    const urlV1 = `${base}/api/v1/reservas/${encodeURIComponent(n.external_order_id)}/checkin`;
     const payload = typeof n.payload === 'string' ? JSON.parse(n.payload) : n.payload;
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 8000);
     try {
-      const resp = await fetch(url, {
+      let resp = await fetch(urlV2, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
+
+      if (resp.status === 404) {
+        resp = await fetch(urlV1, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+      }
+
       // 2xx = aceptado; 409 = Booking ya tenía el check-in registrado (idempotente)
       const ok = resp.ok || resp.status === 409;
       const errText = ok ? null : (await resp.text().catch(() => '')).slice(0, 500) || `HTTP ${resp.status}`;

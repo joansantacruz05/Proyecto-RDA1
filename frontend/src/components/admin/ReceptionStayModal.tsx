@@ -732,8 +732,11 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
           </div>
 
           <div className={styles.folioRow}>
-            <span>Hospedaje base ({folio.nights} noche{folio.nights > 1 ? 's' : ''})</span>
-            <span>{formatUSD(folio.previousRoomSubtotal)}</span>
+            <span>
+              Hospedaje base ({folio.nights} noche{folio.nights > 1 ? 's' : ''}
+              {Number(reserva.cantidadHabitaciones || 1) > 1 ? ` · ${reserva.cantidadHabitaciones} habs.` : ''})
+            </span>
+            <span>{formatUSD(isBookingOrder ? folio.newTotal : folio.previousRoomSubtotal)}</span>
           </div>
           {!isBookingOrder && folio.roomChanged && (
             <div className={styles.folioRow} style={{ color: folio.roomDifference >= 0 ? '#92400E' : '#059669', fontWeight: 600 }}>
@@ -750,10 +753,12 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
               <span>{formatUSD(folio.extrasSubtotal)}</span>
             </div>
           )}
-          <div className={styles.folioRow}>
-            <span>IVA (15%) + Tasa Municipal (${folio.tasaMunicipal.toFixed(2)})</span>
-            <span>{formatUSD(folio.newIva + folio.tasaMunicipal)}</span>
-          </div>
+          {!isBookingOrder && (
+            <div className={styles.folioRow}>
+              <span>IVA (15%) + Tasa Municipal (${folio.tasaMunicipal.toFixed(2)})</span>
+              <span>{formatUSD(folio.newIva + folio.tasaMunicipal)}</span>
+            </div>
+          )}
 
           <div className={styles.folioDivider} />
 
@@ -764,8 +769,8 @@ export const ReceptionStayModal: React.FC<ReceptionStayModalProps> = ({
           <div className={styles.folioRow} style={{ fontWeight: 700, color: '#14406B' }}>
             {isBookingOrder ? (
               <>
-                <span>Cobro adicional en recepción (pagado en Booking: {formatUSD(folio.montoInicial)})</span>
-                <span>$0.00 (Liquidado en Booking Core)</span>
+                <span>Cobro adicional en recepción</span>
+                <span>$0.00 (Liquidado en Booking Core: {formatUSD(folio.montoInicial)})</span>
               </>
             ) : (
               <>

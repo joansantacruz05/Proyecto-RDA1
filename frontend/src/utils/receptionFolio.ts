@@ -156,18 +156,17 @@ export function computeReceptionFolioPreview(input: ReceptionFolioInput): Recept
       : Number((nights * RECEPTION_TASA_MUNICIPAL_POR_NOCHE * Math.max(1, input.cantidadHabitaciones || 1)).toFixed(2));
 
   if (input.esReservaBooking) {
-    const lockedIva = Number((rawSubtotal * RECEPTION_IVA_RATE).toFixed(2));
     const totalPaidBooking = Number(input.montoPagadoInicial ?? currentTotal);
     return {
       nights,
       roomChanged: false,
-      previousRoomSubtotal,
-      baseRoomSubtotal: previousRoomSubtotal,
+      previousRoomSubtotal: Number(currentTotal.toFixed(2)),
+      baseRoomSubtotal: Number(currentTotal.toFixed(2)),
       roomDifference: 0,
-      extrasSubtotal: Number(currentExtras.toFixed(2)),
-      newSubtotal: Number(rawSubtotal.toFixed(2)),
-      newIva: lockedIva,
-      tasaMunicipal: Number(tasaMunicipal.toFixed(2)),
+      extrasSubtotal: 0,
+      newSubtotal: Number(currentTotal.toFixed(2)),
+      newIva: 0,
+      tasaMunicipal: 0,
       newTotal: Number(currentTotal.toFixed(2)),
       montoInicial: Number(totalPaidBooking.toFixed(2)),
       diferenciaTotal: 0,

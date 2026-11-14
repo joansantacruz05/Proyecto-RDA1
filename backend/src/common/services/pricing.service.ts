@@ -64,14 +64,18 @@ export class PricingService {
   }
 
   /**
-   * Calcula desglose exacto de precio con recargos de temporada y feriados ecuatorianos
+   * Calcula desglose exacto de precio con recargos de temporada y feriados ecuatorianos.
+   * Para canales externos GDS/Booking Hub, las tarifas se calculan directas sin recargo local
+   * y los impuestos se consideran incluidos/cero para garantizar coincidencia con el contrato GDS.
    */
   calculatePrice(
     basePricePerNight: number,
     checkinStr: string,
     checkoutStr: string,
     numRooms: number = 1,
+    options?: { isBookingChannel?: boolean; skipTaxes?: boolean },
   ): PriceBreakdownResult {
+    const isChannel = Boolean(options?.isBookingChannel || options?.skipTaxes);
     const { checkin, checkout, nights } = this.validateDates(checkinStr, checkoutStr);
 
     const nightlyRates: Array<{ date: string; basePrice: number; multiplier: number; rate: number }> = [];
@@ -87,12 +91,14 @@ export class PricingService {
       const month = curr.getMonth(); // 6=Julio, 7=Agosto, 11=Diciembre
 
       let multiplier = 1.0;
-      // Feriados nacionales: 1 Ene, 1 May, 25 Dic (+50%)
-      if ((mm === '01' && dd === '01') || (mm === '05' && dd === '01') || (mm === '12' && dd === '25')) {
-        multiplier = 1.5;
-      } else if (month === 6 || month === 7 || month === 11) {
-        // Temporada alta (+30%)
-        multiplier = 1.3;
+      if (!isChannel) {
+        // Feriados nacionales: 1 Ene, 1 May, 25 Dic (+50%)
+        if ((mm === '01' && dd === '01') || (mm === '05' && dd === '01') || (mm === '12' && dd === '25')) {
+          multiplier = 1.5;
+        } else if (month === 6 || month === 7 || month === 11) {
+          // Temporada alta (+30%)
+          multiplier = 1.3;
+        }
       }
 
       const nightRate = basePricePerNight * multiplier * numRooms;
@@ -110,9 +116,9 @@ export class PricingService {
     }
 
     const subtotal = Number((subtotalCents / 100).toFixed(2));
-    const iva = Number((subtotal * this.defaultIvaRate).toFixed(2));
-    const tasaMunicipal = Number((nights * this.defaultTasaMunicipal * numRooms).toFixed(2));
-    const total = Number((subtotal + iva + tasaMunicipal).toFixed(2));
+    const iva = isChannel ? 0 : Number((subtotal * this.defaultIvaRate).toFixed(2));
+    const tasaMunicipal = isChannel ? 0 : Number((nights * this.defaultTasaMunicipal * numRooms).toFixed(2));
+    const total = isChannel ? subtotal : Number((subtotal + iva + tasaMunicipal).toFixed(2));
 
     return {
       nights,
