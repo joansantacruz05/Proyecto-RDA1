@@ -151,7 +151,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
   // ═══════════════════════════════════════════════════════════════════════
 
   async previewOrder(previewRequest: any): Promise<any> {
-    const accommodationId = String(
+    const rawAccommodationId = String(
       previewRequest.accommodation_id ||
       previewRequest.accommodationId ||
       previewRequest.alojamientoId ||
@@ -161,6 +161,9 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       previewRequest.id ||
       '',
     ).trim();
+    const accommodationId = rawAccommodationId.includes('~')
+      ? rawAccommodationId.split('~').pop()!.trim()
+      : rawAccommodationId;
     const productId = String(previewRequest.product_id || previewRequest.productId || previewRequest.espacioId || '').trim();
     const guests = previewRequest.guests || {
       number_of_adults: previewRequest.numeroPersonas || 1,
@@ -447,7 +450,7 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
     const previewId = createRequest.order_preview_id || createRequest.orderPreviewId;
     const cachedPreview = previewId ? ReservasService.previewsCache.get(previewId) : null;
 
-    const accommodationId = String(
+    const rawAccommodationId = String(
       createRequest.alojamientoId ||
       createRequest.accommodation_id ||
       createRequest.accommodationId ||
@@ -459,6 +462,9 @@ export class ReservasService implements OnModuleInit, OnModuleDestroy {
       cachedPreview?.accommodationId ||
       ''
     ).trim();
+    const accommodationId = rawAccommodationId.includes('~')
+      ? rawAccommodationId.split('~').pop()!.trim()
+      : rawAccommodationId;
 
     const tipoHabitacionCodigo = String(
       createRequest.tipoHabitacionCodigo ||

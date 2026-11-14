@@ -565,7 +565,10 @@ export class AlojamientosService {
   // ═══════════════════════════════════════════════════════════════════════
   
   async getRoomsAdmin(alojamientoId: string): Promise<any[]> {
-    return await this.alojamientoRepository.query(
+    const cleanId = String(alojamientoId || '').includes('~')
+      ? String(alojamientoId).split('~').pop()!.trim()
+      : String(alojamientoId || '').trim();
+    const rows = await this.alojamientoRepository.query(
       `SELECT id, "alojamientoId", nombre, "capacidadAdultos", "capacidadNinos", "precioPorNoche",
               GREATEST(0, COALESCE("cantidadDisponible", 1) - COALESCE((
                 SELECT SUM(COALESCE(r."cantidadHabitaciones", 1))
@@ -580,8 +583,21 @@ export class AlojamientosService {
               "numHabitaciones", "numCamas", "tipoCamas", "enLimpiezaDesde"
        FROM espacios_rentables
        WHERE "alojamientoId" = $1 ORDER BY nombre`,
-      [alojamientoId],
+      [cleanId],
     );
+    return rows.map((r: any) => {
+      const disp = Number(r.cantidadDisponible || 0);
+      return {
+        ...r,
+        tipoHabitacionCodigo: r.codigo || 'SUITE_DELUXE',
+        disponible: disp > 0 && (r.estado === 'Activo' || !r.estado),
+        habitacionesRemanentes: disp,
+        remanentes: disp,
+        available_rooms: disp,
+        cupo: disp,
+        stockDisponible: disp,
+      };
+    });
   }
 
   async createRoomAdmin(alojamientoId: string, dto: any): Promise<any> {
@@ -784,6 +800,10 @@ export class AlojamientosService {
     const checkinClean = String(checkin).split('T')[0];
     const checkoutClean = String(checkout).split('T')[0];
 
+    const cleanAlojamientoId = String(alojamientoId || '').includes('~')
+      ? String(alojamientoId).split('~').pop()!.trim()
+      : String(alojamientoId || '').trim();
+
     // Verificar si el alojamiento existe
     const alRows = await this.alojamientoRepository.query(
       `SELECT * FROM alojamientos 
@@ -793,7 +813,7 @@ export class AlojamientosService {
           OR REPLACE(UPPER(COALESCE(codigo, '')), '-', '_') = REPLACE(UPPER($1), '-', '_') 
           OR REPLACE(UPPER(COALESCE(codigo, '')), '_', '-') = REPLACE(UPPER($1), '_', '-') 
        LIMIT 1`,
-      [alojamientoId],
+      [cleanAlojamientoId],
     );
 
     if (!alRows || alRows.length === 0) {
@@ -817,9 +837,13 @@ export class AlojamientosService {
         checkin: checkinClean,
         checkout: checkoutClean,
         noches,
+        disponible: false,
         estaDisponible: false,
         habitacionesRemanentes: 0,
+        remanentes: 0,
         available_rooms: 0,
+        cupo: 0,
+        stockDisponible: 0,
         estadoAlojamiento: accommodation.estado,
         totalHabitaciones: 0,
         habitacionesOcupadas: 0,
@@ -896,10 +920,18 @@ export class AlojamientosService {
 
       opciones.push({
         tipoHabitacionCodigo: sp.codigo || 'SUITE_DELUXE',
+        codigo: sp.codigo || 'SUITE_DELUXE',
         nombre: sp.nombre,
+        disponible: disponibles >= rooms,
         estaDisponible: disponibles >= rooms,
         habitacionesRemanentes: disponibles,
+        remanentes: disponibles,
         available_rooms: disponibles,
+        cupo: disponibles,
+        stockDisponible: disponibles,
+        capacidadAdultos: Number(sp.capacidadAdultos || 2),
+        capacidadNinos: Number(sp.capacidadNinos || 0),
+        capacidadMax: Number(sp.capacidadAdultos || 2) + Number(sp.capacidadNinos || 0),
         precioNoche: precioNocheNum.toFixed(2),
         precioTotalEstancia: precioTotalNum.toFixed(2),
         regimen: 'SOLO_HABITACION',
@@ -915,9 +947,13 @@ export class AlojamientosService {
       checkin: checkinClean,
       checkout: checkoutClean,
       noches,
+      disponible: estaDisponible,
       estaDisponible,
       habitacionesRemanentes: totalDisponibles,
+      remanentes: totalDisponibles,
       available_rooms: totalDisponibles,
+      cupo: totalDisponibles,
+      stockDisponible: totalDisponibles,
       totalHabitaciones: totalHotel,
       habitacionesOcupadas: ocupadasHotel,
       opciones,
@@ -925,7 +961,7 @@ export class AlojamientosService {
   }
 
   async checkAvailability(availabilityRequest: any): Promise<any> {
-    const accommodationId = String(
+    const rawAccommodationId = String(
       availabilityRequest.alojamientoId ||
       availabilityRequest.accommodation ||
       availabilityRequest.accommodation_id ||
@@ -934,6 +970,9 @@ export class AlojamientosService {
       availabilityRequest.id ||
       ''
     ).trim();
+    const accommodationId = rawAccommodationId.includes('~')
+      ? rawAccommodationId.split('~').pop()!.trim()
+      : rawAccommodationId;
     const checkin = availabilityRequest.fechaInicio || availabilityRequest.checkin || availabilityRequest.dates?.checkin;
     const checkout = availabilityRequest.fechaFin || availabilityRequest.checkout || availabilityRequest.dates?.checkout;
     const tipoHabitacionCodigo = String(
@@ -1133,9 +1172,13 @@ export class AlojamientosService {
     return {
       alojamientoId: accommodation.id,
       tipoHabitacionCodigo: room.codigo || 'SUITE_DELUXE',
+      disponible: true,
       estaDisponible: true,
       habitacionesRemanentes: disponibles,
+      remanentes: disponibles,
       available_rooms: disponibles,
+      cupo: disponibles,
+      stockDisponible: disponibles,
       nochesEstancia: nights,
       precioTotalCotizado: pricing.totalStr,
       cotizacionId: cotizacionId,
